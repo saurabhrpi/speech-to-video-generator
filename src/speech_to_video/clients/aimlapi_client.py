@@ -23,36 +23,56 @@ class AIMLAPIClient:
         POST {base_url}/generate/video/google/generation
         Body: {"model": "google/veo3", "prompt": "..."}
         """
+        import time
+
         url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_generate_path}"
         body = {
             "model": "google/veo3",
             "prompt": prompt,
         }
 
-        resp = self.session.post(url, json=body, timeout=60)
-        try:
-            data = resp.json()
-        except Exception:
-            data = {"error": resp.text}
-        data["_status_code"] = resp.status_code
-        data["_attempt_url"] = url
-        return data
+        last: Dict[str, Any] = {}
+        backoff = 1.0
+        for _ in range(3):
+            resp = self.session.post(url, json=body, timeout=60)
+            try:
+                data = resp.json()
+            except Exception:
+                data = {"error": resp.text}
+            data["_status_code"] = resp.status_code
+            data["_attempt_url"] = url
+            if resp.status_code not in {429} and resp.status_code < 500:
+                return data
+            last = data
+            time.sleep(backoff)
+            backoff *= 2.0
+        return last or {"error": "No response", "_status_code": 0}
 
     def get_status(self, job_id: str) -> Dict[str, Any]:
         """
         Poll generation using AIMLAPI v2 endpoint:
         GET {base_url}/generate/video/google/generation?generation_id={id}
         """
+        import time
+
         url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_status_path}"
         params = {self.settings.aimlapi_status_query_param: job_id}
-        resp = self.session.get(url, params=params, timeout=30)
-        try:
-            data = resp.json()
-        except Exception:
-            data = {"error": resp.text}
-        data["_status_code"] = resp.status_code
-        data["_attempt_url"] = resp.url
-        return data
+        last: Dict[str, Any] = {}
+        backoff = 1.0
+        for _ in range(3):
+            resp = self.session.get(url, params=params, timeout=30)
+            try:
+                data = resp.json()
+            except Exception:
+                data = {"error": resp.text}
+            data["_status_code"] = resp.status_code
+            data["_attempt_url"] = resp.url
+            if resp.status_code not in {429} and resp.status_code < 500:
+                return data
+            last = data
+            time.sleep(backoff)
+            backoff *= 2.0
+        return last or {"error": "No response", "_status_code": 0}
 
     def poll_until_complete(self, job_id: str, max_wait: int = 300, interval: int = 5) -> Dict[str, Any]:
         import time

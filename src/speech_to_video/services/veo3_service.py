@@ -29,8 +29,9 @@ class Veo3VideoSystem:
 
     def _single_veo3_generation(self, prompt: str, duration: int, quality: str) -> Dict:
         data = self.aiml_client.generate_video(prompt=prompt, duration=duration, quality=quality)
-        status_code = data.get("_status_code", 0)
-        if status_code != 200:
+        status_code = int(data.get("_status_code", 0) or 0)
+        # Accept any 2xx as success/created; otherwise return error
+        if not (200 <= status_code < 300):
             return {"success": False, "error": data.get("error") or data, "status_code": status_code}
 
         # v2 returns an id; poll until completion
@@ -38,17 +39,24 @@ class Veo3VideoSystem:
         if job_id:
             data = self.aiml_client.poll_until_complete(job_id=str(job_id))
 
-        # success if a known complete state or a URL is discoverable
-        if data.get("status") in {"completed", "succeeded", "finished"} or data.get("video_url"):
+        # Determine final video URL if present anywhere in the response structure
+        video_url = data.get("video_url")
+        if not video_url and hasattr(self.aiml_client, "_extract_video_url"):
+            try:
+                video_url = self.aiml_client._extract_video_url(data)  # best-effort
+            except Exception:
+                video_url = None
+
+        if data.get("status") in {"completed", "succeeded", "finished"} or video_url:
             return {
                 "success": True,
-                "video_url": data.get("video_url"),
+                "video_url": video_url,
                 "has_audio": data.get("has_audio", True),
                 "duration": duration,
                 "cost": duration * 0.788,
             }
 
-        return {"success": False, "error": data}
+        return {"success": False, "error": data, "status_code": int(data.get("_status_code", status_code) or status_code)}
 
     def _multi_veo3_generation(self, prompt: str, total_duration: int, quality: str) -> Dict:
         scenes = self.openai_client.create_scene_progression(prompt, total_duration)

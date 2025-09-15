@@ -42,6 +42,11 @@ def run_speech_to_video(audio_path: str, duration: int, quality: str, prompt: st
                 "Enter a Prompt in the UI to bypass transcription (uses AIMLAPI only)",
                 "Or use CLI: python -m src.speech_to_video.cli generate --prompt '...' --duration 10",
             ])
+        if "503" in msg or "service unavailable" in msg or "unexpected error occurred" in msg:
+            err.setdefault("hints", []).extend([
+                "AIMLAPI returned 503: temporary service issue",
+                "Please try again in a minute",
+            ])
         return None, json.dumps(err, indent=2)
 
 
