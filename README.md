@@ -15,9 +15,6 @@ The code is organized into clients (OpenAI and AIMLAPI), a service orchestrating
 - An `OPENAI_API_KEY` (for transcription and scene planning)
 - An `AIMLAPI_API_KEY` (for Veo 3 video generation via `api.aimlapi.com`)
 
-Optional:
-- `ffmpeg` on your system path for video stitching (used by `moviepy`).
-
 ### Setup
 
 1) Create and activate a virtual environment.
