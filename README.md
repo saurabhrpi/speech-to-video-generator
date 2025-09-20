@@ -123,4 +123,4 @@ Outputs will include URLs returned by the AIMLAPI. If stitching is enabled and `
   - `OPENAI_PROJECT=proj_...`
 - Use the UI's "Test OpenAI Key" in the Setup status panel to validate your credentials quickly.
 
-
+### TBD: Deploy on public URL.
