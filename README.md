@@ -127,4 +127,7 @@ Outputs will include URLs returned by the AIMLAPI. If stitching is enabled and `
 
 - Current cost is $3 for a 10 sec clip.
 
-### TBD: Deploy on public URL.
+### TBD: 
+
+- Deploy on public URL.
+- Decrease the cost per 10 sec clip.
