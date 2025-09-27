@@ -19,7 +19,7 @@ class OpenAIClient:
 
     def transcribe(self, audio_path: str) -> Dict[str, str]:
         """
-        Transcribe speech audio using Whisper (or compatible) model.
+        Transcribe speech audio using Whisper model.
         Uses an in-memory stream and retries to mitigate h11 Content-Length issues.
         Returns a dict with key "text".
         """
