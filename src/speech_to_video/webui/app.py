@@ -6,6 +6,8 @@ import gradio as gr
 
 from ..services.video_service import VideoService
 from ..utils.config import get_settings
+from ..utils.video import stitch_videos, stitch_videos_detailed
+from ..utils.clip_store import add_clip, list_clips, clear_clips
 
 
 settings = get_settings()
@@ -21,10 +23,10 @@ def run_speech_to_video(audio_path: str, prompt: str):
             result.setdefault("prompt_used", manual_prompt)
         else:
             if not audio_path:
-                return None, json.dumps({"success": False, "error": "No audio provided or prompt supplied"}, indent=2)
+                return None, json.dumps({"success": False, "error": "No audio provided or prompt supplied"}, indent=2), None
             result = system.speech_to_video_with_audio(audio_path=audio_path, duration=10)
         video = result.get("video_url")
-        return video, json.dumps(result, indent=2)
+        return video, json.dumps(result, indent=2), video
     except Exception as exc:
         err = {
             "success": False,
@@ -48,7 +50,7 @@ def run_speech_to_video(audio_path: str, prompt: str):
                 "AIMLAPI returned 503: temporary service issue",
                 "Please try again in a minute",
             ])
-        return None, json.dumps(err, indent=2)
+        return None, json.dumps(err, indent=2), None
 
 
 def check_setup():
@@ -131,7 +133,48 @@ with gr.Blocks(title="Speech to Video (WAN 2.1 Turbo)") as app:
         video_out = gr.Video(label="Generated Video")
         meta_out = gr.Code(label="Result JSON")
 
-    submit.click(fn=run_speech_to_video, inputs=[audio, prompt], outputs=[video_out, meta_out])
+    # track last clip url
+    last_clip_url = gr.State(None)
+    submit.click(fn=run_speech_to_video, inputs=[audio, prompt], outputs=[video_out, meta_out, last_clip_url])
+
+    def _save_last_clip(note: str, url):
+        if not url:
+            return json.dumps({"success": False, "error": "No last clip to save"}, indent=2), json.dumps(list_clips(), indent=2)
+        entry = add_clip(url, note)
+        return json.dumps({"success": True, "saved": entry}, indent=2), json.dumps(list_clips(), indent=2)
+
+    def _show_clips():
+        return json.dumps(list_clips(), indent=2)
+
+    def _clear_all_clips():
+        clear_clips()
+        return json.dumps({"success": True, "cleared": True}, indent=2), json.dumps(list_clips(), indent=2)
+
+    def _stitch_saved():
+        items = list_clips()
+        urls = [i.get("url") for i in items if i.get("url")]
+        if not urls:
+            return None, json.dumps({"success": False, "error": "No saved clips"}, indent=2)
+        detailed = stitch_videos_detailed(urls)
+        if not detailed.get("success"):
+            return None, json.dumps(detailed, indent=2)
+        return detailed.get("output_path"), json.dumps(detailed, indent=2)
+
+    with gr.Accordion("Clip library", open=False):
+        note = gr.Textbox(label="Note (optional)")
+        save_btn = gr.Button("Save last clip")
+        saved_status = gr.Code(label="Save status")
+        saved_list = gr.Code(label="Saved clips")
+        list_btn = gr.Button("Refresh list")
+        clear_btn = gr.Button("Clear all")
+        stitch_btn = gr.Button("Stitch saved clips")
+        stitched_video = gr.Video(label="Stitched video")
+        stitched_json = gr.Code(label="Stitch result JSON")
+
+        save_btn.click(fn=_save_last_clip, inputs=[note, last_clip_url], outputs=[saved_status, saved_list])
+        list_btn.click(fn=_show_clips, inputs=None, outputs=[saved_list])
+        clear_btn.click(fn=_clear_all_clips, inputs=None, outputs=[saved_status, saved_list])
+        stitch_btn.click(fn=_stitch_saved, inputs=None, outputs=[stitched_video, stitched_json])
 
 
 if __name__ == "__main__":
