@@ -1,32 +1,32 @@
 import argparse
 import sys
 
-from .services.veo3_service import Veo3VideoSystem
+from .services.video_service import VideoService
 
 
 def _cmd_transcribe(args) -> int:
-    system = Veo3VideoSystem()
+    system = VideoService()
     result = system.openai_client.transcribe(args.audio)
     print(result.get("text", ""))
     return 0
 
 
 def _cmd_generate(args) -> int:
-    system = Veo3VideoSystem()
-    result = system.generate_veo3_video(prompt=args.prompt, duration=args.duration, quality=args.quality)
+    system = VideoService()
+    result = system.generate_video(prompt=args.prompt, duration=args.duration, quality=args.quality)
     print(result)
     return 0 if result.get("success") else 1
 
 
 def _cmd_speech_to_video(args) -> int:
-    system = Veo3VideoSystem()
+    system = VideoService()
     result = system.speech_to_video_with_audio(audio_path=args.audio, duration=args.duration, quality=args.quality)
     print(result)
     return 0 if result.get("success") else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Speech to Video CLI (Veo 3 pipeline)")
+    parser = argparse.ArgumentParser(description="Speech to Video CLI (WAN 2.1 Turbo pipeline)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p1 = sub.add_parser("transcribe", help="Transcribe an audio file")

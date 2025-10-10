@@ -4,24 +4,25 @@ from typing import Optional
 
 import gradio as gr
 
-from ..services.veo3_service import Veo3VideoSystem
+from ..services.video_service import VideoService
 from ..utils.config import get_settings
 
 
 settings = get_settings()
-system = Veo3VideoSystem()
+system = VideoService()
 
 
-def run_speech_to_video(audio_path: str, duration: int, quality: str, prompt: str):
+def run_speech_to_video(audio_path: str, prompt: str):
     try:
         manual_prompt = (prompt or "").strip()
         if manual_prompt:
-            result = system.generate_veo3_video(prompt=manual_prompt, duration=duration, quality=quality)
+            # Use a single-clip call; many providers ignore duration, but 10s keeps us on single path
+            result = system.generate_video(prompt=manual_prompt, duration=10)
             result.setdefault("prompt_used", manual_prompt)
         else:
             if not audio_path:
                 return None, json.dumps({"success": False, "error": "No audio provided or prompt supplied"}, indent=2)
-            result = system.speech_to_video_with_audio(audio_path=audio_path, duration=duration, quality=quality)
+            result = system.speech_to_video_with_audio(audio_path=audio_path, duration=10)
         video = result.get("video_url")
         return video, json.dumps(result, indent=2)
     except Exception as exc:
@@ -100,13 +101,12 @@ def test_aimlapi_paths():
         return json.dumps({"error": str(exc)}, indent=2)
 
 
-with gr.Blocks(title="Speech to Video (Veo 3)") as app:
+with gr.Blocks(title="Speech to Video (WAN 2.1 Turbo)") as app:
     gr.Markdown("""
-    **Speech to Video (Veo 3)**
+    **Speech to Video (WAN 2.1 Turbo)**
     
-    1. Record or upload an audio clip.
-    2. Choose duration and quality.
-    3. Generate a video using transcription + Veo 3.
+    1. Record or upload an audio clip, or provide a prompt.
+    2. Generate a video using WAN 2.1 Turbo.
     """)
 
     with gr.Accordion("Setup status", open=False):
@@ -125,15 +125,13 @@ with gr.Blocks(title="Speech to Video (Veo 3)") as app:
         audio = gr.Audio(sources=["microphone", "upload"], type="filepath", label="Speech audio")
         with gr.Column():
             prompt = gr.Textbox(label="Prompt (optional; bypasses transcription)")
-            duration = gr.Slider(minimum=5, maximum=120, step=5, value=60, label="Duration (seconds)")
-            quality = gr.Dropdown(choices=["high", "medium"], value="high", label="Quality")
             submit = gr.Button("Generate Video")
 
     with gr.Row():
         video_out = gr.Video(label="Generated Video")
         meta_out = gr.Code(label="Result JSON")
 
-    submit.click(fn=run_speech_to_video, inputs=[audio, duration, quality, prompt], outputs=[video_out, meta_out])
+    submit.click(fn=run_speech_to_video, inputs=[audio, prompt], outputs=[video_out, meta_out])
 
 
 if __name__ == "__main__":

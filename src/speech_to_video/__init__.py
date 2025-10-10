@@ -1,5 +1,5 @@
-from .services.veo3_service import Veo3VideoSystem
+from .services.video_service import VideoService
 
-__all__ = ["Veo3VideoSystem"]
+__all__ = ["VideoService"]
 
 

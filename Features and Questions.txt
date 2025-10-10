@@ -1,0 +1,14 @@
+1a.company register karo
+1b.patent file karo india me
+1c.Fully working application host karo :
+	Save context project wise.
+	Stich scenes.
+	Align scene using drag and drop.
+	Edit video scene.
+	Regenerate if too many edits.
+2. Users add karo jugad se
+3. VCs se meeting karo
+
+
+What are we doing in the create_scene_progression()?
+

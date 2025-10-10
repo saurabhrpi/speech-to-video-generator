@@ -21,13 +21,13 @@ class AIMLAPIClient:
         """
         Create a generation using AIMLAPI v2 endpoint:
         POST {base_url}/generate/video/google/generation
-        Body: {"model": "google/veo3", "prompt": "..."}
+        Body: {"model": "alibaba/wan2.1-t2v-turbo", "prompt": "..."}
         """
         import time
 
         url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_generate_path}"
         body = {
-            "model": "google/veo3",
+            "model": "alibaba/wan2.1-t2v-turbo",
             "prompt": prompt,
         }
 

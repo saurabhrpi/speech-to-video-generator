@@ -20,7 +20,7 @@ def stitch_videos(video_urls: List[str]) -> Optional[str]:
         # moviepy/ffmpeg not available; return the first URL as a fallback
         return video_urls[0]
 
-    temp_dir = tempfile.mkdtemp(prefix="veo3_stitch_")
+    temp_dir = tempfile.mkdtemp(prefix="video_stitch_")
     local_paths: List[str] = []
     try:
         # Download segments
