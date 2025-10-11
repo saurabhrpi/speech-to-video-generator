@@ -1,4 +1,4 @@
-### Speech to Video (Veo 3 pipeline)
+### Speech to Video
 
 This project converts spoken audio into a video using a multi-step pipeline:
 
