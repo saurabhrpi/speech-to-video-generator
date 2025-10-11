@@ -1,6 +1,9 @@
 import json
+import os
+import time
 import traceback
 from typing import Optional
+from collections import defaultdict, deque
 
 import gradio as gr
 
@@ -13,10 +16,41 @@ from ..utils.clip_store import add_clip, list_clips, clear_clips
 settings = get_settings()
 system = VideoService()
 
+# Basic hardening and limits
+_WINDOW = int(os.getenv("RATE_WINDOW_SECONDS", "60"))
+_MAX_REQ = int(os.getenv("RATE_MAX_REQUESTS", "5"))
+_BUCKETS = defaultdict(deque)
+MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", "10485760"))  # 10 MB
+MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "500"))
+PUBLIC_MODE = os.getenv("PUBLIC_MODE", "0").lower() in {"1", "true", "yes", "on"}
+MAINT_MODE = os.getenv("MAINTENANCE_MODE", "0").lower() in {"1", "true", "yes", "on"}
 
-def run_speech_to_video(audio_path: str, prompt: str):
+def _client_ip(request: gr.Request) -> str:
     try:
+        return request.client.host or "unknown"
+    except Exception:
+        return "unknown"
+
+def _rate_limit(request: gr.Request):
+    ip = _client_ip(request)
+    now = time.time()
+    dq = _BUCKETS[ip]
+    # evict old entries
+    while dq and now - dq[0] > _WINDOW:
+        dq.popleft()
+    if len(dq) >= _MAX_REQ:
+        raise RuntimeError("Rate limit exceeded. Please wait and try again.")
+    dq.append(now)
+
+
+def run_speech_to_video(audio_path: str, prompt: str, request: gr.Request):
+    try:
+        _rate_limit(request)
+        if MAINT_MODE:
+            return None, json.dumps({"success": False, "error": "Maintenance mode"}, indent=2), None
         manual_prompt = (prompt or "").strip()
+        if manual_prompt and len(manual_prompt) > MAX_PROMPT_CHARS:
+            return None, json.dumps({"success": False, "error": "Prompt too long"}, indent=2), None
         if manual_prompt:
             # Use a single-clip call; many providers ignore duration, but 10s keeps us on single path
             result = system.generate_video(prompt=manual_prompt, duration=10)
@@ -24,6 +58,11 @@ def run_speech_to_video(audio_path: str, prompt: str):
         else:
             if not audio_path:
                 return None, json.dumps({"success": False, "error": "No audio provided or prompt supplied"}, indent=2), None
+            try:
+                if os.path.exists(audio_path) and os.path.getsize(audio_path) > MAX_AUDIO_BYTES:
+                    return None, json.dumps({"success": False, "error": "Audio too large"}, indent=2), None
+            except Exception:
+                pass
             result = system.speech_to_video_with_audio(audio_path=audio_path, duration=10)
         video = result.get("video_url")
         return video, json.dumps(result, indent=2), video
@@ -113,15 +152,19 @@ with gr.Blocks(title="Speech to Video (WAN 2.1 Turbo)") as app:
 
     with gr.Accordion("Setup status", open=False):
         setup_box = gr.Code(label="Environment checks", value=check_setup())
-        with gr.Row():
+        if not PUBLIC_MODE:
+            with gr.Row():
+                refresh = gr.Button("Refresh checks")
+                test_key = gr.Button("Test OpenAI Key")
+                test_aiml = gr.Button("Test AIMLAPI Paths")
+            test_out = gr.Code(label="OpenAI test result")
+            test_aiml_out = gr.Code(label="AIMLAPI test result")
+            refresh.click(fn=check_setup, inputs=None, outputs=setup_box)
+            test_key.click(fn=test_openai_key, inputs=None, outputs=test_out)
+            test_aiml.click(fn=test_aimlapi_paths, inputs=None, outputs=test_aiml_out)
+        else:
             refresh = gr.Button("Refresh checks")
-            test_key = gr.Button("Test OpenAI Key")
-            test_aiml = gr.Button("Test AIMLAPI Paths")
-        test_out = gr.Code(label="OpenAI test result")
-        test_aiml_out = gr.Code(label="AIMLAPI test result")
-        refresh.click(fn=check_setup, inputs=None, outputs=setup_box)
-        test_key.click(fn=test_openai_key, inputs=None, outputs=test_out)
-        test_aiml.click(fn=test_aimlapi_paths, inputs=None, outputs=test_aiml_out)
+            refresh.click(fn=check_setup, inputs=None, outputs=setup_box)
 
     with gr.Row():
         audio = gr.Audio(sources=["microphone", "upload"], type="filepath", label="Speech audio")
@@ -150,7 +193,8 @@ with gr.Blocks(title="Speech to Video (WAN 2.1 Turbo)") as app:
         clear_clips()
         return json.dumps({"success": True, "cleared": True}, indent=2), json.dumps(list_clips(), indent=2)
 
-    def _stitch_saved():
+    def _stitch_saved(request: gr.Request):
+        _rate_limit(request)
         items = list_clips()
         urls = [i.get("url") for i in items if i.get("url")]
         if not urls:
