@@ -32,8 +32,16 @@ externalPort = 80
 localPort = 33903
 externalPort = 3000
 
+[[ports]]
+localPort = 44951
+externalPort = 3001
+
 [agent]
 expertMode = true
 
 [nix]
 channel = "stable-23_11"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["python", "-m", "src.speech_to_video.webui.app"]

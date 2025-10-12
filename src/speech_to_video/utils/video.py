@@ -15,7 +15,7 @@ def stitch_videos(video_urls: List[str]) -> Optional[str]:
         return None
 
     try:
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
+        from moviepy import VideoFileClip, concatenate_videoclips
     except Exception:
         # moviepy/ffmpeg not available; return None so caller can surface error
         return None
@@ -87,7 +87,7 @@ def stitch_videos_detailed(video_urls: List[str]) -> Dict[str, Any]:
         return result
 
     try:
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
+        from moviepy import VideoFileClip, concatenate_videoclips
     except Exception as e:
         result["error"] = f"moviepy/ffmpeg unavailable: {e}"
         return result
