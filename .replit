@@ -1,0 +1,7 @@
+run = "pip install -r requirements.txt --quiet && python -m src.speech_to_video.webui.app"
+language = "python3"
+entrypoint = "src/speech_to_video/webui/app.py"
+
+[nix]
+channel = "stable-23_11"
+
