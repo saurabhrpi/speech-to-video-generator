@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 modules = ["python-3.11"]
 
 [workflows]
@@ -29,18 +28,9 @@ outputType = "webview"
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 33903
+externalPort = 3000
+
 [agent]
 expertMode = true
-
-[deployment]
-run = ["sh", "-c", "python -m src.speech_to_video.webui.app"]
-deploymentTarget = "cloudrun"
-=======
-run = "pip install -r requirements.txt --quiet && python -m src.speech_to_video.webui.app"
-language = "python3"
-entrypoint = "src/speech_to_video/webui/app.py"
-
-[nix]
-channel = "stable-23_11"
-
->>>>>>> 99e096afdd194e02ada7e28248be2bf7b9d5c01a
