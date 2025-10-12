@@ -5,4 +5,7 @@ moviepy>=1.0.3
 tqdm>=4.66.0
 gradio>=4.44.0
 
+# Ensure ffmpeg binary availability for moviepy via imageio backend
+imageio-ffmpeg>=0.4.9
+
 
