@@ -34,3 +34,6 @@ externalPort = 3000
 
 [agent]
 expertMode = true
+
+[nix]
+channel = "stable-23_11"
