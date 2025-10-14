@@ -51,3 +51,8 @@ wheels/
 # Project specific
 Features and Questions.txt
 *.mp4
+
+# Web development
+web/node_modules/
+web/dist/
+web/.vite/

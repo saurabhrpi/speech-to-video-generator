@@ -8,4 +8,10 @@ gradio>=4.44.0
 # Ensure ffmpeg binary availability for moviepy via imageio backend
 imageio-ffmpeg>=0.4.9
 
+# REST API backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+aiofiles>=23.2.1
+
 
