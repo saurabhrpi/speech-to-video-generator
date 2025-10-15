@@ -56,3 +56,4 @@ Features and Questions.txt
 web/node_modules/
 web/dist/
 web/.vite/
+web/*.log
