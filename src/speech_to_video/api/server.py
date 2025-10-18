@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth
+from starlette.middleware.sessions import SessionMiddleware
+from authlib.integrations.starlette_client import OAuth
 import requests
 
 from ..services.video_service import VideoService
@@ -36,6 +38,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session middleware for login state (already used by OAuth)
+SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
+
+oauth = OAuth()
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+POST_LOGIN_REDIRECT = os.getenv("POST_LOGIN_REDIRECT", "").rstrip("/")
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
 # Session middleware for login state
 SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
@@ -112,21 +132,33 @@ def auth_session(request: Request):
 
 @app.get("/api/auth/login")
 async def auth_login(request: Request):
-    if "google" not in oauth:
+    client = oauth.create_client("google")
+    if client is None:
         raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    # Optional 'next' for post-login redirect
+    next_url = request.query_params.get("next")
+    if next_url:
+        request.session["plr"] = next_url
     redirect_uri = request.url_for("auth_callback")
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    # On Replit/public deploys, force an absolute URL that matches Google console
+    if PUBLIC_BASE_URL:
+        redirect_uri = f"{PUBLIC_BASE_URL}/api/auth/callback"
+    return await client.authorize_redirect(request, redirect_uri)
 
 @app.get("/api/auth/callback")
 async def auth_callback(request: Request):
-    if "google" not in oauth:
+    client = oauth.create_client("google")
+    if client is None:
         raise HTTPException(status_code=503, detail="Google OAuth not configured")
-    token = await oauth.google.authorize_access_token(request)
+    try:
+        token = await client.authorize_access_token(request)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"oauth_exchange_failed: {exc}")
     userinfo = token.get("userinfo") or {}
     if not userinfo:
         try:
-            userinfo = await oauth.google.parse_id_token(request, token)
-        except Exception:
+            userinfo = await client.parse_id_token(request, token)
+        except Exception as exc:
             userinfo = {}
     if not userinfo:
         raise HTTPException(status_code=401, detail="Failed to retrieve user info")
@@ -136,7 +168,9 @@ async def auth_callback(request: Request):
         "name": userinfo.get("name"),
         "picture": userinfo.get("picture"),
     }
-    return HTMLResponse("<script>window.location='/'</script>")
+    # Redirect back to app
+    dest = request.session.pop("plr", None) or POST_LOGIN_REDIRECT or PUBLIC_BASE_URL or "/"
+    return HTMLResponse(f"<script>window.location='{dest}'</script>")
 
 @app.post("/api/auth/logout")
 def auth_logout(request: Request):
@@ -262,6 +296,37 @@ def proxy_video(url: str):
         headers["Content-Length"] = cl
 
     return StreamingResponse(r.iter_content(chunk_size=8192), headers=headers, status_code=status)
+
+
+@app.post("/api/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    """
+    Transcribe an uploaded audio file and return the text.
+    """
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio.filename or "")[1] or ".wav") as tmpf:
+            contents = await audio.read()
+            tmpf.write(contents)
+            tmp_path = tmpf.name
+    finally:
+        try:
+            await audio.close()
+        except Exception:
+            pass
+
+    try:
+        try:
+            result = service.openai_client.transcribe(tmp_path)
+        except Exception as exc:
+            return JSONResponse({"success": False, "error": str(exc)})
+        text = (result or {}).get("text", "")
+        return JSONResponse({"success": True, "text": text, "length": len(text)})
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
 
 
 # Optionally mount Gradio UI at /gradio for transition

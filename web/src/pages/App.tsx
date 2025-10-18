@@ -20,6 +20,9 @@ export default function App() {
   const [clips, setClips] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [loginRequired, setLoginRequired] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingAudio, setPendingAudio] = useState<File | null>(null)
+  const [pendingTranscript, setPendingTranscript] = useState<string>('')
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -219,6 +222,22 @@ export default function App() {
     window.location.href = `${API_BASE}/api/auth/login`
   }
 
+  async function confirmProceed() {
+    const f = pendingAudio
+    setConfirmOpen(false)
+    if (f) {
+      setPendingAudio(null)
+      await handleSpeechToVideo(f)
+    }
+  }
+
+  function confirmCancel() {
+    setPendingAudio(null)
+    setPendingTranscript('')
+    setConfirmOpen(false)
+    setStatusMsg('')
+  }
+
   async function startRecording() {
     if (!canRecord) return
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -229,7 +248,22 @@ export default function App() {
     rec.onstop = async () => {
       const blob = new Blob(recordedChunks.current, { type: 'audio/webm' })
       const file = new File([blob], 'recording.webm', { type: 'audio/webm' })
-      await handleSpeechToVideo(file)
+      // Defer submission until user confirms in-app, and open modal immediately
+      setPendingAudio(file)
+      setPendingTranscript('')
+      setConfirmOpen(true)
+      // Kick off transcription in the background; update when done
+      ;(async () => {
+        try {
+          const fd = new FormData()
+          fd.set('audio', file)
+          const r = await fetch(`${API_BASE}/api/transcribe`, { method: 'POST', body: fd })
+          const j = await r.json()
+          if (j?.success && j?.text) setPendingTranscript(String(j.text))
+        } catch {
+          // ignore; leave transcript blank
+        }
+      })()
     }
     rec.start()
     setMediaRecorder(rec)
@@ -257,6 +291,23 @@ export default function App() {
       </header>
 
       <main className="container py-8 space-y-8">
+        {confirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-md border bg-card p-5 shadow">
+              <h2 className="text-base font-semibold">Submit recording?</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{pendingTranscript ? 'Proceed to generate a video from your recorded audio?' : 'Just a sec..'}</p>
+              {pendingTranscript && (
+                <div className="mt-3 rounded bg-muted p-2 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
+                  {pendingTranscript}
+                </div>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="ghost" onClick={confirmCancel}>Cancel</Button>
+                <Button onClick={confirmProceed}>Proceed</Button>
+              </div>
+            </div>
+          </div>
+        )}
         {(busy || statusMsg) && (
           <div>
             <div className="rounded-md border bg-card p-3">
