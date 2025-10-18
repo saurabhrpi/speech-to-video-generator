@@ -263,12 +263,29 @@ def stitch(urls: Optional[str] = Form(None), use_saved: bool = Form(False)):
     url_list: List[str] = []
     if use_saved:
         items = list_clips()
-        url_list = [i.get("url") for i in items if i.get("url")]
+        filtered: List[str] = []
+        for i in items:
+            u = (i.get("url") or "").strip()
+            note = (i.get("note") or "").strip().lower()
+            if not u:
+                continue
+            # Ignore previously stitched entries and non-absolute URLs
+            if u.startswith("/api/stitched") or u.endswith("/api/stitched"):
+                continue
+            if "stitched" in note:
+                continue
+            if not (u.startswith("http://") or u.startswith("https://")):
+                continue
+            filtered.append(u)
+        # de-duplicate while preserving order
+        seen = set()
+        url_list = [x for x in filtered if not (x in seen or seen.add(x))]
     else:
         if urls:
             # Accept comma or newline separated
             parts = [p.strip() for p in urls.replace("\n", ",").split(",")]
-            url_list = [p for p in parts if p]
+            # keep only absolute http(s) urls
+            url_list = [p for p in parts if p and (p.startswith("http://") or p.startswith("https://"))]
     if not url_list:
         raise HTTPException(status_code=400, detail="No URLs to stitch")
     detailed = stitch_videos_detailed(url_list)

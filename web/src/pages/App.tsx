@@ -165,6 +165,15 @@ export default function App() {
     setClips(list)
   }
 
+  async function saveClipDirect(url: string, note?: string) {
+    const body = new FormData()
+    body.set('url', url)
+    if (note) body.set('note', note)
+    await fetch(`${API_BASE}/api/clips`, { method: 'POST', body })
+    const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
+    setClips(list)
+  }
+
   async function handleClearClips() {
     await fetch(`${API_BASE}/api/clips`, { method: 'DELETE' })
     const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
@@ -203,6 +212,8 @@ export default function App() {
           setVideoUrl(url)
           setPendingUrl(null)
           endProgress('Stitching complete')
+          // Save stitched video into the LIST automatically (best-effort)
+          ;(async () => { try { await saveClipDirect(url, 'Stitched') } catch {} })()
         }
         const remaining = Math.max(0, expectedMsRef.current - elapsed)
         if (remaining > 0) {
@@ -309,7 +320,8 @@ export default function App() {
         </div>
       </header>
 
-      <main className="container py-8 space-y-8">
+      <main className="container py-8 grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-8">
         {confirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="w-full max-w-md rounded-md border bg-card p-5 shadow">
@@ -369,17 +381,9 @@ export default function App() {
             </div>
           </div>
           <div className="flex justify-center gap-2">
-            <Button variant="secondary" disabled={!videoUrl} onClick={() => handleSaveLastClip('')}>Save last clip</Button>
+            <Button variant="outline" disabled={!videoUrl} onClick={() => handleSaveLastClip('')}>Save last clip</Button>
             <Button variant="outline" onClick={handleStitchSaved} disabled={busy}>Stitch saved clips</Button>
-            <Button variant="ghost" onClick={handleClearClips}>Clear clips</Button>
-          </div>
-          <div className="max-w-3xl mx-auto space-y-2">
-            <label className="text-sm font-medium">Saved clips</label>
-            <ul className="space-y-1 text-sm">
-              {clips.map((c, idx) => (
-                <li key={idx} className="truncate">{c.url}</li>
-              ))}
-            </ul>
+            <Button variant="outline" onClick={handleClearClips}>Clear clips</Button>
           </div>
         </section>
 
@@ -389,6 +393,40 @@ export default function App() {
             {jsonOut || '{\n  "result": null\n}'}
           </pre>
         </section>
+        </div>
+
+        <aside className="hidden lg:block">
+          <div className="sticky top-4 rounded-md border bg-card p-3 h-[calc(100vh-6rem)] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold">LIST</span>
+              <span className="text-xs text-muted-foreground">{clips.length}</span>
+            </div>
+            <div className="space-y-1">
+              {clips.map((c, idx) => (
+                <button
+                  key={idx}
+                  className="w-full text-left flex gap-3 p-2 rounded hover:bg-accent"
+                  onClick={() => setVideoUrl(c.url)}
+                >
+                  <video
+                    src={c.url}
+                    className="w-28 h-16 rounded bg-black object-cover"
+                    preload="metadata"
+                    muted
+                    playsInline
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{c.note?.trim() || `Clip ${idx + 1}`}</div>
+                    <div className="truncate text-xs text-muted-foreground">{c.url}</div>
+                  </div>
+                </button>
+              ))}
+              {clips.length === 0 && (
+                <div className="text-xs text-muted-foreground">No saved clips yet.</div>
+              )}
+            </div>
+          </div>
+        </aside>
       </main>
       {/* Removed full-screen blur overlay; using inline progress at top */}
     </div>
