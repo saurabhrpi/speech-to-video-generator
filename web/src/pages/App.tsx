@@ -295,7 +295,7 @@ export default function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="w-full max-w-md rounded-md border bg-card p-5 shadow">
               <h2 className="text-base font-semibold">Submit recording?</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{pendingTranscript ? 'Proceed to generate a video from your recorded audio?' : 'Just a sec..'}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{pendingTranscript ? 'Proceed to generate a video from your recorded audio?' : 'Just a sec. Generating transcript for confirmation...'}</p>
               {pendingTranscript && (
                 <div className="mt-3 rounded bg-muted p-2 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
                   {pendingTranscript}

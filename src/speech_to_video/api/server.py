@@ -41,7 +41,16 @@ app.add_middleware(
 
 # Session middleware for login state (already used by OAuth)
 SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
+COOKIE_SAMESITE = (os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower() or "lax")
+if COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    COOKIE_SAMESITE = "lax"
+COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "0").lower() in {"1", "true", "yes", "on"}
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    same_site=COOKIE_SAMESITE,
+    https_only=COOKIE_SECURE,
+)
 
 oauth = OAuth()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
