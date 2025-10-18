@@ -19,6 +19,7 @@ export default function App() {
   const clipCountRef = useRef<number>(0)
   const [clips, setClips] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const [loginRequired, setLoginRequired] = useState(false)
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -112,6 +113,14 @@ export default function App() {
       const body = new FormData()
       body.set('audio', file)
       const resp = await fetch(`${API_BASE}/api/speech-to-video`, { method: 'POST', body })
+      if (resp.status === 401) {
+        setLoginRequired(true)
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Sign in required to continue.')
+        setBusy(false)
+        return
+      }
       const data: ApiResult = await resp.json()
       setJsonOut(JSON.stringify(data, null, 2))
       const url = data.video_url as string | undefined
@@ -169,6 +178,14 @@ export default function App() {
       const body = new FormData()
       body.set('use_saved', 'true')
       const resp = await fetch(`${API_BASE}/api/stitch`, { method: 'POST', body })
+      if (resp.status === 401) {
+        setLoginRequired(true)
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Sign in required to continue.')
+        setBusy(false)
+        return
+      }
       const data: ApiResult = await resp.json()
       setJsonOut(JSON.stringify(data, null, 2))
       if (data.success) {
@@ -196,6 +213,10 @@ export default function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function signIn() {
+    window.location.href = `${API_BASE}/api/auth/login`
   }
 
   async function startRecording() {
@@ -229,6 +250,9 @@ export default function App() {
       <header className="border-b">
         <div className="container py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold">Speech to Video</h1>
+          <div>
+            <Button variant="outline" onClick={signIn}>Sign in</Button>
+          </div>
         </div>
       </header>
 
@@ -254,6 +278,9 @@ export default function App() {
               <Button className="w-full h-12" onClick={startRecording} disabled={busy}>Record</Button>
             )
           )}
+          {!recording && loginRequired && (
+            <div className="text-xs text-destructive">Sign in required. Click the Sign in button above to continue.</div>
+          )}
           {recording && (
             <div className="mt-2">
               <MicVisualizer stream={recordingStream} />
@@ -265,7 +292,7 @@ export default function App() {
           <div className="flex justify-center">
             <div className="aspect-video w-full max-w-3xl rounded-md border bg-black/50 flex items-center justify-center">
               {videoUrl ? (
-                <video key={videoUrl} src={videoUrl} className="w-full h-full" controls />
+                <video key={videoUrl} src={videoUrl} className="w-full h-full" controls onError={() => setStatusMsg('Video failed to load')} />
               ) : (
                 <span className="text-sm text-muted-foreground">Your video will appear here</span>
               )}

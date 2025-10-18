@@ -2,11 +2,13 @@ import os
 import tempfile
 from typing import List, Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import StreamingResponse
+from starlette.middleware.sessions import SessionMiddleware
+from authlib.integrations.starlette_client import OAuth
 import requests
 
 from ..services.video_service import VideoService
@@ -35,6 +37,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Session middleware for login state
+SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
+
+# OAuth (Google)
+oauth = OAuth()
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+
 
 @app.get("/api/health")
 def health():
@@ -57,21 +76,98 @@ def setup_status():
     return {"env": info}
 
 
+# --------- Auth and usage limiting ---------
+_UNAUTH_LIMIT = int(os.getenv("UNAUTH_GEN_LIMIT", "5"))
+_IP_USAGE: dict[str, int] = {}
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    try:
+        return request.client.host or "unknown"
+    except Exception:
+        return "unknown"
+
+def _usage_key(request: Request) -> str:
+    ua = request.headers.get("user-agent", "?")
+    return f"{_client_ip(request)}|{ua[:120]}"
+
+def _get_usage(request: Request) -> int:
+    sess = int(request.session.get("usage_count", 0))
+    ipk = _usage_key(request)
+    ipu = int(_IP_USAGE.get(ipk, 0))
+    return max(sess, ipu)
+
+def _inc_usage(request: Request) -> int:
+    newv = _get_usage(request) + 1
+    request.session["usage_count"] = newv
+    _IP_USAGE[_usage_key(request)] = newv
+    return newv
+
+@app.get("/api/auth/session")
+def auth_session(request: Request):
+    user = request.session.get("user")
+    return {"authenticated": bool(user), "user": user or None, "usage_count": _get_usage(request), "limit": _UNAUTH_LIMIT}
+
+@app.get("/api/auth/login")
+async def auth_login(request: Request):
+    if "google" not in oauth:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    redirect_uri = request.url_for("auth_callback")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get("/api/auth/callback")
+async def auth_callback(request: Request):
+    if "google" not in oauth:
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    token = await oauth.google.authorize_access_token(request)
+    userinfo = token.get("userinfo") or {}
+    if not userinfo:
+        try:
+            userinfo = await oauth.google.parse_id_token(request, token)
+        except Exception:
+            userinfo = {}
+    if not userinfo:
+        raise HTTPException(status_code=401, detail="Failed to retrieve user info")
+    request.session["user"] = {
+        "sub": userinfo.get("sub"),
+        "email": userinfo.get("email"),
+        "name": userinfo.get("name"),
+        "picture": userinfo.get("picture"),
+    }
+    return HTMLResponse("<script>window.location='/'</script>")
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return {"success": True}
+
+
 @app.post("/api/generate")
-def generate_video(prompt: str = Form(...), duration: int = Form(10), quality: str = Form("high")):
+def generate_video(request: Request, prompt: str = Form(...), duration: int = Form(10), quality: str = Form("high")):
+    # Enforce unauthenticated usage limit
+    if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
+        raise HTTPException(status_code=401, detail="login_required")
     if not prompt or len(prompt.strip()) == 0:
         raise HTTPException(status_code=400, detail="Prompt is required")
     result = service.generate_video(prompt=prompt.strip(), duration=int(duration), quality=quality)
+    if result.get("success") or result.get("video_url"):
+        _inc_usage(request)
     return JSONResponse(result)
 
 
 @app.post("/api/speech-to-video")
 async def speech_to_video(
+    request: Request,
     audio: UploadFile = File(...),
     duration: int = Form(10),
     quality: str = Form("high"),
     prompt: Optional[str] = Form(None),
 ):
+    # Enforce unauthenticated usage limit
+    if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
+        raise HTTPException(status_code=401, detail="login_required")
     # Save upload to temp file
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio.filename or "")[1] or ".wav") as tmpf:
@@ -89,6 +185,8 @@ async def speech_to_video(
             result = service.generate_video(prompt=prompt.strip(), duration=int(duration), quality=quality)
         else:
             result = service.speech_to_video_with_audio(audio_path=tmp_path, duration=int(duration), quality=quality)
+        if result.get("success") or result.get("video_url"):
+            _inc_usage(request)
         return JSONResponse(result)
     finally:
         try:
