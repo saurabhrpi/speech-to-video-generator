@@ -23,6 +23,7 @@ export default function App() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
+  const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -32,6 +33,7 @@ export default function App() {
 
   useEffect(() => {
     fetch(`${API_BASE}/api/clips`).then(r => r.json()).then((list) => { setClips(list); clipCountRef.current = Array.isArray(list) ? list.length : 0 }).catch(() => setClips([]))
+    fetchSession()
   }, [])
 
   useEffect(() => { clipCountRef.current = clips.length }, [clips])
@@ -222,6 +224,22 @@ export default function App() {
     window.location.href = `${API_BASE}/api/auth/login`
   }
 
+  async function signOut() {
+    try { await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' }) } catch {}
+    await fetchSession()
+  }
+
+  async function fetchSession() {
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/session`)
+      const j = await r.json()
+      setAuth({ authenticated: !!j?.authenticated, user: j?.user, usage_count: Number(j?.usage_count || 0), limit: Number(j?.limit || 0) })
+      if (j?.authenticated) setLoginRequired(false)
+    } catch {
+      setAuth(null)
+    }
+  }
+
   async function confirmProceed() {
     const f = pendingAudio
     setConfirmOpen(false)
@@ -284,8 +302,9 @@ export default function App() {
       <header className="border-b">
         <div className="container py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold">Speech to Video</h1>
-          <div>
-            <Button variant="outline" onClick={signIn}>Sign in</Button>
+          <div className="flex items-center gap-2">
+            {auth?.authenticated && <span className="text-xs text-muted-foreground">Signed in as {auth?.user?.email || 'user'}</span>}
+            <Button variant="outline" onClick={auth?.authenticated ? signOut : signIn}>{auth?.authenticated ? 'Sign out' : 'Sign in'}</Button>
           </div>
         </div>
       </header>
