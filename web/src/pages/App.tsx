@@ -117,7 +117,16 @@ export default function App() {
       beginProgress('Processing audio…', 120_000)
       const body = new FormData()
       body.set('audio', file)
-      const resp = await fetch(`${API_BASE}/api/speech-to-video`, { method: 'POST', body })
+      let resp: Response
+      try {
+        resp = await fetch(`${API_BASE}/api/speech-to-video`, { method: 'POST', body })
+      } catch (e) {
+        // Network error or server restarted mid-request
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
       if (resp.status === 401) {
         setLoginRequired(true)
         clearProgressTimer()
@@ -126,7 +135,15 @@ export default function App() {
         setBusy(false)
         return
       }
-      const data: ApiResult = await resp.json()
+      let data: ApiResult
+      try {
+        data = await resp.json()
+      } catch {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
       setJsonOut(JSON.stringify(data, null, 2))
       const url = data.video_url as string | undefined
       if (url) {
@@ -191,7 +208,15 @@ export default function App() {
       beginProgress('Stitching saved clips…', stitchExpected)
       const body = new FormData()
       body.set('use_saved', 'true')
-      const resp = await fetch(`${API_BASE}/api/stitch`, { method: 'POST', body })
+      let resp: Response
+      try {
+        resp = await fetch(`${API_BASE}/api/stitch`, { method: 'POST', body })
+      } catch (e) {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
       if (resp.status === 401) {
         setLoginRequired(true)
         clearProgressTimer()
@@ -200,7 +225,15 @@ export default function App() {
         setBusy(false)
         return
       }
-      const data: ApiResult = await resp.json()
+      let data: ApiResult
+      try {
+        data = await resp.json()
+      } catch {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
       setJsonOut(JSON.stringify(data, null, 2))
       if (data.success) {
         const url = `${API_BASE}/api/stitched`
