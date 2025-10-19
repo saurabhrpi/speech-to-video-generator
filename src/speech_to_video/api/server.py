@@ -45,11 +45,13 @@ COOKIE_SAMESITE = (os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower() or "lax")
 if COOKIE_SAMESITE not in {"lax", "strict", "none"}:
     COOKIE_SAMESITE = "lax"
 COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "0").lower() in {"1", "true", "yes", "on"}
+COOKIE_MAX_AGE = int(os.getenv("SESSION_COOKIE_MAX_AGE", str(60 * 60 * 24 * 30)))  # 30 days default
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site=COOKIE_SAMESITE,
     https_only=COOKIE_SECURE,
+    max_age=COOKIE_MAX_AGE,
 )
 
 oauth = OAuth()
@@ -123,7 +125,11 @@ def _usage_key(request: Request) -> str:
     return f"{_client_ip(request)}|{ua[:120]}"
 
 def _get_usage(request: Request) -> int:
+    # If authenticated, rely solely on session (persists across visits for max_age)
+    # If unauthenticated, use the higher of session vs ephemeral IP+UA bucket.
     sess = int(request.session.get("usage_count", 0))
+    if request.session.get("user"):
+        return sess
     ipk = _usage_key(request)
     ipu = int(_IP_USAGE.get(ipk, 0))
     return max(sess, ipu)
@@ -131,7 +137,8 @@ def _get_usage(request: Request) -> int:
 def _inc_usage(request: Request) -> int:
     newv = _get_usage(request) + 1
     request.session["usage_count"] = newv
-    _IP_USAGE[_usage_key(request)] = newv
+    if not request.session.get("user"):
+        _IP_USAGE[_usage_key(request)] = newv
     return newv
 
 @app.get("/api/auth/session")
