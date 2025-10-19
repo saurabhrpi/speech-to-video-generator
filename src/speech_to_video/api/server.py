@@ -248,22 +248,33 @@ async def speech_to_video(
 
 @app.get("/api/clips")
 def get_clips(request: Request):
-    # If authenticated, optionally scope by user (future: per-user storage)
-    # For now, return global list from environment-specific CLIPS_DIR
-    return JSONResponse(list_clips())
+    # Scope clips by environment namespace and user (if authenticated)
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    return JSONResponse(list_clips(namespace))
 
 
 @app.post("/api/clips")
-def save_clip(url: str = Form(...), note: Optional[str] = Form(None)):
+def save_clip(request: Request, url: str = Form(...), note: Optional[str] = Form(None)):
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
-    entry = add_clip(url, note)
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    entry = add_clip(url, note, namespace)
     return JSONResponse({"success": True, "saved": entry})
 
 
 @app.delete("/api/clips")
-def delete_clips():
-    clear_clips()
+def delete_clips(request: Request):
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    clear_clips(namespace)
     return JSONResponse({"success": True, "cleared": True})
 
 
