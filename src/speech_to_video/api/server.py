@@ -279,10 +279,15 @@ def delete_clips(request: Request):
 
 
 @app.post("/api/stitch")
-def stitch(urls: Optional[str] = Form(None), use_saved: bool = Form(False)):
+def stitch(request: Request, urls: Optional[str] = Form(None), use_saved: bool = Form(False)):
     url_list: List[str] = []
     if use_saved:
-        items = list_clips()
+        # Use same namespace as clips list/save
+        ns = os.getenv("CLIPS_NAMESPACE", "")
+        user = request.session.get("user") or {}
+        user_ns = user.get("sub") or ""
+        namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+        items = list_clips(namespace)
         filtered: List[str] = []
         for i in items:
             u = (i.get("url") or "").strip()
