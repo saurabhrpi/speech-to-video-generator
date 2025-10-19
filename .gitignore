@@ -52,6 +52,7 @@ wheels/
 # Project specific
 Features and Questions.txt
 *.mp4
+clips/
 
 # Web development
 web/node_modules/

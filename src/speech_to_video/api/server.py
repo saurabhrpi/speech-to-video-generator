@@ -247,7 +247,9 @@ async def speech_to_video(
 
 
 @app.get("/api/clips")
-def get_clips():
+def get_clips(request: Request):
+    # If authenticated, optionally scope by user (future: per-user storage)
+    # For now, return global list from environment-specific CLIPS_DIR
     return JSONResponse(list_clips())
 
 

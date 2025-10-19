@@ -5,8 +5,11 @@ from typing import List, Dict, Optional
 
 
 def _playlist_path() -> str:
-    base = os.path.abspath(os.getcwd())
-    clips_dir = os.path.join(base, "clips")
+    # Allow environment to control storage location so local and prod don't share
+    base_dir = os.getenv("CLIPS_DIR")
+    if not base_dir:
+        base_dir = os.path.join(os.path.abspath(os.getcwd()), "clips")
+    clips_dir = base_dir
     os.makedirs(clips_dir, exist_ok=True)
     return os.path.join(clips_dir, "playlist.json")
 
