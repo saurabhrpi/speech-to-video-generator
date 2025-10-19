@@ -108,6 +108,13 @@ export default function App() {
     })
   }
 
+  async function preloadWithFallback(url: string, fallbackMs: number): Promise<void> {
+    return Promise.race([
+      preloadVideo(url),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), fallbackMs)),
+    ])
+  }
+
   // Removed prompt generation
 
   async function handleSpeechToVideo(file: File) {
@@ -148,8 +155,9 @@ export default function App() {
       const url = data.video_url as string | undefined
       if (url) {
         setStatusMsg('Preparing video…')
+        // Use the provider-returned media URL directly (no proxy)
         setPendingUrl(url)
-        await preloadVideo(url)
+        await preloadWithFallback(url, 15000)
         const elapsed = performance.now() - startTsRef.current
         const finish = () => {
           setVideoUrl(url)
@@ -238,8 +246,9 @@ export default function App() {
       if (data.success) {
         const url = `${API_BASE}/api/stitched`
         setStatusMsg('Preparing video…')
+        // No need to proxy local stitched file; use as is
         setPendingUrl(url)
-        await preloadVideo(url)
+        await preloadWithFallback(url, 15000)
         const elapsed = performance.now() - startTsRef.current
         const finish = () => {
           setVideoUrl(url)

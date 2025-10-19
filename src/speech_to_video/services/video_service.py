@@ -47,11 +47,26 @@ class VideoService:
             except Exception:
                 video_url = None
 
-        if data.get("status") in {"completed", "succeeded", "finished"} or video_url:
-            return {
-                "success": True,
-                "video_url": video_url,
-            }
+        # Only treat as success when we have a direct media URL (mp4/webm)
+        def _is_media(u: Optional[str]) -> bool:
+            if not u:
+                return False
+            try:
+                from urllib.parse import urlparse
+                path = urlparse(u).path.lower()
+                return path.endswith(".mp4") or path.endswith(".webm")
+            except Exception:
+                lu = u.lower()
+                # Fallback check that tolerates query strings
+                import re
+                return bool(re.search(r"\.(mp4|webm)(\?|$)", lu))
+
+        is_media = _is_media(video_url)
+        if data.get("status") in {"completed", "succeeded", "finished"} and not is_media:
+            # Provider finished but didn't return a media URL yet
+            return {"success": False, "error": data, "status_code": int(data.get("_status_code", status_code) or status_code)}
+        if is_media:
+            return {"success": True, "video_url": video_url}
 
         return {"success": False, "error": data, "status_code": int(data.get("_status_code", status_code) or status_code)}
 

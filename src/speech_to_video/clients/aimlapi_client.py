@@ -1,6 +1,9 @@
 from typing import Any, Dict, Optional
 
+import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from ..utils.config import Settings, get_settings
 
@@ -9,13 +12,31 @@ class AIMLAPIClient:
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
         self.base_url = self.settings.aimlapi_base_url.rstrip("/")
-        self.session = requests.Session()
-        self.session.headers.update(
+        # Separate sessions: POST (no retries), GET (with retries)
+        self.session_post = requests.Session()
+        self.session_get = requests.Session()
+        for s in (self.session_post, self.session_get):
+            s.headers.update(
             {
                 "Authorization": f"Bearer {self.settings.aimlapi_api_key}",
                 "Content-Type": "application/json",
             }
+            )
+        # Robust retries for GET/polling only
+        get_retry = Retry(
+            total=int(os.getenv("AIMLAPI_HTTP_RETRIES", "3")),
+            connect=3,
+            read=3,
+            backoff_factor=float(os.getenv("AIMLAPI_HTTP_BACKOFF", "0.8")),
+            status_forcelist=(429, 502, 503, 504),
+            allowed_methods=("GET",),
+            raise_on_status=False,
         )
+        self.session_get.mount("https://", HTTPAdapter(max_retries=get_retry))
+        self.session_get.mount("http://", HTTPAdapter(max_retries=get_retry))
+        # POST: no automatic HTTP retries (we handle minimal retry manually)
+        self.session_post.mount("https://", HTTPAdapter(max_retries=Retry(total=0)))
+        self.session_post.mount("http://", HTTPAdapter(max_retries=Retry(total=0)))
 
     def generate_video(self, prompt: str, duration: int, quality: str) -> Dict[str, Any]:
         """
@@ -32,18 +53,26 @@ class AIMLAPIClient:
         }
 
         last: Dict[str, Any] = {}
+        attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
         backoff = 1.0
-        for _ in range(3):
-            resp = self.session.post(url, json=body, timeout=60)
+        for _ in range(attempts):
             try:
-                data = resp.json()
-            except Exception:
-                data = {"error": resp.text}
-            data["_status_code"] = resp.status_code
-            data["_attempt_url"] = url
-            if resp.status_code not in {429} and resp.status_code < 500:
-                return data
-            last = data
+                connect_to = float(os.getenv("AIMLAPI_CONNECT_TIMEOUT", "10"))
+                read_to = float(os.getenv("AIMLAPI_READ_TIMEOUT", "45"))
+                resp = self.session_post.post(url, json=body, timeout=(connect_to, read_to))
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {"error": resp.text}
+                data["_status_code"] = resp.status_code
+                data["_attempt_url"] = url
+                if resp.status_code not in {429} and resp.status_code < 500:
+                    return data
+                last = data
+            except requests.Timeout as e:
+                last = {"error": f"timeout: {e}", "_status_code": 0, "_attempt_url": url}
+            except requests.RequestException as e:
+                last = {"error": f"request_error: {e}", "_status_code": 0, "_attempt_url": url}
             time.sleep(backoff)
             backoff *= 2.0
         return last or {"error": "No response", "_status_code": 0}
@@ -58,18 +87,26 @@ class AIMLAPIClient:
         url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_status_path}"
         params = {self.settings.aimlapi_status_query_param: job_id}
         last: Dict[str, Any] = {}
+        attempts = int(os.getenv("AIMLAPI_STATUS_ATTEMPTS", "2"))
         backoff = 1.0
-        for _ in range(3):
-            resp = self.session.get(url, params=params, timeout=30)
+        for _ in range(attempts):
             try:
-                data = resp.json()
-            except Exception:
-                data = {"error": resp.text}
-            data["_status_code"] = resp.status_code
-            data["_attempt_url"] = resp.url
-            if resp.status_code not in {429} and resp.status_code < 500:
-                return data
-            last = data
+                connect_to = float(os.getenv("AIMLAPI_CONNECT_TIMEOUT", "10"))
+                read_to = float(os.getenv("AIMLAPI_STATUS_READ_TIMEOUT", "30"))
+                resp = self.session_get.get(url, params=params, timeout=(connect_to, read_to))
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {"error": resp.text}
+                data["_status_code"] = resp.status_code
+                data["_attempt_url"] = resp.url
+                if resp.status_code not in {429} and resp.status_code < 500:
+                    return data
+                last = data
+            except requests.Timeout as e:
+                last = {"error": f"timeout: {e}", "_status_code": 0, "_attempt_url": url}
+            except requests.RequestException as e:
+                last = {"error": f"request_error: {e}", "_status_code": 0, "_attempt_url": url}
             time.sleep(backoff)
             backoff *= 2.0
         return last or {"error": "No response", "_status_code": 0}
@@ -77,6 +114,10 @@ class AIMLAPIClient:
     def poll_until_complete(self, job_id: str, max_wait: int = 300, interval: int = 5) -> Dict[str, Any]:
         import time
 
+        env_max = int(os.getenv("AIMLAPI_MAX_WAIT_SECONDS", str(max_wait)))
+        env_int = int(os.getenv("AIMLAPI_POLL_INTERVAL_SECONDS", str(interval)))
+        max_wait = env_max
+        interval = env_int
         start = time.time()
         while time.time() - start < max_wait:
             status = self.get_status(job_id)
@@ -92,7 +133,7 @@ class AIMLAPIClient:
             if url or state in {"completed", "succeeded", "finished"}:
                 return status
             time.sleep(interval)
-        return {"status": "timeout", "error": "Generation timed out"}
+        return {"status": "timeout", "error": "Generation timed out", "last_seen": status if 'status' in locals() else None}
 
     def _get_resolution(self, quality: str) -> str:
         if quality == "high":
@@ -100,22 +141,41 @@ class AIMLAPIClient:
         return self.settings.default_resolution_medium
 
     def _extract_video_url(self, data: Dict[str, Any]) -> Optional[str]:
-        # Find the first http(s) URL string in the response
+        """Extract a playable media URL from provider responses.
+        Avoid returning provider status/API URLs (e.g., /generation?...).
+        """
+        from urllib.parse import urlparse
+
+        urls: list[str] = []
+
         def _walk(obj):
             if isinstance(obj, str) and obj.startswith("http"):
-                return obj
+                urls.append(obj)
+                return
             if isinstance(obj, dict):
                 for v in obj.values():
-                    found = _walk(v)
-                    if found:
-                        return found
-            if isinstance(obj, list):
-                for item in obj:
-                    found = _walk(item)
-                    if found:
-                        return found
-            return None
+                    _walk(v)
+            elif isinstance(obj, list):
+                for it in obj:
+                    _walk(it)
 
-        return _walk(data)
+        _walk(data)
+
+        if not urls:
+            return None
+        # Strict: only return direct media links (tolerate query strings)
+        for u in urls:
+            try:
+                from urllib.parse import urlparse
+                path = urlparse(u).path.lower()
+                if path.endswith(".mp4") or path.endswith(".webm"):
+                    return u
+            except Exception:
+                pass
+            lu = u.lower()
+            import re
+            if re.search(r"\.(mp4|webm)(\?|$)", lu):
+                return u
+        return None
 
 
