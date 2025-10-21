@@ -5,6 +5,15 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}"
   ],
+  safelist: [
+    "hover:bg-accent",
+    "focus-within:bg-accent",
+    "hover:scale-[1.02]",
+    "focus-within:scale-[1.02]",
+    "group-hover:opacity-100",
+    "group-focus-within:opacity-100",
+    "grid-cols-[112px_1fr_auto]",
+  ],
   theme: {
     container: {
       center: true,

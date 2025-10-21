@@ -455,7 +455,7 @@ export default function App() {
               {clips.map((c, idx) => (
                 <div
                   key={c.ts || idx}
-                  className={`group w-full text-left grid grid-cols-[112px_1fr_auto] gap-3 p-2 rounded transition-transform ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'} hover:scale-[1.02] cursor-move`}
+                  className={`group w-full text-left grid grid-cols-[112px_1fr_auto] gap-3 p-2 rounded transition-transform ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent focus-within:bg-accent'} hover:scale-[1.02] focus-within:scale-[1.02] cursor-move`}
                   draggable
                   onDragStart={(e) => {
                     try { e.dataTransfer.setData('text/plain', String(idx)) } catch {}
@@ -508,7 +508,7 @@ export default function App() {
                         }
                       } catch {}
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     draggable={false}
                   >
                     {/* Trash icon */}
