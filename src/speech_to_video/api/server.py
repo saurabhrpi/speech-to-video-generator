@@ -17,7 +17,7 @@ import glob
 
 from ..services.video_service import VideoService
 from ..utils.config import get_settings
-from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips
+from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip
 from ..utils.video import stitch_videos_detailed
 
 
@@ -278,6 +278,22 @@ def delete_clips(request: Request):
     namespace = "/".join([p for p in [ns, user_ns] if p]) or None
     clear_clips(namespace)
     return JSONResponse({"success": True, "cleared": True})
+
+
+@app.delete("/api/clips/{ts}")
+def delete_clip(request: Request, ts: int):
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    ok = False
+    try:
+        ok = remove_clip(ts, namespace)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to delete: {exc}")
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return JSONResponse({"success": True})
 
 
 @app.post("/api/clips/reorder")

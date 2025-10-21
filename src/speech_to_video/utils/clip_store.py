@@ -106,3 +106,14 @@ def remove_stitched_clips(namespace: Optional[str] = None) -> int:
     return removed
 
 
+def remove_clip(ts_value: int, namespace: Optional[str] = None) -> bool:
+    """Remove a single clip by its ts field. Returns True if removed."""
+    items = _load(namespace)
+    target = int(ts_value)
+    new_items = [it for it in items if int(it.get("ts", 0)) != target]
+    changed = len(new_items) != len(items)
+    if changed:
+        _save(new_items, namespace)
+    return changed
+
+

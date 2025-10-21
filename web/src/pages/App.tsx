@@ -455,7 +455,7 @@ export default function App() {
               {clips.map((c, idx) => (
                 <div
                   key={c.ts || idx}
-                  className={`w-full text-left flex gap-3 p-2 rounded ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'} cursor-move`}
+                  className={`group w-full text-left grid grid-cols-[112px_1fr_auto] gap-3 p-2 rounded transition-transform ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'} hover:scale-[1.02] cursor-move`}
                   draggable
                   onDragStart={(e) => {
                     try { e.dataTransfer.setData('text/plain', String(idx)) } catch {}
@@ -480,7 +480,7 @@ export default function App() {
                     } catch {}
                   }}
                 >
-                  <button onClick={() => setVideoUrl(c.url)} className="flex gap-3 w-full text-left" draggable={false}>
+                  <button onClick={() => setVideoUrl(c.url)} className="col-span-2 grid grid-cols-[112px_1fr] items-center gap-3 w-full text-left" draggable={false}>
                     <video
                       src={c.url}
                       className="w-28 h-16 rounded bg-black object-cover"
@@ -489,10 +489,32 @@ export default function App() {
                       playsInline
                       draggable={false}
                     />
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{(c.note || '').trim() || `Clip ${idx + 1}`}</div>
                       <div className="truncate text-xs text-muted-foreground">{c.url}</div>
                     </div>
+                  </button>
+                  <button
+                    aria-label="Delete clip"
+                    title="Delete clip"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (!c.ts) return
+                      try {
+                        const r = await fetch(`${API_BASE}/api/clips/${c.ts}`, { method: 'DELETE', credentials: 'include' })
+                        if (r.ok) {
+                          const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
+                          setClips(list)
+                        }
+                      } catch {}
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    draggable={false}
+                  >
+                    {/* Trash icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                      <path fillRule="evenodd" d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h3.25a.75.75 0 0 1 0 1.5H5.75a.75.75 0 0 1 0-1.5H9V3.75ZM6.75 8.5a.75.75 0 0 1 .75.75V19c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9.25a.75.75 0 0 1 1.5 0V19A2.75 2.75 0 0 1 15.25 21.75h-6.5A2.75 2.75 0 0 1 6 19V9.25a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75-.75.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5Z" clipRule="evenodd" />
+                    </svg>
                   </button>
                 </div>
               ))}
