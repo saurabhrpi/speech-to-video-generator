@@ -455,11 +455,17 @@ export default function App() {
               {clips.map((c, idx) => (
                 <div
                   key={c.ts || idx}
-                  className={`w-full text-left flex gap-3 p-2 rounded ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'}`}
+                  className={`w-full text-left flex gap-3 p-2 rounded ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'} cursor-move`}
                   draggable
-                  onDragStart={() => setDragIndex(idx)}
+                  onDragStart={(e) => {
+                    try { e.dataTransfer.setData('text/plain', String(idx)) } catch {}
+                    try { e.dataTransfer.effectAllowed = 'move' } catch {}
+                    setDragIndex(idx)
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
                   onDragOver={(e) => { e.preventDefault() }}
-                  onDrop={async () => {
+                  onDrop={async (e) => {
+                    e.preventDefault()
                     if (dragIndex===null || dragIndex===idx) return
                     const newList = [...clips]
                     const [moved] = newList.splice(dragIndex, 1)
@@ -470,17 +476,18 @@ export default function App() {
                       const order = newList.map(x => x.ts).filter(Boolean).join(',')
                       const fd = new FormData()
                       fd.set('order', order)
-                      await fetch(`${API_BASE}/api/clips/reorder`, { method: 'POST', body: fd })
+                      await fetch(`${API_BASE}/api/clips/reorder`, { method: 'POST', body: fd, credentials: 'include' })
                     } catch {}
                   }}
                 >
-                  <button onClick={() => setVideoUrl(c.url)} className="flex gap-3 w-full text-left">
+                  <button onClick={() => setVideoUrl(c.url)} className="flex gap-3 w-full text-left" draggable={false}>
                     <video
                       src={c.url}
                       className="w-28 h-16 rounded bg-black object-cover"
                       preload="metadata"
                       muted
                       playsInline
+                      draggable={false}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{(c.note || '').trim() || `Clip ${idx + 1}`}</div>
