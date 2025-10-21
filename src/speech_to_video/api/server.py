@@ -12,10 +12,12 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth
 import requests
+import shutil
+import glob
 
 from ..services.video_service import VideoService
 from ..utils.config import get_settings
-from ..utils.clip_store import add_clip, list_clips, clear_clips
+from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips
 from ..utils.video import stitch_videos_detailed
 
 
@@ -278,6 +280,38 @@ def delete_clips(request: Request):
     return JSONResponse({"success": True, "cleared": True})
 
 
+@app.post("/api/clips/reorder")
+def clips_reorder(request: Request, order: str = Form(...)):
+    """
+    Reorder clips by list of ts values (comma-separated or JSON list in string form).
+    """
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    # Parse order
+    order_ts: list[int] = []
+    s = (order or "").strip()
+    if s.startswith("["):
+        try:
+            import json as _json
+            arr = _json.loads(s)
+            order_ts = [int(x) for x in arr if isinstance(x, (int, float, str))]
+        except Exception:
+            order_ts = []
+    else:
+        parts = [p.strip() for p in s.split(",")]
+        for p in parts:
+            try:
+                order_ts.append(int(p))
+            except Exception:
+                pass
+    if not order_ts:
+        raise HTTPException(status_code=400, detail="invalid order")
+    new_items = reorder_clips(order_ts, namespace)
+    return JSONResponse({"success": True, "clips": new_items})
+
+
 @app.post("/api/stitch")
 def stitch(request: Request, urls: Optional[str] = Form(None), use_saved: bool = Form(False)):
     url_list: List[str] = []
@@ -314,15 +348,64 @@ def stitch(request: Request, urls: Optional[str] = Form(None), use_saved: bool =
     if not url_list:
         raise HTTPException(status_code=400, detail="No URLs to stitch")
     detailed = stitch_videos_detailed(url_list)
+    # If success, copy stitched file into a unique per-namespace path and return a unique URL
+    if detailed.get("success") and detailed.get("output_path"):
+        out_path = detailed.get("output_path")
+        ns = os.getenv("CLIPS_NAMESPACE", "")
+        user = request.session.get("user") or {}
+        user_ns = user.get("sub") or ""
+        namespace = "/".join([p for p in [ns, user_ns] if p])
+        base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
+        target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
+        os.makedirs(target_dir, exist_ok=True)
+        import time as _t
+        fname = f"stitched-{int(_t.time())}.mp4"
+        dest = os.path.join(target_dir, fname)
+        try:
+            shutil.copyfile(out_path, dest)
+            detailed["stitched_url"] = f"/api/stitched/{fname}"
+            # Prune previously saved stitched entries for this namespace
+            try:
+                remove_stitched_clips(namespace)
+            except Exception:
+                pass
+        except Exception as exc:
+            detailed.setdefault("error", str(exc))
     return JSONResponse(detailed)
 
 
 @app.get("/api/stitched")
-def get_stitched_file():
+def get_stitched_file(request: Request):
+    # Serve most recent stitched file from namespace; fallback to legacy path
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p])
+    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
+    target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
+    if os.path.isdir(target_dir):
+        files = sorted(glob.glob(os.path.join(target_dir, "stitched-*.mp4")))
+        if files:
+            latest = files[-1]
+            return FileResponse(latest, media_type="video/mp4", filename=os.path.basename(latest))
+    # legacy
     path = os.path.abspath("stitched_output.mp4")
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="No stitched_output.mp4 found")
+        raise HTTPException(status_code=404, detail="No stitched file found")
     return FileResponse(path, media_type="video/mp4", filename="stitched_output.mp4")
+
+@app.get("/api/stitched/{name}")
+def get_stitched_named(request: Request, name: str):
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p])
+    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
+    target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
+    path = os.path.join(target_dir, name)
+    if not (os.path.isfile(path) and path.endswith('.mp4')):
+        raise HTTPException(status_code=404, detail="Stitched file not found")
+    return FileResponse(path, media_type="video/mp4", filename=name)
 
 
 @app.get("/api/proxy-video")

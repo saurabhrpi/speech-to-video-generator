@@ -18,6 +18,7 @@ export default function App() {
   const expectedMsRef = useRef<number>(120_000)
   const clipCountRef = useRef<number>(0)
   const [clips, setClips] = useState<any[]>([])
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [loginRequired, setLoginRequired] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -244,7 +245,8 @@ export default function App() {
       }
       setJsonOut(JSON.stringify(data, null, 2))
       if (data.success) {
-        const url = `${API_BASE}/api/stitched`
+        const stitched = (data.stitched_url as string) || ''
+        const url = stitched || `${API_BASE}/api/stitched`
         setStatusMsg('Preparing video…')
         // No need to proxy local stitched file; use as is
         setPendingUrl(url)
@@ -254,8 +256,14 @@ export default function App() {
           setVideoUrl(url)
           setPendingUrl(null)
           endProgress('Stitching complete')
-          // Save stitched video into the LIST automatically (best-effort)
-          ;(async () => { try { await saveClipDirect(url, 'Stitched') } catch {} })()
+          // Save stitched video into the LIST automatically (best-effort). Backend prunes old stitched entries.
+          ;(async () => {
+            try {
+              await saveClipDirect(url, 'Stitched')
+              const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
+              setClips(list)
+            } catch {}
+          })()
         }
         const remaining = Math.max(0, expectedMsRef.current - elapsed)
         if (remaining > 0) {
@@ -445,23 +453,41 @@ export default function App() {
             </div>
             <div className="space-y-1">
               {clips.map((c, idx) => (
-                <button
-                  key={idx}
-                  className="w-full text-left flex gap-3 p-2 rounded hover:bg-accent"
-                  onClick={() => setVideoUrl(c.url)}
+                <div
+                  key={c.ts || idx}
+                  className={`w-full text-left flex gap-3 p-2 rounded ${dragIndex===idx ? 'bg-accent' : 'hover:bg-accent'}`}
+                  draggable
+                  onDragStart={() => setDragIndex(idx)}
+                  onDragOver={(e) => { e.preventDefault() }}
+                  onDrop={async () => {
+                    if (dragIndex===null || dragIndex===idx) return
+                    const newList = [...clips]
+                    const [moved] = newList.splice(dragIndex, 1)
+                    newList.splice(idx, 0, moved)
+                    setClips(newList)
+                    setDragIndex(null)
+                    try {
+                      const order = newList.map(x => x.ts).filter(Boolean).join(',')
+                      const fd = new FormData()
+                      fd.set('order', order)
+                      await fetch(`${API_BASE}/api/clips/reorder`, { method: 'POST', body: fd })
+                    } catch {}
+                  }}
                 >
-                  <video
-                    src={c.url}
-                    className="w-28 h-16 rounded bg-black object-cover"
-                    preload="metadata"
-                    muted
-                    playsInline
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{c.note?.trim() || `Clip ${idx + 1}`}</div>
-                    <div className="truncate text-xs text-muted-foreground">{c.url}</div>
-                  </div>
-                </button>
+                  <button onClick={() => setVideoUrl(c.url)} className="flex gap-3 w-full text-left">
+                    <video
+                      src={c.url}
+                      className="w-28 h-16 rounded bg-black object-cover"
+                      preload="metadata"
+                      muted
+                      playsInline
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{(c.note || '').trim() || `Clip ${idx + 1}`}</div>
+                      <div className="truncate text-xs text-muted-foreground">{c.url}</div>
+                    </div>
+                  </button>
+                </div>
               ))}
               {clips.length === 0 && (
                 <div className="text-xs text-muted-foreground">No saved clips yet.</div>
