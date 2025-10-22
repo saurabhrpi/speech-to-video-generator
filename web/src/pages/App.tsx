@@ -22,6 +22,7 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [loginRequired, setLoginRequired] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [stitchConfirmOpen, setStitchConfirmOpen] = useState(false)
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
   const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
@@ -207,8 +208,6 @@ export default function App() {
   }
 
   async function handleStitchSaved() {
-    const ok = window.confirm('Stitch all saved clips now? This may take some time.')
-    if (!ok) return
     setBusy(true)
     try {
       // 45 seconds per 2 clips (ceil)
@@ -279,6 +278,19 @@ export default function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function openStitchConfirm() {
+    setStitchConfirmOpen(true)
+  }
+
+  function cancelStitchConfirm() {
+    setStitchConfirmOpen(false)
+  }
+
+  async function proceedStitchConfirm() {
+    setStitchConfirmOpen(false)
+    await handleStitchSaved()
   }
 
   function signIn() {
@@ -389,6 +401,18 @@ export default function App() {
             </div>
           </div>
         )}
+        {stitchConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-md border bg-card p-5 shadow">
+              <h2 className="text-base font-semibold">Stitch saved clips?</h2>
+              <p className="mt-2 text-sm text-muted-foreground">This will stitch the saved clips in the order shown.</p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="ghost" onClick={cancelStitchConfirm}>Cancel</Button>
+                <Button onClick={proceedStitchConfirm}>Proceed</Button>
+              </div>
+            </div>
+          </div>
+        )}
         {(busy || statusMsg) && (
           <div>
             <div className="rounded-md border bg-card p-3">
@@ -432,7 +456,7 @@ export default function App() {
           </div>
           <div className="flex justify-center gap-2">
             <Button variant="outline" disabled={!videoUrl} onClick={() => handleSaveLastClip('')}>Save last clip</Button>
-            <Button variant="outline" onClick={handleStitchSaved} disabled={busy}>Stitch saved clips</Button>
+            <Button variant="outline" onClick={openStitchConfirm} disabled={busy}>Stitch saved clips</Button>
             <Button variant="outline" onClick={handleClearClips}>Clear clips</Button>
           </div>
         </section>
