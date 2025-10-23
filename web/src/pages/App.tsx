@@ -165,6 +165,8 @@ export default function App() {
           setVideoUrl(url)
           setPendingUrl(null)
           endProgress('Ready')
+          // Refresh session usage so gating reflects the consumed free attempt
+          ;(async () => { try { await fetchSession() } catch {} })()
         }
         const remaining = Math.max(0, expectedMsRef.current - elapsed)
         if (remaining > 0) {
@@ -331,6 +333,12 @@ export default function App() {
 
   async function startRecording() {
     if (!canRecord) return
+    // Gate unauthenticated returning users client-side before accessing mic
+    if (!auth?.authenticated && Number(auth?.usage_count || 0) >= Number(auth?.limit || 1)) {
+      setLoginRequired(true)
+      setStatusMsg('Sign in required to continue.')
+      return
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     const rec = new MediaRecorder(stream)
     recordedChunks.current = []

@@ -110,7 +110,7 @@ def setup_status():
 
 
 # --------- Auth and usage limiting ---------
-_UNAUTH_LIMIT = int(os.getenv("UNAUTH_GEN_LIMIT", "5"))
+_UNAUTH_LIMIT = int(os.getenv("UNAUTH_GEN_LIMIT", "1"))
 _IP_USAGE: dict[str, int] = {}
 
 def _client_ip(request: Request) -> str:
