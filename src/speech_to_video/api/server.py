@@ -500,6 +500,47 @@ def _mount_static(app_: FastAPI) -> None:
         pass
 
 
+# --- Ads ---
+@app.post("/api/ads/superbowl")
+async def create_superbowl_ad(
+    request: Request,
+    prompt: Optional[str] = Form(None),
+    audio: Optional[UploadFile] = File(None),
+):
+    if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
+        raise HTTPException(status_code=401, detail="login_required")
+
+    text = (prompt or "").strip()
+    tmp_path = None
+    if not text and audio:
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio.filename or "")[1] or ".wav") as tmpf:
+                contents = await audio.read()
+                tmpf.write(contents)
+                tmp_path = tmpf.name
+        finally:
+            try:
+                await audio.close()
+            except Exception:
+                pass
+        try:
+            transcript = service.openai_client.transcribe(tmp_path)
+            text = (transcript or {}).get("text", "").strip()
+        finally:
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if not text:
+        raise HTTPException(status_code=400, detail="prompt_or_audio_required")
+
+    result = service.generate_superbowl_ad(text)
+    if result.get("success") or result.get("video_url"):
+        _inc_usage(request)
+    return JSONResponse(result)
+
 _mount_static(app)
 
 

@@ -128,7 +128,7 @@ export default function App() {
       body.set('audio', file)
       let resp: Response
       try {
-        resp = await fetch(`${API_BASE}/api/speech-to-video`, { method: 'POST', body })
+        resp = await fetch(`${API_BASE}/api/ads/superbowl`, { method: 'POST', body })
       } catch (e) {
         // Network error or server restarted mid-request
         clearProgressTimer()
@@ -166,6 +166,70 @@ export default function App() {
           setPendingUrl(null)
           endProgress('Ready')
           // Refresh session usage so gating reflects the consumed free attempt
+          ;(async () => { try { await fetchSession() } catch {} })()
+        }
+        const remaining = Math.max(0, expectedMsRef.current - elapsed)
+        if (remaining > 0) {
+          window.setTimeout(finish, remaining)
+        } else {
+          finish()
+        }
+      } else {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('No video URL returned')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handlePromptToAd(promptText: string) {
+    setBusy(true)
+    try {
+      // 2 minutes target for generation via text
+      beginProgress('Processing prompt…', 120_000)
+      const body = new FormData()
+      body.set('prompt', promptText)
+      let resp: Response
+      try {
+        resp = await fetch(`${API_BASE}/api/ads/superbowl`, { method: 'POST', body })
+      } catch (e) {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
+      if (resp.status === 401) {
+        setLoginRequired(true)
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Sign in required to continue.')
+        setBusy(false)
+        return
+      }
+      let data: ApiResult
+      try {
+        data = await resp.json()
+      } catch {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server restarted. Please retry.')
+        return
+      }
+      setJsonOut(JSON.stringify(data, null, 2))
+      const raw = data.video_url as string | undefined
+      if (raw) {
+        // Support relative stitched URL with cache-buster
+        const url = /^https?:/i.test(raw) ? raw : `${API_BASE}${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`
+        setStatusMsg('Preparing video…')
+        setPendingUrl(url)
+        await preloadWithFallback(url, 15000)
+        const elapsed = performance.now() - startTsRef.current
+        const finish = () => {
+          setVideoUrl(url)
+          setPendingUrl(null)
+          endProgress('Ready')
           ;(async () => { try { await fetchSession() } catch {} })()
         }
         const remaining = Math.max(0, expectedMsRef.current - elapsed)
@@ -318,7 +382,10 @@ export default function App() {
   async function confirmProceed() {
     const f = pendingAudio
     setConfirmOpen(false)
-    if (f) {
+    if (pendingTranscript && pendingTranscript.trim().length > 0) {
+      setPendingAudio(null)
+      await handlePromptToAd(pendingTranscript.trim())
+    } else if (f) {
       setPendingAudio(null)
       await handleSpeechToVideo(f)
     }
@@ -397,11 +464,14 @@ export default function App() {
             <div className="w-full max-w-md rounded-md border bg-card p-5 shadow">
               <h2 className="text-base font-semibold">Submit recording?</h2>
               <p className="mt-2 text-sm text-muted-foreground">{pendingTranscript ? 'Proceed to generate a video from your recorded audio?' : 'Just a sec. Generating transcript for confirmation...'}</p>
-              {pendingTranscript && (
-                <div className="mt-3 rounded bg-muted p-2 text-xs whitespace-pre-wrap max-h-40 overflow-auto">
-                  {pendingTranscript}
-                </div>
-              )}
+              <div className="mt-3">
+                <textarea
+                  className="w-full rounded border bg-background p-2 text-xs leading-5 max-h-40 min-h-[96px] outline-none"
+                  placeholder={pendingTranscript ? '' : 'Type or wait for transcript…'}
+                  value={pendingTranscript}
+                  onChange={(e) => setPendingTranscript(e.target.value)}
+                />
+              </div>
               <div className="mt-4 flex justify-end gap-2">
                 <Button variant="ghost" onClick={confirmCancel}>Cancel</Button>
                 <Button onClick={confirmProceed}>Proceed</Button>

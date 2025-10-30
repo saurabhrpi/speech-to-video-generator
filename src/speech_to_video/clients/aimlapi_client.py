@@ -38,7 +38,17 @@ class AIMLAPIClient:
         self.session_post.mount("https://", HTTPAdapter(max_retries=Retry(total=0)))
         self.session_post.mount("http://", HTTPAdapter(max_retries=Retry(total=0)))
 
-    def generate_video(self, prompt: str, duration: int, quality: str) -> Dict[str, Any]:
+    def generate_video(
+        self,
+        prompt: str,
+        duration: int,
+        quality: str,
+        seed: Optional[int] = None,
+        model: Optional[str] = None,
+        aspect_ratio: Optional[str] = None,
+        endpoint_path: Optional[str] = None,
+        resolution: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Create a generation using AIMLAPI v2 endpoint:
         POST {base_url}/generate/video/google/generation
@@ -46,11 +56,20 @@ class AIMLAPIClient:
         """
         import time
 
-        url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_generate_path}"
-        body = {
-            "model": "alibaba/wan2.1-t2v-turbo",
+        url = f"{self.base_url.rstrip('/')}{(endpoint_path or self.settings.aimlapi_generate_path)}"
+        body: Dict[str, Any] = {
+            "model": model or "alibaba/wan2.1-t2v-turbo",
             "prompt": prompt,
         }
+        if seed is not None:
+            body["seed"] = int(seed)
+        # Duration hint (used by Veo; ignored by some providers)
+        if isinstance(duration, int) and duration > 0:
+            body["duration"] = int(duration)
+        if aspect_ratio:
+            body["aspect_ratio"] = aspect_ratio
+        if resolution:
+            body["resolution"] = resolution
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
@@ -77,15 +96,24 @@ class AIMLAPIClient:
             backoff *= 2.0
         return last or {"error": "No response", "_status_code": 0}
 
-    def get_status(self, job_id: str) -> Dict[str, Any]:
+    def get_status(self, job_id: str, status_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Poll generation using AIMLAPI v2 endpoint:
         GET {base_url}/generate/video/google/generation?generation_id={id}
         """
         import time
 
-        url = f"{self.base_url.rstrip('/')}{self.settings.aimlapi_status_path}"
-        params = {self.settings.aimlapi_status_query_param: job_id}
+        # Support both query style and REST style (e.g., /video/generations/{id})
+        base = self.base_url.rstrip('/')
+        if status_path and "{id}" in status_path:
+            jid = str(job_id)
+            # Some providers return IDs like "<uuid>:<model>"; REST paths expect the UUID only
+            id_only = jid.split(":")[0]
+            url = f"{base}{status_path.format(id=id_only)}"
+            params = None
+        else:
+            url = f"{base}{(status_path or self.settings.aimlapi_status_path)}"
+            params = {self.settings.aimlapi_status_query_param: job_id}
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_STATUS_ATTEMPTS", "2"))
         backoff = 1.0
@@ -93,7 +121,10 @@ class AIMLAPIClient:
             try:
                 connect_to = float(os.getenv("AIMLAPI_CONNECT_TIMEOUT", "10"))
                 read_to = float(os.getenv("AIMLAPI_STATUS_READ_TIMEOUT", "30"))
-                resp = self.session_get.get(url, params=params, timeout=(connect_to, read_to))
+                if params is None:
+                    resp = self.session_get.get(url, timeout=(connect_to, read_to))
+                else:
+                    resp = self.session_get.get(url, params=params, timeout=(connect_to, read_to))
                 try:
                     data = resp.json()
                 except Exception:
@@ -111,7 +142,7 @@ class AIMLAPIClient:
             backoff *= 2.0
         return last or {"error": "No response", "_status_code": 0}
 
-    def poll_until_complete(self, job_id: str, max_wait: int = 300, interval: int = 5) -> Dict[str, Any]:
+    def poll_until_complete(self, job_id: str, max_wait: int = 300, interval: int = 5, status_path: Optional[str] = None) -> Dict[str, Any]:
         import time
 
         env_max = int(os.getenv("AIMLAPI_MAX_WAIT_SECONDS", str(max_wait)))
@@ -120,8 +151,27 @@ class AIMLAPIClient:
         interval = env_int
         start = time.time()
         while time.time() - start < max_wait:
-            status = self.get_status(job_id)
+            status = self.get_status(job_id, status_path=status_path)
             state = (status.get("status") or "").lower()
+            # Fallbacks for providers that don't support REST GET yet
+            if status.get("_status_code") == 404:
+                # Try query-style on /video/generations
+                try:
+                    qstatus = self.get_status(job_id, status_path="/video/generations")
+                    if qstatus and int(qstatus.get("_status_code", 0)) < 400:
+                        status = qstatus
+                        state = (status.get("status") or "").lower()
+                    else:
+                        # Try legacy google status endpoint
+                        qstatus2 = self.get_status(job_id, status_path="/generate/video/google/generation")
+                        if qstatus2 and int(qstatus2.get("_status_code", 0)) < 400:
+                            status = qstatus2
+                            state = (status.get("status") or "").lower()
+                except Exception:
+                    pass
+                if status.get("_status_code") == 404 and not status.get("status"):
+                    time.sleep(interval)
+                    continue
             if state in {"failed", "error"}:
                 return status
             # common in-progress states from sample
