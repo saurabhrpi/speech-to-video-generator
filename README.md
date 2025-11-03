@@ -128,6 +128,5 @@ Outputs will include URLs returned by the AIMLAPI. If stitching is enabled and `
 
 ### TBD: 
 
-- Deploy on public URL.
-- Decrease the cost per 10 sec clip.
-- To create multi scene stitching, creating one scene at a time and storing those.
+- Decrease the cost per clip.
+- Create a longer clip, 15 sec to be specific for V1.
