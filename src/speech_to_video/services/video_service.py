@@ -113,15 +113,15 @@ class VideoService:
         }
 
     def generate_superbowl_ad(self, prompt: str) -> Dict:
-        """Generate ~15s ad as 3x5s scenes with the same seed for better continuity, then stitch."""
+        """Generate a short ad as 2x4s scenes (Sora 2) and stitch."""
         import os, random
         from ..utils.video import stitch_videos_detailed
         base = self._superbowl_prompt(prompt)
         seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
-        # Two 8-second Veo3.1 scenes (1080p requires exactly 8s), then stitch (~16s total)
+        # Two 4-second scenes (lower cost) at 720p, then stitch (~8s total)
         scenes = [
-            {"prompt": f"{base} Scene 1 (hook). Keep BRAND_HERO identical.", "duration": 8},
-            {"prompt": f"{base} Scene 2 (CTA + logo). Keep BRAND_HERO identical.", "duration": 8},
+            {"prompt": f"{base} Scene 1 (hook). Keep BRAND_HERO identical.", "duration": 4},
+            {"prompt": f"{base} Scene 2 (CTA + logo). Keep BRAND_HERO identical.", "duration": 4},
         ]
         seg_urls: List[str] = []
         for s in scenes:
@@ -130,7 +130,7 @@ class VideoService:
                 s["duration"],
                 "high",
                 seed=seed,
-                model="google/veo-3.1-t2v",
+                model="openai/sora-2-t2v",
                 aspect_ratio="16:9",
                 endpoint_path="/video/generations",
                 status_path="/video/generations/{id}",
