@@ -130,3 +130,4 @@ Outputs will include URLs returned by the AIMLAPI. If stitching is enabled and `
 
 - Decrease the cost per clip.
 - Create a 15 sec clip for V1, by MERGING two clips.
+- Resolve the issue of inconsistent themes/actors across the two clips.
