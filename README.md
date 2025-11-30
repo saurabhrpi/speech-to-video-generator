@@ -12,7 +12,7 @@ The code is organized into clients (OpenAI and AIMLAPI), a service orchestrating
 
 - Python 3.10+
 - An `OPENAI_API_KEY` (for transcription and scene planning)
-- An `AIMLAPI_API_KEY` (for Veo 3 video generation via `api.aimlapi.com`)
+- An `AIMLAPI_API_KEY` (for Sora 2 video generation via `api.aimlapi.com`)
 
 ### Setup
 
