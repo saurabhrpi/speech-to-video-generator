@@ -6,7 +6,7 @@ This project converts spoken audio into a video using a multi-step pipeline:
 - **Video Generation (AIMLAPI Sora 2)**: Generates video (with native audio when supported) via the AIMLAPI Sora 2 model.
 - **Stitching**: For durations over the single-call limit, segments are generated and stitched.
 
-The code is organized into clients (OpenAI and AIMLAPI), a service orchestrating the Veo 3 pipeline, utilities, and a simple CLI.
+The code is organized into clients (OpenAI and AIMLAPI), a service orchestrating the Sora 2 pipeline, utilities, and a simple CLI.
 
 ### Requirements
 
