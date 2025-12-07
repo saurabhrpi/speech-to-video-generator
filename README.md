@@ -125,7 +125,6 @@ Outputs will include URLs returned by the AIMLAPI. If stitching is enabled and `
 ### Cost considerations:
 
 - Current cost is $1 for an 8 sec clip.
-- Aim is to bring it down by 50% further in the next 1 month.
 
 ### TBD: 
 
