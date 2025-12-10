@@ -3,7 +3,7 @@
 This project converts spoken audio into a video using a multi-step pipeline:
 
 - **Transcription (OpenAI Whisper)**: Converts speech audio to text.
-- **Video Generation (AIMLAPI Sora 2)**: Generates video (with native audio when supported) via the AIMLAPI Sora 2 model.
+- **Video Generation (AIMLAPI Sora 2)**: Generates video (with native audio when supported) via the AIMLAPI Sora2 model.
 - **Stitching**: For durations over the single-call limit, segments are generated and stitched.
 
 The code is organized into clients (OpenAI and AIMLAPI), a service orchestrating the Sora 2 pipeline, utilities, and a simple CLI.
