@@ -152,7 +152,7 @@ class AIMLAPIClient:
         start = time.time()
         while time.time() - start < max_wait:
             status = self.get_status(job_id, status_path=status_path)
-            state = (status.get("status") or "").lower()
+            state = str(status.get("status") or "").lower()
             # Fallbacks for providers that don't support REST GET yet
             if status.get("_status_code") == 404:
                 # Try query-style on /video/generations
@@ -160,13 +160,13 @@ class AIMLAPIClient:
                     qstatus = self.get_status(job_id, status_path="/video/generations")
                     if qstatus and int(qstatus.get("_status_code", 0)) < 400:
                         status = qstatus
-                        state = (status.get("status") or "").lower()
+                        state = str(status.get("status") or "").lower()
                     else:
                         # Try legacy google status endpoint
                         qstatus2 = self.get_status(job_id, status_path="/generate/video/google/generation")
                         if qstatus2 and int(qstatus2.get("_status_code", 0)) < 400:
                             status = qstatus2
-                            state = (status.get("status") or "").lower()
+                            state = str(status.get("status") or "").lower()
                 except Exception:
                     pass
                 if status.get("_status_code") == 404 and not status.get("status"):

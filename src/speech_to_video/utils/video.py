@@ -34,9 +34,34 @@ def stitch_videos(video_urls: List[str]) -> Optional[str]:
                             f.write(chunk)
             local_paths.append(local_path)
 
-        # Load and concatenate
+        # Load and concatenate with gentle crossfade for continuity
         clips = [VideoFileClip(p) for p in local_paths]
-        final = concatenate_videoclips(clips, method="compose")
+        if len(clips) >= 2:
+            try:
+                fade = 0.5
+                mod: List = []
+                for i, c in enumerate(clips):
+                    d = max(0.1, min(fade, (c.duration or 0.6) * 0.25))
+                    if i > 0:
+                        try:
+                            c = c.crossfadein(d)
+                        except Exception:
+                            pass
+                        try:
+                            c = c.audio_fadein(d)
+                        except Exception:
+                            pass
+                    if i < len(clips) - 1:
+                        try:
+                            c = c.audio_fadeout(d)
+                        except Exception:
+                            pass
+                    mod.append(c)
+                final = concatenate_videoclips(mod, method="compose", padding=-d)
+            except Exception:
+                final = concatenate_videoclips(clips, method="compose")
+        else:
+            final = concatenate_videoclips(clips, method="compose")
         output_path = os.path.join(temp_dir, "stitched.mp4")
         final.write_videofile(output_path, codec="libx264", audio_codec="aac")
 
@@ -108,9 +133,34 @@ def stitch_videos_detailed(video_urls: List[str]) -> Dict[str, Any]:
 
         result["segments"] = list(local_paths)
 
-        # Load and concatenate
+        # Load and concatenate with gentle crossfade for continuity
         clips = [VideoFileClip(p) for p in local_paths]
-        final = concatenate_videoclips(clips, method="compose")
+        if len(clips) >= 2:
+            try:
+                fade = 0.5
+                mod: List = []
+                for i, c in enumerate(clips):
+                    d = max(0.1, min(fade, (c.duration or 0.6) * 0.25))
+                    if i > 0:
+                        try:
+                            c = c.crossfadein(d)
+                        except Exception:
+                            pass
+                        try:
+                            c = c.audio_fadein(d)
+                        except Exception:
+                            pass
+                    if i < len(clips) - 1:
+                        try:
+                            c = c.audio_fadeout(d)
+                        except Exception:
+                            pass
+                    mod.append(c)
+                final = concatenate_videoclips(mod, method="compose", padding=-d)
+            except Exception:
+                final = concatenate_videoclips(clips, method="compose")
+        else:
+            final = concatenate_videoclips(clips, method="compose")
         output_path = os.path.join(temp_dir, "stitched.mp4")
         final.write_videofile(output_path, codec="libx264", audio_codec="aac")
 

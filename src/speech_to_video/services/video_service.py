@@ -118,10 +118,49 @@ class VideoService:
         from ..utils.video import stitch_videos_detailed
         base = self._superbowl_prompt(prompt)
         seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
+        # Derive strict per-scene prompts from user's script if provided
+        import re
+        clip1_text, clip2_text = None, None
+        try:
+            m1 = re.search(r"(?is)\bclip\s*1\b[\s:–—-]*([^]*?)(?=\bclip\s*2\b|$)", prompt)
+            m2 = re.search(r"(?is)\bclip\s*2\b[\s:–—-]*([^]*?)$", prompt)
+            if m1 and m1.group(1):
+                clip1_text = m1.group(1).strip()
+            if m2 and m2.group(1):
+                clip2_text = m2.group(1).strip()
+            if not (clip1_text and clip2_text):
+                h1 = re.search(r"(?is)\bthe\s+hook\b[\s:–—-]*([^]*?)(?=\bthe\s+payoff\b|$)", prompt)
+                h2 = re.search(r"(?is)\bthe\s+payoff\b[\s:–—-]*([^]*?)$", prompt)
+                if h1 and h1.group(1):
+                    clip1_text = clip1_text or h1.group(1).strip()
+                if h2 and h2.group(1):
+                    clip2_text = clip2_text or h2.group(1).strip()
+        except Exception:
+            pass
+
+        if clip1_text and clip2_text:
+            p1 = (
+                f"{base} This is Scene 1 (hook). Use ONLY this scene description: {clip1_text}. "
+                f"Do NOT include any elements from other scenes. Keep the same hero across scenes."
+            )
+            p2 = (
+                f"{base} This is Scene 2 (payoff/CTA). Use ONLY this scene description: {clip2_text}. "
+                f"Do NOT include any elements from other scenes. Keep the same hero across scenes."
+            )
+        else:
+            p1 = (
+                f"{base} Scene 1 (hook). Focus solely on the hook beat. "
+                f"Do NOT include payoff/endcard elements. Keep the same hero."
+            )
+            p2 = (
+                f"{base} Scene 2 (payoff). Focus solely on payoff/logo/endcard. "
+                f"Do NOT include hook elements. Keep the same hero."
+            )
+
         # Two 4-second scenes (lower cost) at 720p, then stitch (~8s total)
         scenes = [
-            {"prompt": f"{base} Scene 1 (hook). Keep BRAND_HERO identical.", "duration": 4},
-            {"prompt": f"{base} Scene 2 (CTA + logo). Keep BRAND_HERO identical.", "duration": 4},
+            {"prompt": p1, "duration": 4},
+            {"prompt": p2, "duration": 4},
         ]
         seg_urls: List[str] = []
         for s in scenes:
