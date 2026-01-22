@@ -536,41 +536,49 @@ async def create_superbowl_ad(
     if not text:
         raise HTTPException(status_code=400, detail="prompt_or_audio_required")
 
-    # Build continuity-aware prompt using previous clip context (session) and reuse seed
-    prev_ctx = request.session.get("ad_prev_text")
+    # Get or generate seed for continuity
     seed = request.session.get("ad_seed")
     if not isinstance(seed, int):
         import random
         seed = random.randint(1, 2**31 - 1)
 
-    if prev_ctx:
-        combined = (
-            "Maintain EXACTLY the same environment, ambience, color palette, lighting, camera style, and the SAME main hero as the previous clip. "
-            f"Previous clip description (for continuity only, do not repeat it): {prev_ctx}. "
-            f"Now generate ONLY the next short scene described here: {text}. "
-            "Do not introduce new settings or characters; continue seamlessly."
-        )
+    # Check requested duration - if > 12s, use the 2-clip generation (max single clip is 12s)
+    duration = int(os.getenv("AD_DURATION", "16"))
+
+    if duration > 12:
+        # Use the new seamless 2-clip generation (2x8s = 16s)
+        result = service.generate_16s_video(text, seed=seed)
     else:
-        combined = text
+        # Single clip generation for shorter durations (4, 8, or 12 seconds)
+        # Build continuity-aware prompt using previous clip context (session)
+        prev_ctx = request.session.get("ad_prev_text")
+        if prev_ctx:
+            combined = (
+                "Maintain EXACTLY the same environment, ambience, color palette, lighting, camera style, and the SAME main hero as the previous clip. "
+                f"Previous clip description (for continuity only, do not repeat it): {prev_ctx}. "
+                f"Now generate ONLY the next short scene described here: {text}. "
+                "Do not introduce new settings or characters; continue seamlessly."
+            )
+        else:
+            combined = text
 
-    # Single short Sora 2 clip (no auto-stitch); user will stitch saved clips later
-    model = os.getenv("AD_MODEL", "openai/sora-2-t2v")
-    duration = int(os.getenv("AD_DURATION", "4"))
-    endpoint_path = os.getenv("AD_ENDPOINT_PATH", "/video/generations")
-    # Use query-style status path (no {id} placeholder) so the client uses ?generation_id=...
-    status_path = os.getenv("AD_STATUS_PATH", "/video/generations")
+        model = os.getenv("AD_MODEL", "openai/sora-2-t2v")
+        endpoint_path = os.getenv("AD_ENDPOINT_PATH", "/video/generations")
+        # Use query-style status path (no {id} placeholder) so the client uses ?generation_id=...
+        status_path = os.getenv("AD_STATUS_PATH", "/video/generations")
 
-    result = service._single_generation(  # type: ignore[attr-defined]
-        combined,
-        duration,
-        "high",
-        seed=seed,
-        model=model,
-        aspect_ratio="16:9",
-        endpoint_path=endpoint_path,
-        status_path=status_path,
-        resolution=service.settings.default_resolution_medium,
-    )
+        result = service._single_generation(  # type: ignore[attr-defined]
+            combined,
+            duration,
+            "high",
+            seed=seed,
+            model=model,
+            aspect_ratio="16:9",
+            endpoint_path=endpoint_path,
+            status_path=status_path,
+            resolution=service.settings.default_resolution_medium,
+        )
+
     if result.get("success") or result.get("video_url"):
         _inc_usage(request)
         # Persist continuity info for the next clip

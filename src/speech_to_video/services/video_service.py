@@ -112,10 +112,90 @@ class VideoService:
             "total_duration": total_duration,
         }
 
+    def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
+        """
+        Generate a seamless 16-second video by creating two 8-second clips with continuity.
+        Uses GPT to intelligently split the prompt at a natural narrative break point.
+        """
+        import os
+        import random
+        from ..utils.video import stitch_videos_seamless
+
+        # Use provided seed or generate one for consistency across both clips
+        if seed is None:
+            seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
+
+        # Use GPT to intelligently split the prompt into two parts
+        split_result = self.openai_client.split_prompt_for_two_clips(prompt)
+        clip1_prompt = split_result["clip1"]
+        clip2_prompt = split_result["clip2"]
+
+        # Build detailed prompts with strong continuity instructions
+        style_instructions = (
+            "Cinematic quality, consistent lighting, smooth camera movement. "
+            "Maintain exact same visual style, color grading, and atmosphere throughout."
+        )
+
+        p1 = (
+            f"{clip1_prompt} "
+            f"{style_instructions} "
+            "This is the FIRST half of a continuous scene."
+        )
+
+        p2 = (
+            f"{clip2_prompt} "
+            f"{style_instructions} "
+            "This is the SECOND half continuing EXACTLY from where the first clip ended. "
+            "CRITICAL: Use the EXACT same characters, environment, lighting, color palette, "
+            "and camera style as the first clip. The transition must be invisible."
+        )
+
+        # Generate two 8-second clips
+        model = os.getenv("AD_MODEL", "openai/sora-2-t2v")
+        endpoint_path = os.getenv("AD_ENDPOINT_PATH", "/video/generations")
+        status_path = os.getenv("AD_STATUS_PATH", "/video/generations")
+
+        scenes = [
+            {"prompt": p1, "duration": 8},
+            {"prompt": p2, "duration": 8},
+        ]
+
+        seg_urls: List[str] = []
+        for idx, s in enumerate(scenes):
+            r = self._single_generation(
+                s["prompt"],
+                s["duration"],
+                "high",
+                seed=seed,  # Same seed for both clips
+                model=model,
+                aspect_ratio="16:9",
+                endpoint_path=endpoint_path,
+                status_path=status_path,
+                resolution=self.settings.default_resolution_medium,
+            )
+            if not r.get("success"):
+                r["_failed_clip"] = idx + 1
+                r["_generated_clips"] = seg_urls
+                return r
+            if r.get("video_url"):
+                seg_urls.append(r["video_url"])
+
+        # Stitch seamlessly (no visual crossfade, only subtle audio transitions)
+        stitched = stitch_videos_seamless(seg_urls)
+        if stitched.get("success"):
+            return {
+                "success": True,
+                "video_url": "/api/stitched",
+                "segments": seg_urls,
+                "duration": 16,
+                "seed": seed,
+            }
+        return {"success": False, "error": stitched}
+
     def generate_superbowl_ad(self, prompt: str) -> Dict:
         """Generate a short ad as 2x4s scenes (Sora 2) and stitch."""
         import os, random
-        from ..utils.video import stitch_videos_detailed
+        from ..utils.video import stitch_videos_seamless
         base = self._superbowl_prompt(prompt)
         seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
         # Derive strict per-scene prompts from user's script if provided
@@ -172,14 +252,14 @@ class VideoService:
                 model="openai/sora-2-t2v",
                 aspect_ratio="16:9",
                 endpoint_path="/video/generations",
-                status_path="/video/generations/{id}",
+                status_path="/video/generations",
                 resolution=self.settings.default_resolution_medium,  # e.g., 720p allows 4s
             )
             if not r.get("success"):
                 return r
             if r.get("video_url"):
                 seg_urls.append(r["video_url"])
-        stitched = stitch_videos_detailed(seg_urls)
+        stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
             return {"success": True, "video_url": "/api/stitched", "segments": seg_urls}
         return {"success": False, "error": stitched}

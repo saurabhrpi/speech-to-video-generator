@@ -95,4 +95,56 @@ class OpenAIClient:
 
         return scenes
 
+    def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
+        """
+        Use GPT to intelligently split a prompt into two parts for seamless 2-clip video generation.
+        Returns {"clip1": "...", "clip2": "..."} with detailed scene descriptions.
+        """
+        response = self.client.chat.completions.create(
+            model=self.settings.openai_chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a video director. Split the user's video concept into exactly TWO sequential scenes "
+                        "for a seamless 16-second video (8 seconds each). "
+                        "Requirements:\n"
+                        "1. Find a NATURAL narrative break point - don't just split text arbitrarily\n"
+                        "2. Scene 1 should contain the setup/beginning action and end at a transition moment\n"
+                        "3. Scene 2 should continue seamlessly from that moment and conclude the story\n"
+                        "4. Both scenes must describe the SAME characters, environment, lighting, and visual style\n"
+                        "5. Be specific and visual - describe what the camera sees, not abstract concepts\n"
+                        "6. Scene 2 should start with 'Continuing from the previous moment...' to ensure continuity\n\n"
+                        "Respond in EXACTLY this format (no other text):\n"
+                        "SCENE1: [detailed visual description for first 8 seconds]\n"
+                        "SCENE2: [detailed visual description for next 8 seconds, continuing seamlessly]"
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+
+        content = response.choices[0].message.content or ""
+        
+        # Parse the response
+        clip1 = ""
+        clip2 = ""
+        
+        lines = content.strip().split("\n")
+        for line in lines:
+            line = line.strip()
+            if line.upper().startswith("SCENE1:"):
+                clip1 = line[7:].strip()
+            elif line.upper().startswith("SCENE2:"):
+                clip2 = line[7:].strip()
+        
+        # Fallback if parsing fails - split the original prompt
+        if not clip1 or not clip2:
+            # Simple fallback: use the prompt for both with position hints
+            clip1 = f"Beginning of the scene: {prompt}. Focus on the setup and initial action."
+            clip2 = f"Continuing seamlessly: {prompt}. Focus on the continuation and conclusion."
+        
+        return {"clip1": clip1, "clip2": clip2}
+
 
