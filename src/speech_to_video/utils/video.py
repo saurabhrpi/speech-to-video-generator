@@ -274,8 +274,8 @@ def stitch_videos_seamless(video_urls: List[str]) -> Dict[str, Any]:
             codec="libx264",
             audio_codec="aac",
             fps=30,  # Consistent framerate
-            preset="medium",
-            bitrate="8000k",  # High quality to preserve details at the cut point
+            preset="ultrafast",  # Fast encoding for Replit/cloud
+            bitrate="4000k",  # Good quality, faster encoding
         )
 
         # Close handles
