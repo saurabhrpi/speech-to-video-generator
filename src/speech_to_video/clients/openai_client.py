@@ -95,6 +95,62 @@ class OpenAIClient:
 
         return scenes
 
+    def create_timelapse_progression(self, base_prompt: str, total_duration: int) -> List[Dict[str, object]]:
+        """
+        Break an interior design timelapse prompt into sequential construction phases
+        rather than narrative story beats.
+        """
+        num_scenes = max(1, total_duration // 10)
+        if num_scenes <= 1:
+            return [{"prompt": base_prompt, "duration": total_duration}]
+
+        response = self.client.chat.completions.create(
+            model=self.settings.openai_chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are an architectural visualization director. Break this interior design "
+                        f"timelapse concept into EXACTLY {num_scenes} sequential construction phases.\n\n"
+                        "Rules:\n"
+                        "1. Each phase shows a distinct stage of building/installing the space\n"
+                        "2. Progress through: empty shell/structure -> framework/rough construction -> "
+                        "material installation -> feature additions -> lighting and finishing -> "
+                        "final cinematic reveal\n"
+                        "3. Every phase MUST maintain the exact same room geometry, camera angle, "
+                        "and architectural style\n"
+                        "4. Describe what the camera SEES in each phase, not abstract concepts\n"
+                        "5. Each phase description should be a single detailed sentence\n\n"
+                        f"Respond with EXACTLY {num_scenes} lines, one per phase. "
+                        "No numbering, no bullets, no extra text."
+                    ),
+                },
+                {"role": "user", "content": f"Timelapse concept: {base_prompt}"},
+            ],
+            temperature=0.7,
+        )
+
+        content = response.choices[0].message.content or ""
+        lines = [line.strip() for line in content.split("\n") if line.strip()]
+        # Strip any leading numbering like "1." or "- "
+        cleaned: List[str] = []
+        for line in lines:
+            stripped = line.lstrip("0123456789.-) ").strip()
+            if stripped:
+                cleaned.append(stripped)
+
+        scenes: List[Dict[str, object]] = []
+        for phase_desc in cleaned[:num_scenes]:
+            scenes.append({
+                "prompt": f"{base_prompt} Current phase: {phase_desc}",
+                "duration": 10,
+            })
+
+        if not scenes:
+            scenes.append({"prompt": base_prompt, "duration": total_duration})
+
+        return scenes
+
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
         """
         Use GPT to intelligently split a prompt into two parts for seamless 2-clip video generation.

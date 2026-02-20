@@ -16,6 +16,7 @@ import shutil
 import glob
 
 from ..services.video_service import VideoService
+from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
 from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip
 from ..utils.video import stitch_videos_detailed
@@ -498,6 +499,58 @@ def _mount_static(app_: FastAPI) -> None:
     except Exception:
         # Serving static is best-effort
         pass
+
+
+# --- Interior Timelapse ---
+
+@app.get("/api/timelapse/options")
+def timelapse_options():
+    return JSONResponse(get_all_options())
+
+
+@app.post("/api/generate/timelapse")
+async def generate_timelapse(request: Request):
+    if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
+        raise HTTPException(status_code=401, detail="login_required")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    room_type = (body.get("room_type") or "").strip()
+    style = (body.get("style") or "").strip()
+    if not room_type or not style:
+        raise HTTPException(status_code=400, detail="room_type and style are required")
+
+    features = body.get("features") or []
+    if isinstance(features, str):
+        features = [f.strip() for f in features.split(",") if f.strip()]
+
+    materials = body.get("materials") or []
+    if isinstance(materials, str):
+        materials = [m.strip() for m in materials.split(",") if m.strip()]
+
+    duration = int(body.get("duration", 10))
+    if duration not in (5, 10, 15):
+        raise HTTPException(status_code=400, detail="duration must be 5, 10, or 15")
+
+    req = TimelapseRequest(
+        room_type=room_type,
+        style=style,
+        features=features,
+        materials=materials,
+        lighting=(body.get("lighting") or "natural").strip(),
+        duration=duration,
+        camera_motion=(body.get("camera_motion") or "slow_pan").strip(),
+        progression=(body.get("progression") or "construction").strip(),
+        freeform_description=(body.get("freeform_description") or "").strip(),
+    )
+
+    result = service.generate_timelapse(req)
+    if result.get("success") or result.get("video_url"):
+        _inc_usage(request)
+    return JSONResponse(result)
 
 
 # --- Ads ---

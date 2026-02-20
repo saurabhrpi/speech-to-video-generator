@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
+from ..models.timelapse import TimelapseRequest, compose_timelapse_prompt
 from ..utils.config import Settings, get_settings
 from ..utils.video import stitch_videos
 
@@ -111,6 +112,69 @@ class VideoService:
             "segments": video_segments,
             "total_duration": total_duration,
         }
+
+    def generate_timelapse(self, request: TimelapseRequest) -> Dict:
+        """
+        Generate an interior design timelapse video from structured input.
+        Composes a rich prompt, then routes to single or multi-phase generation.
+        """
+        import os
+        import random
+        from ..utils.video import stitch_videos_seamless
+
+        composed_prompt = compose_timelapse_prompt(request)
+        seed = random.randint(1, 2**31 - 1)
+
+        if request.duration <= 10:
+            result = self._single_generation(
+                composed_prompt,
+                request.duration,
+                "high",
+                seed=seed,
+                aspect_ratio="16:9",
+                resolution=self.settings.default_resolution_high,
+            )
+            if result.get("success"):
+                result["composed_prompt"] = composed_prompt
+                result["seed"] = seed
+            return result
+
+        # Multi-phase: use construction-progression scene splitter
+        scenes = self.openai_client.create_timelapse_progression(
+            composed_prompt, request.duration
+        )
+
+        seg_urls: List[str] = []
+        for idx, scene in enumerate(scenes):
+            scene_prompt = scene.get("prompt", composed_prompt)
+            scene_duration = int(scene.get("duration", 10))
+            r = self._single_generation(
+                scene_prompt,
+                scene_duration,
+                "high",
+                seed=seed,
+                aspect_ratio="16:9",
+                resolution=self.settings.default_resolution_high,
+            )
+            if not r.get("success"):
+                r["_failed_phase"] = idx + 1
+                r["_generated_phases"] = seg_urls
+                r["composed_prompt"] = composed_prompt
+                return r
+            if r.get("video_url"):
+                seg_urls.append(r["video_url"])
+
+        stitched = stitch_videos_seamless(seg_urls)
+        if stitched.get("success"):
+            return {
+                "success": True,
+                "video_url": "/api/stitched",
+                "segments": seg_urls,
+                "duration": request.duration,
+                "seed": seed,
+                "composed_prompt": composed_prompt,
+            }
+        return {"success": False, "error": stitched, "composed_prompt": composed_prompt}
 
     def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
         """

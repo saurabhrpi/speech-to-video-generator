@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../components/ui/button'
 import MicVisualizer from '../components/MicVisualizer'
+import TimelapseForm from '../components/TimelapseForm'
 
 type ApiResult = Record<string, any>
 
@@ -26,6 +27,7 @@ export default function App() {
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
   const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
+  const [mode, setMode] = useState<'speech' | 'timelapse'>('timelapse')
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -445,14 +447,93 @@ export default function App() {
     setRecordingStream(null)
   }
 
+  async function handleTimelapseSubmit(payload: Record<string, any>) {
+    if (!auth?.authenticated && Number(auth?.usage_count || 0) >= Number(auth?.limit || 1)) {
+      setLoginRequired(true)
+      setStatusMsg('Sign in required to continue.')
+      return
+    }
+    setBusy(true)
+    try {
+      const expectedMs = payload.duration > 10 ? 180_000 : 120_000
+      beginProgress('Generating timelapse...', expectedMs)
+      let resp: Response
+      try {
+        resp = await fetch(`${API_BASE}/api/generate/timelapse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } catch (e) {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server error. Please retry.')
+        return
+      }
+      if (resp.status === 401) {
+        setLoginRequired(true)
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Sign in required to continue.')
+        setBusy(false)
+        return
+      }
+      let data: ApiResult
+      try {
+        data = await resp.json()
+      } catch {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg('Server error. Please retry.')
+        return
+      }
+      setJsonOut(JSON.stringify(data, null, 2))
+      const raw = data.video_url as string | undefined
+      if (raw) {
+        const url = /^https?:/i.test(raw) ? raw : `${API_BASE}${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`
+        setStatusMsg('Preparing video...')
+        setPendingUrl(url)
+        await preloadWithFallback(url, 15000)
+        setVideoUrl(url)
+        setPendingUrl(null)
+        endProgress('Ready')
+        ;(async () => { try { await fetchSession() } catch {} })()
+      } else {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg(data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'No video URL returned')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="min-h-dvh bg-background">
       <header className="border-b">
         <div className="container py-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Speech to Video</h1>
+          <h1 className="text-lg font-semibold">
+            {mode === 'timelapse' ? 'Interior Timelapse' : 'Speech to Video'}
+          </h1>
           <div className="flex items-center gap-2">
             {auth?.authenticated && <span className="text-xs text-muted-foreground">Signed in as {auth?.user?.email || 'user'}</span>}
             <Button variant="outline" onClick={auth?.authenticated ? signOut : signIn}>{auth?.authenticated ? 'Sign out' : 'Sign in'}</Button>
+          </div>
+        </div>
+        <div className="container pb-3">
+          <div className="inline-flex rounded-md border bg-muted p-0.5">
+            <button
+              onClick={() => setMode('timelapse')}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'timelapse' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Interior Timelapse
+            </button>
+            <button
+              onClick={() => setMode('speech')}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'speech' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Speech to Video
+            </button>
           </div>
         </div>
       </header>
@@ -505,20 +586,26 @@ export default function App() {
           </div>
         )}
         <section className="space-y-3">
-          {canRecord && (
-            recording ? (
-              <Button className="w-full h-12" variant="destructive" onClick={stopRecording}>Stop Recording</Button>
-            ) : (
-              <Button className="w-full h-12" onClick={startRecording} disabled={busy}>Record</Button>
-            )
-          )}
-          {!recording && loginRequired && (
-            <div className="text-xs text-destructive">Sign in required. Click the Sign in button above to continue.</div>
-          )}
-          {recording && (
-            <div className="mt-2">
-              <MicVisualizer stream={recordingStream} />
-            </div>
+          {mode === 'timelapse' ? (
+            <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} />
+          ) : (
+            <>
+              {canRecord && (
+                recording ? (
+                  <Button className="w-full h-12" variant="destructive" onClick={stopRecording}>Stop Recording</Button>
+                ) : (
+                  <Button className="w-full h-12" onClick={startRecording} disabled={busy}>Record</Button>
+                )
+              )}
+              {!recording && loginRequired && (
+                <div className="text-xs text-destructive">Sign in required. Click the Sign in button above to continue.</div>
+              )}
+              {recording && (
+                <div className="mt-2">
+                  <MicVisualizer stream={recordingStream} />
+                </div>
+              )}
+            </>
           )}
         </section>
 
