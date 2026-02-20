@@ -125,13 +125,20 @@ class VideoService:
         composed_prompt = compose_timelapse_prompt(request)
         seed = random.randint(1, 2**31 - 1)
 
+        model = os.getenv("TIMELAPSE_MODEL", "openai/sora-2-t2v")
+        endpoint_path = os.getenv("TIMELAPSE_ENDPOINT_PATH", "/video/generations")
+        status_path = os.getenv("TIMELAPSE_STATUS_PATH", "/video/generations")
+
         if request.duration <= 10:
             result = self._single_generation(
                 composed_prompt,
                 request.duration,
                 "high",
                 seed=seed,
+                model=model,
                 aspect_ratio="16:9",
+                endpoint_path=endpoint_path,
+                status_path=status_path,
                 resolution=self.settings.default_resolution_high,
             )
             if result.get("success"):
@@ -153,7 +160,10 @@ class VideoService:
                 scene_duration,
                 "high",
                 seed=seed,
+                model=model,
                 aspect_ratio="16:9",
+                endpoint_path=endpoint_path,
+                status_path=status_path,
                 resolution=self.settings.default_resolution_high,
             )
             if not r.get("success"):
