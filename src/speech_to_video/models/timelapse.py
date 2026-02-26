@@ -112,7 +112,7 @@ class TimelapseRequest:
     features: List[str] = field(default_factory=list)
     materials: List[str] = field(default_factory=list)
     lighting: str = "natural"
-    duration: int = 10
+    duration: int = 8
     camera_motion: str = "slow_pan"
     progression: str = "construction"
     freeform_description: str = ""

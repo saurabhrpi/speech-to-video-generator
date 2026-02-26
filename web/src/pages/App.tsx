@@ -455,8 +455,7 @@ export default function App() {
     }
     setBusy(true)
     try {
-      const expectedMs = payload.duration > 10 ? 180_000 : 120_000
-      beginProgress('Generating timelapse...', expectedMs)
+      beginProgress('Generating timelapse (this takes a few minutes)...', 600_000)
       let resp: Response
       try {
         resp = await fetch(`${API_BASE}/api/generate/timelapse`, {

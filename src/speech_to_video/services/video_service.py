@@ -1,10 +1,15 @@
+import logging
 from typing import Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
+from ..clients.dzine_client import DzineClient
 from ..models.timelapse import TimelapseRequest, compose_timelapse_prompt
 from ..utils.config import Settings, get_settings
 from ..utils.video import stitch_videos
+
+
+logger = logging.getLogger(__name__)
 
 
 class VideoService:
@@ -12,6 +17,7 @@ class VideoService:
         self.settings = settings or get_settings()
         self.openai_client = OpenAIClient(self.settings)
         self.aiml_client = AIMLAPIClient(self.settings)
+        self.dzine_client = DzineClient(self.settings) if self.settings.dzine_api_key else None
 
     def speech_to_video_with_audio(self, audio_path: str, duration: int = 60, quality: str = "high") -> Dict:
         transcript = self.openai_client.transcribe(audio_path)
@@ -129,7 +135,7 @@ class VideoService:
         endpoint_path = os.getenv("TIMELAPSE_ENDPOINT_PATH", "/video/generations")
         status_path = os.getenv("TIMELAPSE_STATUS_PATH", "/video/generations")
 
-        if request.duration <= 10:
+        if request.duration <= 12:
             result = self._single_generation(
                 composed_prompt,
                 request.duration,
@@ -139,7 +145,7 @@ class VideoService:
                 aspect_ratio="16:9",
                 endpoint_path=endpoint_path,
                 status_path=status_path,
-                resolution=self.settings.default_resolution_high,
+                resolution=self.settings.default_resolution_medium,
             )
             if result.get("success"):
                 result["composed_prompt"] = composed_prompt
@@ -164,7 +170,7 @@ class VideoService:
                 aspect_ratio="16:9",
                 endpoint_path=endpoint_path,
                 status_path=status_path,
-                resolution=self.settings.default_resolution_high,
+                resolution=self.settings.default_resolution_medium,
             )
             if not r.get("success"):
                 r["_failed_phase"] = idx + 1
@@ -185,6 +191,179 @@ class VideoService:
                 "composed_prompt": composed_prompt,
             }
         return {"success": False, "error": stitched, "composed_prompt": composed_prompt}
+
+    def generate_timelapse_v2(self, request: TimelapseRequest) -> Dict:
+        """
+        Multi-step timelapse pipeline:
+        1. GPT generates Scene Bible + N stage deltas
+        2. Dzine generates keyframe images (text-to-image for stage 1, image-to-image for 2..N)
+        3. Kling generates transition videos between consecutive keyframes
+        4. Stitch transition clips with 1.5x speed
+        """
+        import random
+        from ..utils.video import stitch_timelapse_clips
+
+        if not self.dzine_client:
+            return {"success": False, "error": "Dzine API key not configured. Set DZINE_API_KEY in .env"}
+
+        seed = random.randint(1, 2**31 - 1)
+        num_stages = 7
+
+        # --- Phase 1: Generate Scene Bible + stage deltas via GPT ---
+        plan = self.openai_client.generate_scene_bible_and_stages(
+            room_type=request.room_type,
+            style=request.style,
+            features=request.features,
+            materials=request.materials,
+            lighting=request.lighting,
+            camera_motion=request.camera_motion,
+            progression=request.progression,
+            num_stages=num_stages,
+            freeform=request.freeform_description,
+        )
+
+        scene_bible = plan["scene_bible"]
+        stages = plan["stages"]
+
+        # --- Phase 2: Generate keyframe images via Dzine ---
+        keyframe_images: List[Dict] = []
+        prev_image_url: Optional[str] = None
+
+        DZINE_MAX_PROMPT = 1400
+
+        for i, stage in enumerate(stages):
+            stage_desc = stage.get("description", "")
+            suffix = " Keep all previously completed elements unchanged."
+            full_prompt = f"{scene_bible} {stage_desc}{suffix}"
+
+            if len(full_prompt) > DZINE_MAX_PROMPT:
+                original_prompt = full_prompt
+                available = DZINE_MAX_PROMPT - len(stage_desc) - len(suffix) - 1
+                trimmed_bible = scene_bible[:available].rsplit(",", 1)[0] if available > 0 else ""
+                full_prompt = f"{trimmed_bible} {stage_desc}{suffix}"
+                logger.debug(
+                    "[Timelapse] Prompt truncated for stage %d: %d -> %d chars (bible %d -> %d)",
+                    i + 1, len(original_prompt), len(full_prompt), len(scene_bible), len(trimmed_bible),
+                )
+                logger.debug("[Timelapse] Original prompt: %s", original_prompt)
+                logger.debug("[Timelapse] Truncated prompt: %s", full_prompt)
+
+            if i == 0:
+                img_result = self.dzine_client.generate_image(
+                    prompt=full_prompt,
+                    seed=seed,
+                    width=1280,
+                    height=720,
+                )
+            else:
+                if prev_image_url is None:
+                    return {
+                        "success": False,
+                        "error": f"No image URL from stage {i} to use as reference",
+                        "scene_bible": scene_bible,
+                        "stages": stages,
+                    }
+                img_result = self.dzine_client.generate_image(
+                    prompt=full_prompt,
+                    seed=seed,
+                    reference_image_url=prev_image_url,
+                )
+
+            if not img_result.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Image generation failed at stage {i + 1}",
+                    "dzine_error": img_result.get("error"),
+                    "scene_bible": scene_bible,
+                    "stages": stages,
+                    "_completed_keyframes": len(keyframe_images),
+                }
+
+            images = img_result.get("images", [])
+            if not images:
+                return {
+                    "success": False,
+                    "error": f"No image URL returned for stage {i + 1}",
+                    "raw": img_result,
+                    "_completed_keyframes": len(keyframe_images),
+                }
+
+            image_url = images[0]
+            keyframe_images.append({
+                "stage": i + 1,
+                "image_url": image_url,
+                "description": stage_desc,
+            })
+            prev_image_url = image_url
+
+        # --- Phase 3: Generate transition videos via Kling ---
+        transition_videos: List[str] = []
+
+        for i in range(len(keyframe_images) - 1):
+            from_kf = keyframe_images[i]
+            to_kf = keyframe_images[i + 1]
+
+            transition_prompt = stages[i].get("transition_prompt", "")
+            if not transition_prompt:
+                transition_prompt = (
+                    "Smooth construction timelapse motion, materials appearing, "
+                    "subtle activity, no camera reposition, preserve architecture."
+                )
+
+            motion_prompt = (
+                f"{transition_prompt} "
+                "No camera movement or reposition. Preserve all architectural geometry and perspective."
+            )
+
+            i2v_result = self.aiml_client.generate_and_poll_i2v(
+                image_url=from_kf["image_url"],
+                prompt=motion_prompt,
+            )
+
+            if not i2v_result.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Transition video failed between stage {i + 1} and {i + 2}",
+                    "kling_error": i2v_result.get("error"),
+                    "keyframe_images": keyframe_images,
+                    "_completed_transitions": len(transition_videos),
+                }
+
+            video_url = i2v_result.get("video_url")
+            if video_url:
+                transition_videos.append(video_url)
+
+        if not transition_videos:
+            return {
+                "success": False,
+                "error": "No transition videos were generated",
+                "keyframe_images": keyframe_images,
+            }
+
+        # --- Phase 4: Stitch with 1.5x speed ---
+        stitched = stitch_timelapse_clips(
+            video_sources=transition_videos,
+            speed=1.5,
+            dissolve=False,
+        )
+
+        if stitched.get("success"):
+            return {
+                "success": True,
+                "video_url": "/api/stitched",
+                "keyframe_images": keyframe_images,
+                "transition_videos": transition_videos,
+                "scene_bible": scene_bible,
+                "stages": stages,
+                "seed": seed,
+                "pipeline": "v2",
+            }
+        return {
+            "success": False,
+            "error": stitched.get("error", "Stitching failed"),
+            "keyframe_images": keyframe_images,
+            "transition_videos": transition_videos,
+        }
 
     def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
         """

@@ -185,6 +185,83 @@ class AIMLAPIClient:
             time.sleep(interval)
         return {"status": "timeout", "error": "Generation timed out", "last_seen": status if 'status' in locals() else None}
 
+    def generate_image_to_video(
+        self,
+        image_url: str,
+        prompt: str,
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate a video from an image using Kling's image-to-video model.
+        Uses the v2 /video/generations endpoint.
+        """
+        import time
+
+        base = self.settings.aimlapi_base_url.rstrip("/").replace("/v2", "")
+        url = f"{base}/v2/video/generations"
+        body: Dict[str, Any] = {
+            "model": model or self.settings.kling_i2v_model,
+            "prompt": prompt,
+            "image_url": image_url,
+        }
+
+        last: Dict[str, Any] = {}
+        attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
+        backoff = 1.0
+        for _ in range(attempts):
+            try:
+                connect_to = float(os.getenv("AIMLAPI_CONNECT_TIMEOUT", "10"))
+                read_to = float(os.getenv("AIMLAPI_READ_TIMEOUT", "45"))
+                resp = self.session_post.post(url, json=body, timeout=(connect_to, read_to))
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {"error": resp.text}
+                data["_status_code"] = resp.status_code
+                data["_attempt_url"] = url
+                if resp.status_code not in {429} and resp.status_code < 500:
+                    return data
+                last = data
+            except requests.Timeout as e:
+                last = {"error": f"timeout: {e}", "_status_code": 0, "_attempt_url": url}
+            except requests.RequestException as e:
+                last = {"error": f"request_error: {e}", "_status_code": 0, "_attempt_url": url}
+            time.sleep(backoff)
+            backoff *= 2.0
+        return last or {"error": "No response", "_status_code": 0}
+
+    def generate_and_poll_i2v(
+        self,
+        image_url: str,
+        prompt: str,
+        model: Optional[str] = None,
+        max_wait: int = 300,
+    ) -> Dict[str, Any]:
+        """
+        High-level: submit Kling image-to-video job, poll until done, return video URL.
+        """
+        data = self.generate_image_to_video(image_url, prompt, model=model)
+        status_code = int(data.get("_status_code", 0))
+        if not (200 <= status_code < 300):
+            return {"success": False, "error": data}
+
+        job_id = data.get("id") or data.get("job_id") or data.get("generation_id")
+        if not job_id:
+            video_url = self._extract_video_url(data)
+            if video_url:
+                return {"success": True, "video_url": video_url}
+            return {"success": False, "error": "No job_id in response", "raw": data}
+
+        poll_result = self.poll_until_complete(
+            job_id=str(job_id),
+            max_wait=max_wait,
+            status_path="/v2/video/generations",
+        )
+        video_url = self._extract_video_url(poll_result)
+        if video_url:
+            return {"success": True, "video_url": video_url, "job_id": str(job_id)}
+        return {"success": False, "error": poll_result, "job_id": str(job_id)}
+
     def _get_resolution(self, quality: str) -> str:
         if quality == "high":
             return self.settings.default_resolution_high

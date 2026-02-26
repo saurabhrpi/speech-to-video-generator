@@ -95,6 +95,142 @@ class OpenAIClient:
 
         return scenes
 
+    def generate_scene_bible_and_stages(
+        self,
+        room_type: str,
+        style: str,
+        features: List[str],
+        materials: List[str],
+        lighting: str,
+        camera_motion: str,
+        progression: str,
+        num_stages: int = 7,
+        freeform: str = "",
+    ) -> Dict[str, object]:
+        """
+        Generate a Scene Bible (constant base description) and N stage deltas
+        for a multi-step interior timelapse pipeline.
+
+        Returns {"scene_bible": str, "stages": [{"stage": int, "description": str, "transition_prompt": str}]}
+        """
+        features_str = ", ".join(features) if features else "standard fixtures"
+        materials_str = ", ".join(materials) if materials else "appropriate materials"
+        freeform_clause = f"\nAdditional direction: {freeform}" if freeform.strip() else ""
+
+        response = self.client.chat.completions.create(
+            model=self.settings.openai_chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert architectural visualization director planning a multi-stage "
+                        "construction timelapse for interior design.\n\n"
+                        "You will produce TWO things:\n\n"
+                        "1. A SCENE BIBLE (MAX 400 CHARACTERS): A dense, comma-separated list of constants that "
+                        "NEVER change across stages: camera position/lens, room shape, perspective, light "
+                        "direction, color temp, render style. Be terse—use shorthand, no full sentences. "
+                        "Example: '24mm eye-level centered, straight-run stairwell, soft daylight from above, "
+                        "5200K cool-neutral, ultra-photorealistic arch-viz, no DOF, no color grading.'\n\n"
+                        f"2. EXACTLY {num_stages} STAGE DELTAS (MAX 200 CHARACTERS EACH): Each stage describes "
+                        "ONLY what changes. Be concise—list materials and actions, skip flowery language. "
+                        "Stage 1 is always the empty starting space. The final stage is the polished result "
+                        "with no crew/tools/dust.\n\n"
+                        "For each stage, also write a TRANSITION PROMPT (MAX 150 CHARACTERS) describing motion/"
+                        "activity between this stage and the next. The last stage has no transition.\n\n"
+                        "CHARACTER LIMITS ARE STRICT. The scene bible + any single stage description must total "
+                        "under 700 characters combined. Trim aggressively.\n\n"
+                        "Respond in EXACTLY this format:\n"
+                        "SCENE_BIBLE: [paragraph]\n"
+                        "STAGE_1: [description]\n"
+                        "TRANSITION_1: [motion description]\n"
+                        "STAGE_2: [description]\n"
+                        "TRANSITION_2: [motion description]\n"
+                        "...\n"
+                        f"STAGE_{num_stages}: [description]\n"
+                        "TRANSITION_FINAL: none"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Room type: {room_type}\n"
+                        f"Style: {style}\n"
+                        f"Key features: {features_str}\n"
+                        f"Materials: {materials_str}\n"
+                        f"Lighting: {lighting}\n"
+                        f"Camera: {camera_motion}\n"
+                        f"Progression type: {progression}"
+                        f"{freeform_clause}"
+                    ),
+                },
+            ],
+            temperature=0.7,
+        )
+
+        content = response.choices[0].message.content or ""
+
+        scene_bible = ""
+        stages: List[Dict[str, object]] = []
+        current_stage_desc = ""
+        current_stage_num = 0
+        transitions: Dict[int, str] = {}
+
+        for line in content.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+
+            upper = line.upper()
+            if upper.startswith("SCENE_BIBLE:"):
+                scene_bible = line[len("SCENE_BIBLE:"):].strip()
+            elif upper.startswith("STAGE_"):
+                if current_stage_num > 0 and current_stage_desc:
+                    stages.append({
+                        "stage": current_stage_num,
+                        "description": current_stage_desc,
+                    })
+                try:
+                    parts = upper.split(":", 1)
+                    current_stage_num = int(parts[0].replace("STAGE_", "").strip())
+                    current_stage_desc = line.split(":", 1)[1].strip() if ":" in line else ""
+                except (ValueError, IndexError):
+                    current_stage_desc = line
+            elif upper.startswith("TRANSITION_"):
+                try:
+                    parts = upper.split(":", 1)
+                    t_key = parts[0].replace("TRANSITION_", "").strip()
+                    t_val = line.split(":", 1)[1].strip() if ":" in line else ""
+                    if t_key.lower() != "final" and t_val.lower() != "none":
+                        transitions[int(t_key)] = t_val
+                except (ValueError, IndexError):
+                    pass
+
+        if current_stage_num > 0 and current_stage_desc:
+            stages.append({
+                "stage": current_stage_num,
+                "description": current_stage_desc,
+            })
+
+        for s in stages:
+            s_num = int(s["stage"])
+            s["transition_prompt"] = transitions.get(s_num, "")
+
+        if not scene_bible:
+            scene_bible = (
+                f"Ultra photorealistic {style} {room_type}, locked camera, 24mm lens, "
+                f"eye-level centered composition, {lighting} lighting, high-end architectural visualization."
+            )
+
+        if not stages:
+            stages = [
+                {"stage": 1, "description": f"Empty {room_type}, bare structure, no furnishings.", "transition_prompt": "Construction crew arrives with tools and materials."},
+                {"stage": 2, "description": f"Structural framework being installed.", "transition_prompt": "Workers fitting primary surfaces."},
+                {"stage": 3, "description": f"{features_str} being installed with {materials_str}.", "transition_prompt": "Final finishes being applied."},
+                {"stage": 4, "description": f"Completed {style} {room_type}, all construction removed, polished.", "transition_prompt": ""},
+            ]
+
+        return {"scene_bible": scene_bible, "stages": stages}
+
     def create_timelapse_progression(self, base_prompt: str, total_duration: int) -> List[Dict[str, object]]:
         """
         Break an interior design timelapse prompt into sequential construction phases

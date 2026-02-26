@@ -1,6 +1,9 @@
+import logging
 import os
 import tempfile
 from typing import List, Optional
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -531,23 +534,19 @@ async def generate_timelapse(request: Request):
     if isinstance(materials, str):
         materials = [m.strip() for m in materials.split(",") if m.strip()]
 
-    duration = int(body.get("duration", 10))
-    if duration not in (5, 10, 15):
-        raise HTTPException(status_code=400, detail="duration must be 5, 10, or 15")
-
     req = TimelapseRequest(
         room_type=room_type,
         style=style,
         features=features,
         materials=materials,
         lighting=(body.get("lighting") or "natural").strip(),
-        duration=duration,
+        duration=8,
         camera_motion=(body.get("camera_motion") or "slow_pan").strip(),
         progression=(body.get("progression") or "construction").strip(),
         freeform_description=(body.get("freeform_description") or "").strip(),
     )
 
-    result = service.generate_timelapse(req)
+    result = service.generate_timelapse_v2(req)
     if result.get("success") or result.get("video_url"):
         _inc_usage(request)
     return JSONResponse(result)

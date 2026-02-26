@@ -27,7 +27,6 @@ export default function TimelapseForm({ busy, onSubmit }: TimelapseFormProps) {
   const [materials, setMaterials] = useState<string[]>([])
   const [materialInput, setMaterialInput] = useState('')
   const [lighting, setLighting] = useState('natural')
-  const [duration, setDuration] = useState(10)
   const [cameraMotion, setCameraMotion] = useState('slow_pan')
   const [progression, setProgression] = useState('construction')
   const [freeform, setFreeform] = useState('')
@@ -76,7 +75,6 @@ export default function TimelapseForm({ busy, onSubmit }: TimelapseFormProps) {
       features,
       materials,
       lighting,
-      duration,
       camera_motion: cameraMotion,
       progression,
       freeform_description: freeform,
@@ -170,25 +168,7 @@ export default function TimelapseForm({ busy, onSubmit }: TimelapseFormProps) {
           </select>
         </div>
 
-        {/* Duration */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Duration</label>
-          <div className="flex gap-2">
-            {[5, 10, 15].map(d => (
-              <button
-                key={d}
-                onClick={() => setDuration(d)}
-                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  duration === d
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background hover:bg-accent'
-                }`}
-              >
-                {d}s
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Duration is auto-determined by the multi-step pipeline (7 stages) */}
       </div>
 
       {/* Features */}

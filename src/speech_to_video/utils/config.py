@@ -21,13 +21,19 @@ class Settings:
     aimlapi_generate_path: str = os.environ.get("AIMLAPI_GENERATE_PATH", "/generate/video/alibaba/generation")
     aimlapi_status_path: str = os.environ.get("AIMLAPI_STATUS_PATH", "/generate/video/alibaba/generation")
     aimlapi_status_query_param: str = os.environ.get("AIMLAPI_STATUS_QUERY_PARAM", "generation_id")
-    openai_chat_model: str = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4")
+    openai_chat_model: str = os.environ.get("OPENAI_CHAT_MODEL", "gpt-5.2")
     openai_transcribe_model: str = os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
     default_fps: int = int(os.environ.get("DEFAULT_FPS", "30"))
     default_resolution_high: str = os.environ.get("DEFAULT_RES_HIGH", "1080p")
     default_resolution_medium: str = os.environ.get("DEFAULT_RES_MEDIUM", "720p")
     default_clip_seconds: int = int(os.environ.get("DEFAULT_CLIP_SECONDS", "10"))
     debug_transcript: bool = os.environ.get("DEBUG_TRANSCRIPT", "0").lower() in {"1", "true", "yes", "on"}
+    dzine_api_key: str = os.environ.get("DZINE_API_KEY", "")
+    dzine_base_url: str = os.environ.get("DZINE_BASE_URL", "https://papi.dzine.ai/openapi/v1")
+    dzine_style_code: str = os.environ.get("DZINE_STYLE_CODE", "Style-7feccf2b-f2ad-43a6-89cb-354fb5d928d2")
+    dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
+    dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
+    kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/v2.5-turbo/pro/image-to-video")
 
 
 def get_settings() -> Settings:
