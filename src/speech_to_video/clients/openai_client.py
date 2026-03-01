@@ -124,32 +124,43 @@ class OpenAIClient:
                     "role": "system",
                     "content": (
                         "You are an expert architectural visualization director planning a multi-stage "
-                        "construction timelapse for interior design.\n\n"
-                        "You will produce TWO things:\n\n"
+                        "renovation timelapse for ONE SINGLE ROOM.\n\n"
+                        "CRITICAL RULE: All stages depict the SAME PHYSICAL ROOM. The room's shape, "
+                        "dimensions, windows, doors, and architectural bones NEVER change—only surfaces, "
+                        "finishes, fixtures, and furnishings evolve.\n\n"
+                        "You will produce THREE things:\n\n"
                         "1. A SCENE BIBLE (MAX 400 CHARACTERS): A dense, comma-separated list of constants that "
-                        "NEVER change across stages: camera position/lens, room shape, perspective, light "
+                        "NEVER change across stages: camera position/lens, room shape & dimensions, architectural "
+                        "bones (walls, ceiling, floor footprint, window/door positions), perspective, light "
                         "direction, color temp, render style. Be terse—use shorthand, no full sentences. "
-                        "Example: '24mm eye-level centered, straight-run stairwell, soft daylight from above, "
-                        "5200K cool-neutral, ultra-photorealistic arch-viz, no DOF, no color grading.'\n\n"
-                        f"2. EXACTLY {num_stages} STAGE DELTAS (MAX 200 CHARACTERS EACH): Each stage describes "
-                        "ONLY what changes. Be concise—list materials and actions, skip flowery language. "
-                        "Stage 1 is always the empty starting space. The final stage is the polished result "
-                        "with no crew/tools/dust.\n\n"
+                        "Example: '24mm eye-level centered, 4m x 6m rectangular room, single window left wall, "
+                        "door rear-right, 2.8m ceiling, soft daylight from left, 5200K cool-neutral, "
+                        "ultra-photorealistic arch-viz, no DOF.'\n\n"
+                        "2. STAGE 1 DESCRIPTION (MAX 300 CHARACTERS): The COMPLETE visible state of the "
+                        "bare/unfinished starting room. Include all surfaces, materials, and fixtures present. "
+                        "This is used to generate the first image from scratch.\n\n"
+                        f"3. EDIT INSTRUCTIONS FOR STAGES 2-{num_stages} (MAX 250 CHARACTERS EACH): "
+                        "For each subsequent stage, write SPECIFIC EDIT INSTRUCTIONS describing what to "
+                        "CHANGE, ADD, or REMOVE relative to the previous stage's image. These edits will be "
+                        "applied to the previous image, so be precise: name the elements being modified and "
+                        "their new state. Do NOT repeat unchanged elements. "
+                        "Example: 'Change bare concrete walls to smooth white paint. Replace exposed wiring "
+                        "with recessed LED strips. Add polished oak treads over raw plywood steps.'\n\n"
+                        "NEVER mention people, crews, workers, hands, or tools in ANY output.\n\n"
                         "For each stage, also write a TRANSITION PROMPT (MAX 150 CHARACTERS) describing how "
                         "the scene visually TRANSFORMS from this stage to the next. Focus on material changes "
-                        "and visual morphing (e.g., 'walls fade from bare concrete to smooth white paint, "
-                        "wood grain materializes on treads'). NEVER mention people, crews, workers, hands, "
-                        "or tools—describe only the environment changing. The last stage has no transition.\n\n"
-                        "CHARACTER LIMITS ARE STRICT. The scene bible + any single stage description must total "
-                        "under 700 characters combined. Trim aggressively.\n\n"
+                        "and visual morphing. The last stage has no transition.\n\n"
+                        "CHARACTER LIMITS ARE STRICT. Trim aggressively.\n\n"
                         "Respond in EXACTLY this format:\n"
                         "SCENE_BIBLE: [paragraph]\n"
-                        "STAGE_1: [description]\n"
-                        "TRANSITION_1: [motion description]\n"
-                        "STAGE_2: [description]\n"
-                        "TRANSITION_2: [motion description]\n"
+                        "STAGE_1: [complete room state description]\n"
+                        "TRANSITION_1: [visual morphing description]\n"
+                        "EDIT_2: [what to change/add/remove from stage 1 image]\n"
+                        "TRANSITION_2: [visual morphing description]\n"
+                        "EDIT_3: [what to change/add/remove from stage 2 image]\n"
+                        "TRANSITION_3: [visual morphing description]\n"
                         "...\n"
-                        f"STAGE_{num_stages}: [description]\n"
+                        f"EDIT_{num_stages}: [what to change/add/remove from stage {num_stages - 1} image]\n"
                         "TRANSITION_FINAL: none"
                     ),
                 },
@@ -174,9 +185,9 @@ class OpenAIClient:
 
         scene_bible = ""
         stages: List[Dict[str, object]] = []
-        current_stage_desc = ""
-        current_stage_num = 0
         transitions: Dict[int, str] = {}
+        edit_deltas: Dict[int, str] = {}
+        stage_1_desc = ""
 
         for line in content.split("\n"):
             line = line.strip()
@@ -186,18 +197,24 @@ class OpenAIClient:
             upper = line.upper()
             if upper.startswith("SCENE_BIBLE:"):
                 scene_bible = line[len("SCENE_BIBLE:"):].strip()
-            elif upper.startswith("STAGE_"):
-                if current_stage_num > 0 and current_stage_desc:
-                    stages.append({
-                        "stage": current_stage_num,
-                        "description": current_stage_desc,
-                    })
+            elif upper.startswith("STAGE_1:") or upper.startswith("STAGE_1 :"):
+                stage_1_desc = line.split(":", 1)[1].strip() if ":" in line else ""
+            elif upper.startswith("EDIT_"):
                 try:
                     parts = upper.split(":", 1)
-                    current_stage_num = int(parts[0].replace("STAGE_", "").strip())
-                    current_stage_desc = line.split(":", 1)[1].strip() if ":" in line else ""
+                    e_num = int(parts[0].replace("EDIT_", "").strip())
+                    e_val = line.split(":", 1)[1].strip() if ":" in line else ""
+                    edit_deltas[e_num] = e_val
                 except (ValueError, IndexError):
-                    current_stage_desc = line
+                    pass
+            elif upper.startswith("STAGE_"):
+                try:
+                    parts = upper.split(":", 1)
+                    s_num = int(parts[0].replace("STAGE_", "").strip())
+                    s_val = line.split(":", 1)[1].strip() if ":" in line else ""
+                    edit_deltas[s_num] = s_val
+                except (ValueError, IndexError):
+                    pass
             elif upper.startswith("TRANSITION_"):
                 try:
                     parts = upper.split(":", 1)
@@ -208,10 +225,18 @@ class OpenAIClient:
                 except (ValueError, IndexError):
                     pass
 
-        if current_stage_num > 0 and current_stage_desc:
+        if stage_1_desc:
             stages.append({
-                "stage": current_stage_num,
-                "description": current_stage_desc,
+                "stage": 1,
+                "description": stage_1_desc,
+                "edit_delta": "",
+            })
+
+        for s_num in sorted(edit_deltas.keys()):
+            stages.append({
+                "stage": s_num,
+                "description": edit_deltas[s_num],
+                "edit_delta": edit_deltas[s_num],
             })
 
         for s in stages:

@@ -16,9 +16,11 @@ interface TimelapseOptions {
 interface TimelapseFormProps {
   busy: boolean
   onSubmit: (payload: Record<string, any>) => void
+  stepByStep?: boolean
+  onStepByStepChange?: (v: boolean) => void
 }
 
-export default function TimelapseForm({ busy, onSubmit }: TimelapseFormProps) {
+export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStepChange }: TimelapseFormProps) {
   const [options, setOptions] = useState<TimelapseOptions | null>(null)
   const [roomType, setRoomType] = useState('')
   const [style, setStyle] = useState('')
@@ -258,6 +260,17 @@ export default function TimelapseForm({ busy, onSubmit }: TimelapseFormProps) {
           className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring resize-none"
         />
       </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={!!stepByStep}
+          onChange={e => onStepByStepChange?.(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 accent-primary"
+        />
+        <span className="text-sm font-medium">Step-by-step mode</span>
+        <span className="text-xs text-muted-foreground">(review each phase before proceeding)</span>
+      </label>
 
       <Button
         className="w-full h-12"

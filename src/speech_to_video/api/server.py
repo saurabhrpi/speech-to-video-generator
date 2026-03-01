@@ -559,8 +559,11 @@ async def generate_timelapse(request: Request):
         freeform_description=(body.get("freeform_description") or "").strip(),
     )
 
-    result = service.generate_timelapse_v2(req)
-    if result.get("success") or result.get("video_url"):
+    stop_after = body.get("stop_after")  # "plan" | "images" | "videos" | None
+    resume_state = body.get("resume_state")  # dict with prior phase outputs
+
+    result = service.generate_timelapse_v2(req, stop_after=stop_after, resume_state=resume_state)
+    if result.get("video_url"):
         _inc_usage(request)
     return JSONResponse(result)
 
