@@ -296,8 +296,18 @@ class VideoService:
             })
             prev_image_url = image_url
 
-        # --- Phase 3: Generate transition videos via Kling ---
+        # --- Phase 3: Generate transition videos via Kling O1 (first+last frame) ---
         transition_videos: List[str] = []
+
+        camera = request.camera_motion.lower() if request.camera_motion else "static"
+        camera_cues = {
+            "static": "Static locked-off camera, no camera movement.",
+            "slow_pan": "Slow cinematic horizontal pan.",
+            "dolly": "Gentle dolly push-in toward the subject.",
+            "orbit": "Slow orbit around the scene center.",
+            "crane_up": "Smooth crane rise upward revealing the space.",
+        }
+        camera_instruction = camera_cues.get(camera, camera_cues["static"])
 
         for i in range(len(keyframe_images) - 1):
             from_kf = keyframe_images[i]
@@ -306,21 +316,35 @@ class VideoService:
             transition_prompt = stages[i].get("transition_prompt", "")
             if not transition_prompt:
                 transition_prompt = (
-                    "Smooth construction timelapse motion, materials appearing, "
-                    "subtle activity, no camera reposition, preserve architecture."
+                    "Smooth timelapse transformation, gradual material changes, "
+                    "architectural elements morphing into place."
                 )
 
             motion_prompt = (
-                f"{transition_prompt} "
-                "No camera movement or reposition. Preserve all architectural geometry and perspective."
+                f"Timelapse transition: {transition_prompt} "
+                f"{camera_instruction} "
+                "Smooth continuous transformation preserving room geometry."
             )
 
+            logger.info(
+                "[Timelapse] Generating transition %d->%d with first+last frame",
+                i + 1, i + 2,
+            )
+
+            import time as _t
+            t0 = _t.time()
             i2v_result = self.aiml_client.generate_and_poll_i2v(
                 image_url=from_kf["image_url"],
+                last_image_url=to_kf["image_url"],
                 prompt=motion_prompt,
             )
+            elapsed_s = int(_t.time() - t0)
 
             if not i2v_result.get("success"):
+                logger.error(
+                    "[Timelapse] Transition %d->%d FAILED after %ds: %s",
+                    i + 1, i + 2, elapsed_s, i2v_result.get("error"),
+                )
                 return {
                     "success": False,
                     "error": f"Transition video failed between stage {i + 1} and {i + 2}",
@@ -332,6 +356,10 @@ class VideoService:
             video_url = i2v_result.get("video_url")
             if video_url:
                 transition_videos.append(video_url)
+                logger.info(
+                    "[Timelapse] Transition %d->%d completed in %ds: %s",
+                    i + 1, i + 2, elapsed_s, video_url,
+                )
 
         if not transition_videos:
             return {

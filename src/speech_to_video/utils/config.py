@@ -33,7 +33,7 @@ class Settings:
     dzine_style_code: str = os.environ.get("DZINE_STYLE_CODE", "Style-7feccf2b-f2ad-43a6-89cb-354fb5d928d2")
     dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
     dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
-    kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/v2.5-turbo/pro/image-to-video")
+    kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
 
 
 def get_settings() -> Settings:

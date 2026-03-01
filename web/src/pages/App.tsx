@@ -35,6 +35,25 @@ export default function App() {
   const recordedChunks = useRef<Blob[]>([])
   const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null)
 
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+
+  useEffect(() => {
+    async function toggleWakeLock() {
+      if (busy) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen')
+          }
+        } catch { /* browser may deny */ }
+      } else {
+        try { await wakeLockRef.current?.release() } catch {}
+        wakeLockRef.current = null
+      }
+    }
+    toggleWakeLock()
+    return () => { try { wakeLockRef.current?.release() } catch {} }
+  }, [busy])
+
   useEffect(() => {
     fetch(`${API_BASE}/api/clips`).then(r => r.json()).then((list) => { setClips(list); clipCountRef.current = Array.isArray(list) ? list.length : 0 }).catch(() => setClips([]))
     fetchSession()
@@ -255,6 +274,7 @@ export default function App() {
     const body = new FormData()
     body.set('url', videoUrl)
     if (note) body.set('note', note)
+    if (jsonOut) body.set('json_response', jsonOut)
     await fetch(`${API_BASE}/api/clips`, { method: 'POST', body })
     const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
     setClips(list)
@@ -455,7 +475,7 @@ export default function App() {
     }
     setBusy(true)
     try {
-      beginProgress('Generating timelapse (this takes a few minutes)...', 600_000)
+      beginProgress('Generating timelapse (this may take up to 30 minutes)...', 1_800_000)
       let resp: Response
       try {
         resp = await fetch(`${API_BASE}/api/generate/timelapse`, {
@@ -682,28 +702,53 @@ export default function App() {
                       <div className="truncate text-xs text-muted-foreground">{c.url}</div>
                     </div>
                   </button>
-                  <button
-                    aria-label="Delete clip"
-                    title="Delete clip"
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      if (!c.ts) return
-                      try {
-                        const r = await fetch(`${API_BASE}/api/clips/${c.ts}`, { method: 'DELETE', credentials: 'include' })
-                        if (r.ok) {
-                          const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
-                          setClips(list)
-                        }
-                      } catch {}
-                    }}
-                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    draggable={false}
-                  >
-                    {/* Trash icon */}
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                      <path fillRule="evenodd" d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h3.25a.75.75 0 0 1 0 1.5H5.75a.75.75 0 0 1 0-1.5H9V3.75ZM6.75 8.5a.75.75 0 0 1 .75.75V19c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9.25a.75.75 0 0 1 1.5 0V19A2.75 2.75 0 0 1 15.25 21.75h-6.5A2.75 2.75 0 0 1 6 19V9.25a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75-.75.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5Z" clipRule="evenodd" />
-                    </svg>
-                  </button>
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    {c.has_response && (
+                      <button
+                        aria-label="View JSON response"
+                        title="View JSON response"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!c.ts) return
+                          try {
+                            const r = await fetch(`${API_BASE}/api/clips/${c.ts}/response`)
+                            if (r.ok) {
+                              const data = await r.json()
+                              setJsonOut(JSON.stringify(data, null, 2))
+                            }
+                          } catch {}
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        draggable={false}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                          <path fillRule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" clipRule="evenodd" />
+                          <path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      aria-label="Delete clip"
+                      title="Delete clip"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (!c.ts) return
+                        try {
+                          const r = await fetch(`${API_BASE}/api/clips/${c.ts}`, { method: 'DELETE', credentials: 'include' })
+                          if (r.ok) {
+                            const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
+                            setClips(list)
+                          }
+                        } catch {}
+                      }}
+                      className="text-muted-foreground hover:text-destructive"
+                      draggable={false}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                        <path fillRule="evenodd" d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h3.25a.75.75 0 0 1 0 1.5H5.75a.75.75 0 0 1 0-1.5H9V3.75ZM6.75 8.5a.75.75 0 0 1 .75.75V19c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9.25a.75.75 0 0 1 1.5 0V19A2.75 2.75 0 0 1 15.25 21.75h-6.5A2.75 2.75 0 0 1 6 19V9.25a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75-.75.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5Z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
               {clips.length === 0 && (

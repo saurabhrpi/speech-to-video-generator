@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import tempfile
@@ -21,7 +22,7 @@ import glob
 from ..services.video_service import VideoService
 from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
-from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip
+from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response
 from ..utils.video import stitch_videos_detailed
 
 
@@ -263,15 +264,27 @@ def get_clips(request: Request):
 
 
 @app.post("/api/clips")
-def save_clip(request: Request, url: str = Form(...), note: Optional[str] = Form(None)):
+def save_clip(request: Request, url: str = Form(...), note: Optional[str] = Form(None), json_response: Optional[str] = Form(None)):
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
     ns = os.getenv("CLIPS_NAMESPACE", "")
     user = request.session.get("user") or {}
     user_ns = user.get("sub") or ""
     namespace = "/".join([p for p in [ns, user_ns] if p]) or None
-    entry = add_clip(url, note, namespace)
+    entry = add_clip(url, note, namespace, json_response=json_response)
     return JSONResponse({"success": True, "saved": entry})
+
+
+@app.get("/api/clips/{ts}/response")
+def get_clip_response(request: Request, ts: int):
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    content = get_response(ts, namespace)
+    if content is None:
+        raise HTTPException(status_code=404, detail="No saved response for this clip")
+    return JSONResponse(json.loads(content))
 
 
 @app.delete("/api/clips")

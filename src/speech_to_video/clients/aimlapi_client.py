@@ -190,20 +190,30 @@ class AIMLAPIClient:
         image_url: str,
         prompt: str,
         model: Optional[str] = None,
+        last_image_url: Optional[str] = None,
+        duration: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Generate a video from an image using Kling's image-to-video model.
-        Uses the v2 /video/generations endpoint.
+        Generate a video from an image (and optionally a last-frame image) using
+        Kling's image-to-video model. Uses the v2 /video/generations endpoint.
         """
         import time
 
         base = self.settings.aimlapi_base_url.rstrip("/").replace("/v2", "")
         url = f"{base}/v2/video/generations"
+        resolved_model = model or self.settings.kling_i2v_model
         body: Dict[str, Any] = {
-            "model": model or self.settings.kling_i2v_model,
+            "model": resolved_model,
             "prompt": prompt,
             "image_url": image_url,
         }
+        if last_image_url:
+            if "video-o1" in resolved_model:
+                body["last_image_url"] = last_image_url
+            else:
+                body["tail_image_url"] = last_image_url
+        if duration:
+            body["duration"] = int(duration)
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
@@ -235,12 +245,17 @@ class AIMLAPIClient:
         image_url: str,
         prompt: str,
         model: Optional[str] = None,
+        last_image_url: Optional[str] = None,
+        duration: Optional[int] = None,
         max_wait: int = 300,
     ) -> Dict[str, Any]:
         """
         High-level: submit Kling image-to-video job, poll until done, return video URL.
         """
-        data = self.generate_image_to_video(image_url, prompt, model=model)
+        data = self.generate_image_to_video(
+            image_url, prompt, model=model,
+            last_image_url=last_image_url, duration=duration,
+        )
         status_code = int(data.get("_status_code", 0))
         if not (200 <= status_code < 300):
             return {"success": False, "error": data}
