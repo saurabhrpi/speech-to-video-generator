@@ -34,6 +34,8 @@ class Settings:
     dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
     dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
     kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
+    nano_banana_t2i_model: str = os.environ.get("NANO_BANANA_T2I_MODEL", "google/nano-banana-pro")
+    nano_banana_edit_model: str = os.environ.get("NANO_BANANA_EDIT_MODEL", "google/nano-banana-pro-edit")
 
 
 def get_settings() -> Settings:

@@ -3,7 +3,6 @@ from typing import Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
-from ..clients.dzine_client import DzineClient
 from ..models.timelapse import TimelapseRequest, compose_timelapse_prompt
 from ..utils.config import Settings, get_settings
 from ..utils.video import stitch_videos
@@ -17,7 +16,6 @@ class VideoService:
         self.settings = settings or get_settings()
         self.openai_client = OpenAIClient(self.settings)
         self.aiml_client = AIMLAPIClient(self.settings)
-        self.dzine_client = DzineClient(self.settings) if self.settings.dzine_api_key else None
 
     def speech_to_video_with_audio(self, audio_path: str, duration: int = 60, quality: str = "high") -> Dict:
         transcript = self.openai_client.transcribe(audio_path)
@@ -210,8 +208,8 @@ class VideoService:
         import random
         from ..utils.video import stitch_timelapse_clips
 
-        if not self.dzine_client:
-            return {"success": False, "error": "Dzine API key not configured. Set DZINE_API_KEY in .env"}
+        if not self.settings.aimlapi_api_key:
+            return {"success": False, "error": "AIMLAPI key not configured. Set AIMLAPI_API_KEY in .env"}
 
         resume = resume_state or {}
 
@@ -249,7 +247,7 @@ class VideoService:
                 "pipeline": "v2",
             }
 
-        # --- Phase 2: Generate keyframe images via Dzine ---
+        # --- Phase 2: Generate keyframe images via Nano Banana Pro ---
         if "keyframe_images" in resume and resume["keyframe_images"]:
             keyframe_images = resume["keyframe_images"]
             logger.info("[Timelapse] Resuming with %d existing keyframe images", len(keyframe_images))
@@ -257,37 +255,20 @@ class VideoService:
             keyframe_images: List[Dict] = []
             prev_image_url: Optional[str] = None
 
-            DZINE_MAX_PROMPT = 1400
-
             for i, stage in enumerate(stages):
                 stage_desc = stage.get("description", "")
                 edit_delta = stage.get("edit_delta", "")
 
                 if i == 0:
-                    full_prompt = (
+                    prompt = (
                         f"SAME ROOM, SAME CAMERA, EXACT SAME LAYOUT. {scene_bible} "
                         f"Current state of this room: {stage_desc}"
                     )
-                else:
-                    full_prompt = (
-                        f"In this image, make the following changes: {edit_delta} "
-                        f"Keep everything else in the image exactly the same."
-                    )
-
-                if len(full_prompt) > DZINE_MAX_PROMPT:
-                    original_prompt = full_prompt
-                    full_prompt = full_prompt[:DZINE_MAX_PROMPT]
-                    logger.debug(
-                        "[Timelapse] Prompt truncated for stage %d: %d -> %d chars",
-                        i + 1, len(original_prompt), len(full_prompt),
-                    )
-
-                if i == 0:
-                    img_result = self.dzine_client.generate_image(
-                        prompt=full_prompt,
-                        seed=seed,
-                        width=1280,
-                        height=720,
+                    logger.info("[Timelapse] Stage %d: T2I via Nano Banana Pro", i + 1)
+                    img_result = self.aiml_client.generate_image(
+                        prompt=prompt,
+                        aspect_ratio="16:9",
+                        resolution="1K",
                     )
                 else:
                     if prev_image_url is None:
@@ -297,17 +278,23 @@ class VideoService:
                             "scene_bible": scene_bible,
                             "stages": stages,
                         }
-                    img_result = self.dzine_client.generate_image(
-                        prompt=full_prompt,
-                        seed=seed,
-                        reference_image_url=prev_image_url,
+                    prompt = (
+                        f"In this image, make the following changes: {edit_delta} "
+                        f"Keep everything else in the image exactly the same."
+                    )
+                    logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", i + 1)
+                    img_result = self.aiml_client.generate_image(
+                        prompt=prompt,
+                        image_urls=[prev_image_url],
+                        aspect_ratio="16:9",
+                        resolution="1K",
                     )
 
                 if not img_result.get("success"):
                     return {
                         "success": False,
                         "error": f"Image generation failed at stage {i + 1}",
-                        "dzine_error": img_result.get("error"),
+                        "image_error": img_result.get("error"),
                         "scene_bible": scene_bible,
                         "stages": stages,
                         "seed": seed,

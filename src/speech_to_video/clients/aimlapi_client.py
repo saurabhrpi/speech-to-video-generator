@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+import logging
+from typing import Any, Dict, List, Optional
 
 import os
 import requests
@@ -6,6 +7,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ..utils.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class AIMLAPIClient:
@@ -276,6 +279,97 @@ class AIMLAPIClient:
         if video_url:
             return {"success": True, "video_url": video_url, "job_id": str(job_id)}
         return {"success": False, "error": poll_result, "job_id": str(job_id)}
+
+    def generate_image(
+        self,
+        prompt: str,
+        image_urls: Optional[List[str]] = None,
+        model: Optional[str] = None,
+        aspect_ratio: str = "16:9",
+        resolution: str = "1K",
+    ) -> Dict[str, Any]:
+        """
+        Generate or edit an image via Nano Banana Pro / Pro Edit.
+
+        Stage 1 (T2I): prompt only, model=google/nano-banana-pro
+        Stages 2+ (Edit): prompt + image_urls, model=google/nano-banana-pro-edit
+        """
+        base = self.settings.aimlapi_base_url.rstrip("/").replace("/v2", "")
+        url = f"{base}/v1/images/generations"
+
+        if model is None:
+            model = self.settings.nano_banana_edit_model if image_urls else self.settings.nano_banana_t2i_model
+
+        body: Dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "num_images": 1,
+        }
+        if image_urls:
+            body["image_urls"] = image_urls
+
+        logger.info("[AIMLAPI] generate_image POST %s model=%s image_urls=%s", url, model, bool(image_urls))
+        logger.debug("[AIMLAPI] generate_image body: %s", {k: v for k, v in body.items() if k != "prompt"})
+
+        import time
+        last: Dict[str, Any] = {}
+        attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
+        backoff = 1.0
+        for _ in range(attempts):
+            try:
+                connect_to = float(os.getenv("AIMLAPI_CONNECT_TIMEOUT", "10"))
+                read_to = float(os.getenv("AIMLAPI_IMAGE_READ_TIMEOUT", "120"))
+                resp = self.session_post.post(url, json=body, timeout=(connect_to, read_to))
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {"error": resp.text}
+                data["_status_code"] = resp.status_code
+                logger.info("[AIMLAPI] generate_image response: status=%s", resp.status_code)
+                logger.debug("[AIMLAPI] generate_image raw response: %s", data)
+
+                if resp.status_code >= 400:
+                    logger.error("[AIMLAPI] generate_image FAILED: http=%s body=%s", resp.status_code, data)
+                    last = data
+                    if resp.status_code not in {429} and resp.status_code < 500:
+                        return {"success": False, "error": data}
+                else:
+                    image_url = self._extract_image_url(data)
+                    if image_url:
+                        logger.info("[AIMLAPI] generate_image OK: %s", image_url)
+                        return {"success": True, "images": [image_url], "raw": data}
+                    logger.warning("[AIMLAPI] generate_image: no image URL found in response: %s", data)
+                    return {"success": False, "error": "No image URL in response", "raw": data}
+            except requests.Timeout as e:
+                last = {"error": f"timeout: {e}", "_status_code": 0}
+                logger.error("[AIMLAPI] generate_image timeout: %s", e)
+            except requests.RequestException as e:
+                last = {"error": f"request_error: {e}", "_status_code": 0}
+                logger.error("[AIMLAPI] generate_image request error: %s", e)
+            time.sleep(backoff)
+            backoff *= 2.0
+        return {"success": False, "error": last or "No response"}
+
+    def _extract_image_url(self, data: Dict[str, Any]) -> Optional[str]:
+        """Extract an image URL from the Nano Banana response."""
+        if isinstance(data, dict):
+            # Common pattern: {"data": [{"url": "..."}]}
+            items = data.get("data") or data.get("images") or data.get("results") or []
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        u = item.get("url") or item.get("image_url") or item.get("uri")
+                        if u and isinstance(u, str) and u.startswith("http"):
+                            return u
+                    elif isinstance(item, str) and item.startswith("http"):
+                        return item
+            # Flat: {"url": "..."}
+            u = data.get("url") or data.get("image_url")
+            if u and isinstance(u, str) and u.startswith("http"):
+                return u
+        return None
 
     def _get_resolution(self, quality: str) -> str:
         if quality == "high":
