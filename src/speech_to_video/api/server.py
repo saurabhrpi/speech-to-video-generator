@@ -1,6 +1,10 @@
+import json
+import logging
 import os
 import tempfile
 from typing import List, Optional
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +22,7 @@ import glob
 from ..services.video_service import VideoService
 from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
-from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip
+from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response
 from ..utils.video import stitch_videos_detailed
 
 
@@ -70,24 +74,6 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
         client_kwargs={"scope": "openid email profile"},
     )
-
-# Session middleware for login state
-SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
-
-# OAuth (Google)
-oauth = OAuth()
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    oauth.register(
-        name="google",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
-
 
 @app.get("/api/health")
 def health():
@@ -260,15 +246,27 @@ def get_clips(request: Request):
 
 
 @app.post("/api/clips")
-def save_clip(request: Request, url: str = Form(...), note: Optional[str] = Form(None)):
+def save_clip(request: Request, url: str = Form(...), note: Optional[str] = Form(None), json_response: Optional[str] = Form(None)):
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
     ns = os.getenv("CLIPS_NAMESPACE", "")
     user = request.session.get("user") or {}
     user_ns = user.get("sub") or ""
     namespace = "/".join([p for p in [ns, user_ns] if p]) or None
-    entry = add_clip(url, note, namespace)
+    entry = add_clip(url, note, namespace, json_response=json_response)
     return JSONResponse({"success": True, "saved": entry})
+
+
+@app.get("/api/clips/{ts}/response")
+def get_clip_response(request: Request, ts: int):
+    ns = os.getenv("CLIPS_NAMESPACE", "")
+    user = request.session.get("user") or {}
+    user_ns = user.get("sub") or ""
+    namespace = "/".join([p for p in [ns, user_ns] if p]) or None
+    content = get_response(ts, namespace)
+    if content is None:
+        raise HTTPException(status_code=404, detail="No saved response for this clip")
+    return JSONResponse(json.loads(content))
 
 
 @app.delete("/api/clips")
@@ -413,16 +411,22 @@ def get_stitched_file(request: Request):
 
 @app.get("/api/stitched/{name}")
 def get_stitched_named(request: Request, name: str):
+    if not name.endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
     ns = os.getenv("CLIPS_NAMESPACE", "")
     user = request.session.get("user") or {}
     user_ns = user.get("sub") or ""
     namespace = "/".join([p for p in [ns, user_ns] if p])
-    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
-    target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
-    path = os.path.join(target_dir, name)
-    if not (os.path.isfile(path) and path.endswith('.mp4')):
-        raise HTTPException(status_code=404, detail="Stitched file not found")
-    return FileResponse(path, media_type="video/mp4", filename=name)
+    search_dirs = []
+    if namespace:
+        search_dirs.append(os.path.join(base_dir, *(namespace.split("/")), "stitched"))
+    search_dirs.append(os.path.join(base_dir, "stitched"))
+    for d in search_dirs:
+        path = os.path.join(d, name)
+        if os.path.isfile(path):
+            return FileResponse(path, media_type="video/mp4", filename=name)
+    raise HTTPException(status_code=404, detail="Stitched file not found")
 
 
 @app.get("/api/proxy-video")
@@ -531,24 +535,23 @@ async def generate_timelapse(request: Request):
     if isinstance(materials, str):
         materials = [m.strip() for m in materials.split(",") if m.strip()]
 
-    duration = int(body.get("duration", 10))
-    if duration not in (5, 10, 15):
-        raise HTTPException(status_code=400, detail="duration must be 5, 10, or 15")
-
     req = TimelapseRequest(
         room_type=room_type,
         style=style,
         features=features,
         materials=materials,
         lighting=(body.get("lighting") or "natural").strip(),
-        duration=duration,
+        duration=8,
         camera_motion=(body.get("camera_motion") or "slow_pan").strip(),
         progression=(body.get("progression") or "construction").strip(),
         freeform_description=(body.get("freeform_description") or "").strip(),
     )
 
-    result = service.generate_timelapse(req)
-    if result.get("success") or result.get("video_url"):
+    stop_after = body.get("stop_after")  # "plan" | "images" | "videos" | None
+    resume_state = body.get("resume_state")  # dict with prior phase outputs
+
+    result = service.generate_timelapse_v2(req, stop_after=stop_after, resume_state=resume_state)
+    if result.get("video_url"):
         _inc_usage(request)
     return JSONResponse(result)
 

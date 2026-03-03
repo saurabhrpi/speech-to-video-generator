@@ -28,12 +28,35 @@ export default function App() {
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
   const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
   const [mode, setMode] = useState<'speech' | 'timelapse'>('timelapse')
+  const [stepByStep, setStepByStep] = useState(false)
+  const [pipelineState, setPipelineState] = useState<Record<string, any> | null>(null)
+  const [phaseCompleted, setPhaseCompleted] = useState<string | null>(null)
+  const [formPayload, setFormPayload] = useState<Record<string, any> | null>(null)
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [recording, setRecording] = useState(false)
   const recordedChunks = useRef<Blob[]>([])
   const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null)
+
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+
+  useEffect(() => {
+    async function toggleWakeLock() {
+      if (busy) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen')
+          }
+        } catch { /* browser may deny */ }
+      } else {
+        try { await wakeLockRef.current?.release() } catch {}
+        wakeLockRef.current = null
+      }
+    }
+    toggleWakeLock()
+    return () => { try { wakeLockRef.current?.release() } catch {} }
+  }, [busy])
 
   useEffect(() => {
     fetch(`${API_BASE}/api/clips`).then(r => r.json()).then((list) => { setClips(list); clipCountRef.current = Array.isArray(list) ? list.length : 0 }).catch(() => setClips([]))
@@ -255,6 +278,7 @@ export default function App() {
     const body = new FormData()
     body.set('url', videoUrl)
     if (note) body.set('note', note)
+    if (jsonOut) body.set('json_response', jsonOut)
     await fetch(`${API_BASE}/api/clips`, { method: 'POST', body })
     const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
     setClips(list)
@@ -447,7 +471,28 @@ export default function App() {
     setRecordingStream(null)
   }
 
-  async function handleTimelapseSubmit(payload: Record<string, any>) {
+  const PHASE_ORDER = ['plan', 'images', 'videos'] as const
+  const PHASE_LABELS: Record<string, string> = {
+    plan: 'Planning (GPT)',
+    images: 'Image Generation (Dzine)',
+    videos: 'Video Transitions (Kling)',
+    done: 'Stitching',
+  }
+  const PHASE_EXPECTED_MS: Record<string, number> = {
+    plan: 15_000,
+    images: 180_000,
+    videos: 1_500_000,
+    done: 1_800_000,
+  }
+
+  function nextStopAfter(currentPhase: string | null): string | null {
+    if (!currentPhase) return 'plan'
+    const idx = PHASE_ORDER.indexOf(currentPhase as any)
+    if (idx < 0 || idx >= PHASE_ORDER.length - 1) return null
+    return PHASE_ORDER[idx + 1]
+  }
+
+  async function runPipeline(payload: Record<string, any>, stopAfter: string | null, resumeState: Record<string, any> | null) {
     if (!auth?.authenticated && Number(auth?.usage_count || 0) >= Number(auth?.limit || 1)) {
       setLoginRequired(true)
       setStatusMsg('Sign in required to continue.')
@@ -455,14 +500,20 @@ export default function App() {
     }
     setBusy(true)
     try {
-      const expectedMs = payload.duration > 10 ? 180_000 : 120_000
-      beginProgress('Generating timelapse...', expectedMs)
+      const phaseLabel = stopAfter ? PHASE_LABELS[stopAfter] || stopAfter : 'all phases'
+      const expectedMs = stopAfter ? (PHASE_EXPECTED_MS[stopAfter] || 60_000) : 1_800_000
+      beginProgress(`Running ${phaseLabel}...`, expectedMs)
+
+      const body: Record<string, any> = { ...payload }
+      if (stopAfter) body.stop_after = stopAfter
+      if (resumeState) body.resume_state = resumeState
+
       let resp: Response
       try {
         resp = await fetch(`${API_BASE}/api/generate/timelapse`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(body),
         })
       } catch (e) {
         clearProgressTimer()
@@ -488,6 +539,28 @@ export default function App() {
         return
       }
       setJsonOut(JSON.stringify(data, null, 2))
+
+      if (!data.success) {
+        clearProgressTimer()
+        setProgress(0)
+        setStatusMsg(data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'Generation failed')
+        return
+      }
+
+      const completed = data.phase_completed as string | undefined
+      if (completed && completed !== 'done') {
+        const accumulated: Record<string, any> = {}
+        if (data.scene_bible) accumulated.scene_bible = data.scene_bible
+        if (data.stages) accumulated.stages = data.stages
+        if (data.seed) accumulated.seed = data.seed
+        if (data.keyframe_images) accumulated.keyframe_images = data.keyframe_images
+        if (data.transition_videos) accumulated.transition_videos = data.transition_videos
+        setPipelineState(accumulated)
+        setPhaseCompleted(completed)
+        endProgress(`Phase complete: ${PHASE_LABELS[completed] || completed}`)
+        return
+      }
+
       const raw = data.video_url as string | undefined
       if (raw) {
         const url = /^https?:/i.test(raw) ? raw : `${API_BASE}${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`
@@ -497,15 +570,52 @@ export default function App() {
         setVideoUrl(url)
         setPendingUrl(null)
         endProgress('Ready')
+        setPipelineState(null)
+        setPhaseCompleted(null)
         ;(async () => { try { await fetchSession() } catch {} })()
       } else {
         clearProgressTimer()
         setProgress(0)
-        setStatusMsg(data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'No video URL returned')
+        setStatusMsg('No video URL returned')
       }
     } finally {
       setBusy(false)
     }
+  }
+
+  async function handleTimelapseSubmit(payload: Record<string, any>) {
+    setFormPayload(payload)
+    setPipelineState(null)
+    setPhaseCompleted(null)
+    setVideoUrl(null)
+    if (stepByStep) {
+      await runPipeline(payload, 'plan', null)
+    } else {
+      await runPipeline(payload, null, null)
+    }
+  }
+
+  async function handleContinuePipeline() {
+    if (!formPayload || !pipelineState || !phaseCompleted) return
+    const stop = nextStopAfter(phaseCompleted)
+    await runPipeline(formPayload, stop, pipelineState)
+  }
+
+  function handleStopPipeline() {
+    const label = phaseCompleted ? (PHASE_LABELS[phaseCompleted] || phaseCompleted) : ''
+    setPhaseCompleted(null)
+    setFormPayload(null)
+    setStatusMsg(label ? `Pipeline stopped after ${label}.` : 'Pipeline stopped.')
+  }
+
+  function handleStartOver() {
+    setPipelineState(null)
+    setPhaseCompleted(null)
+    setFormPayload(null)
+    setVideoUrl(null)
+    setJsonOut('')
+    setStatusMsg('')
+    setProgress(0)
   }
 
   return (
@@ -585,9 +695,121 @@ export default function App() {
             </div>
           </div>
         )}
+        {phaseCompleted && pipelineState && !busy && (
+          <div className="rounded-md border bg-card p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                Phase complete: {PHASE_LABELS[phaseCompleted] || phaseCompleted}
+              </h3>
+              <div className="flex items-center gap-1.5">
+                {PHASE_ORDER.map((p, i) => (
+                  <div
+                    key={p}
+                    className={`h-2 w-8 rounded-full ${
+                      PHASE_ORDER.indexOf(phaseCompleted as any) >= i
+                        ? 'bg-primary'
+                        : 'bg-muted'
+                    }`}
+                    title={PHASE_LABELS[p]}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {phaseCompleted === 'plan' && pipelineState.stages && (
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Scene Bible</span>
+                  <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.scene_bible}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Stages ({pipelineState.stages.length})
+                  </span>
+                  <div className="mt-1 space-y-1.5">
+                    {pipelineState.stages.map((s: any, i: number) => (
+                      <div key={i} className="rounded bg-muted p-2">
+                        <div className="text-xs font-medium">
+                          {i === 0 ? 'Stage 1 — Full Description' : `Stage ${i + 1} — Edit`}
+                        </div>
+                        <div className="text-sm">{s.description}</div>
+                        {s.transition_prompt && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Transition: {s.transition_prompt}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {phaseCompleted === 'images' && pipelineState.keyframe_images && (
+              <div className="space-y-3">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Keyframe Images ({pipelineState.keyframe_images.length})
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {pipelineState.keyframe_images.map((kf: any, i: number) => (
+                    <div key={i} className="space-y-1">
+                      <img
+                        src={kf.image_url}
+                        alt={`Stage ${kf.stage}`}
+                        className="w-full rounded border aspect-video object-cover"
+                      />
+                      <div className="text-xs text-center text-muted-foreground truncate" title={kf.description}>
+                        Stage {kf.stage}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {phaseCompleted === 'videos' && pipelineState.transition_videos && (
+              <div className="space-y-3">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Transition Videos ({pipelineState.transition_videos.length})
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {pipelineState.transition_videos.map((url: string, i: number) => (
+                    <div key={i} className="space-y-1">
+                      <video
+                        src={url}
+                        className="w-full rounded border aspect-video object-cover"
+                        controls
+                        preload="metadata"
+                        muted
+                        playsInline
+                      />
+                      <div className="text-xs text-center text-muted-foreground">
+                        Transition {i + 1} &rarr; {i + 2}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleContinuePipeline} disabled={busy}>
+                {nextStopAfter(phaseCompleted)
+                  ? `Continue to ${PHASE_LABELS[nextStopAfter(phaseCompleted)!] || 'next phase'}`
+                  : 'Finish & Stitch'}
+              </Button>
+              <Button variant="secondary" onClick={handleStopPipeline} disabled={busy}>
+                Stop
+              </Button>
+              <Button variant="outline" onClick={handleStartOver} disabled={busy}>
+                Start Over
+              </Button>
+            </div>
+          </div>
+        )}
         <section className="space-y-3">
           {mode === 'timelapse' ? (
-            <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} />
+            <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} stepByStep={stepByStep} onStepByStepChange={setStepByStep} />
           ) : (
             <>
               {canRecord && (
@@ -683,28 +905,53 @@ export default function App() {
                       <div className="truncate text-xs text-muted-foreground">{c.url}</div>
                     </div>
                   </button>
-                  <button
-                    aria-label="Delete clip"
-                    title="Delete clip"
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      if (!c.ts) return
-                      try {
-                        const r = await fetch(`${API_BASE}/api/clips/${c.ts}`, { method: 'DELETE', credentials: 'include' })
-                        if (r.ok) {
-                          const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
-                          setClips(list)
-                        }
-                      } catch {}
-                    }}
-                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    draggable={false}
-                  >
-                    {/* Trash icon */}
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                      <path fillRule="evenodd" d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h3.25a.75.75 0 0 1 0 1.5H5.75a.75.75 0 0 1 0-1.5H9V3.75ZM6.75 8.5a.75.75 0 0 1 .75.75V19c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9.25a.75.75 0 0 1 1.5 0V19A2.75 2.75 0 0 1 15.25 21.75h-6.5A2.75 2.75 0 0 1 6 19V9.25a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75-.75.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5Z" clipRule="evenodd" />
-                    </svg>
-                  </button>
+                  <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    {c.has_response && (
+                      <button
+                        aria-label="View JSON response"
+                        title="View JSON response"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!c.ts) return
+                          try {
+                            const r = await fetch(`${API_BASE}/api/clips/${c.ts}/response`)
+                            if (r.ok) {
+                              const data = await r.json()
+                              setJsonOut(JSON.stringify(data, null, 2))
+                            }
+                          } catch {}
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        draggable={false}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                          <path fillRule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" clipRule="evenodd" />
+                          <path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      aria-label="Delete clip"
+                      title="Delete clip"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (!c.ts) return
+                        try {
+                          const r = await fetch(`${API_BASE}/api/clips/${c.ts}`, { method: 'DELETE', credentials: 'include' })
+                          if (r.ok) {
+                            const list = await fetch(`${API_BASE}/api/clips`).then(r => r.json())
+                            setClips(list)
+                          }
+                        } catch {}
+                      }}
+                      className="text-muted-foreground hover:text-destructive"
+                      draggable={false}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                        <path fillRule="evenodd" d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h3.25a.75.75 0 0 1 0 1.5H5.75a.75.75 0 0 1 0-1.5H9V3.75ZM6.75 8.5a.75.75 0 0 1 .75.75V19c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9.25a.75.75 0 0 1 1.5 0V19A2.75 2.75 0 0 1 15.25 21.75h-6.5A2.75 2.75 0 0 1 6 19V9.25a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm3 .75a.75.75 0 0 1 .75-.75.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5Z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
               {clips.length === 0 && (
