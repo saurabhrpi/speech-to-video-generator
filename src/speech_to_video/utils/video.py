@@ -1,9 +1,18 @@
 import os
 import shutil
 import tempfile
+import time
 from typing import List, Optional, Dict, Any, Union
 
 import requests
+
+
+def _unique_stitched_path() -> str:
+    """Return a unique path like clips/stitched/stitched-{timestamp}.mp4"""
+    stitched_dir = os.path.join(os.path.abspath(os.getcwd()), "clips", "stitched")
+    os.makedirs(stitched_dir, exist_ok=True)
+    filename = f"stitched-{int(time.time())}.mp4"
+    return os.path.join(stitched_dir, filename)
 
 
 def stitch_videos(video_urls: List[str]) -> Optional[str]:
@@ -175,15 +184,11 @@ def stitch_videos_detailed(video_urls: List[str]) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        destination = os.path.abspath("stitched_output.mp4")
-        try:
-            if os.path.exists(destination):
-                os.remove(destination)
-        except Exception:
-            pass
+        destination = _unique_stitched_path()
         shutil.move(output_path, destination)
         result["success"] = True
         result["output_path"] = destination
+        result["filename"] = os.path.basename(destination)
         return result
     except Exception as e:
         result["error"] = str(e)
@@ -289,16 +294,12 @@ def stitch_videos_seamless(video_urls: List[str]) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        destination = os.path.abspath("stitched_output.mp4")
-        try:
-            if os.path.exists(destination):
-                os.remove(destination)
-        except Exception:
-            pass
+        destination = _unique_stitched_path()
         shutil.move(output_path, destination)
 
         result["success"] = True
         result["output_path"] = destination
+        result["filename"] = os.path.basename(destination)
         return result
 
     except Exception as e:
@@ -415,16 +416,12 @@ def stitch_timelapse_clips(
             except Exception:
                 pass
 
-        destination = os.path.abspath("stitched_output.mp4")
-        try:
-            if os.path.exists(destination):
-                os.remove(destination)
-        except Exception:
-            pass
+        destination = _unique_stitched_path()
         shutil.move(output_path, destination)
 
         result["success"] = True
         result["output_path"] = destination
+        result["filename"] = os.path.basename(destination)
         return result
 
     except Exception as e:

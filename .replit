@@ -1,24 +1,24 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "nodejs-20"]
 
 [workflows]
 runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Web UI"
-
-[[workflows.workflow]]
-name = "Web UI"
+mode = "sequential"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python -m src.speech_to_video.webui.app"
+args = "pip install -q -r requirements.txt"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd web && npm install && npm run build"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m src.speech_to_video.api.server"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -28,10 +28,6 @@ outputType = "webview"
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 33903
-externalPort = 3000
-
 [agent]
 expertMode = true
 
@@ -40,4 +36,5 @@ channel = "stable-23_11"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["python", "-m", "src.speech_to_video.webui.app"]
+build = ["sh", "-c", "pip install -r requirements.txt && cd web && npm install && npm run build"]
+run = ["python", "-m", "src.speech_to_video.api.server"]

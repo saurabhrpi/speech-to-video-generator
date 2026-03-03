@@ -75,24 +75,6 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         client_kwargs={"scope": "openid email profile"},
     )
 
-# Session middleware for login state
-SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
-
-# OAuth (Google)
-oauth = OAuth()
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    oauth.register(
-        name="google",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
-
-
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -429,16 +411,22 @@ def get_stitched_file(request: Request):
 
 @app.get("/api/stitched/{name}")
 def get_stitched_named(request: Request, name: str):
+    if not name.endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
     ns = os.getenv("CLIPS_NAMESPACE", "")
     user = request.session.get("user") or {}
     user_ns = user.get("sub") or ""
     namespace = "/".join([p for p in [ns, user_ns] if p])
-    base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
-    target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
-    path = os.path.join(target_dir, name)
-    if not (os.path.isfile(path) and path.endswith('.mp4')):
-        raise HTTPException(status_code=404, detail="Stitched file not found")
-    return FileResponse(path, media_type="video/mp4", filename=name)
+    search_dirs = []
+    if namespace:
+        search_dirs.append(os.path.join(base_dir, *(namespace.split("/")), "stitched"))
+    search_dirs.append(os.path.join(base_dir, "stitched"))
+    for d in search_dirs:
+        path = os.path.join(d, name)
+        if os.path.isfile(path):
+            return FileResponse(path, media_type="video/mp4", filename=name)
+    raise HTTPException(status_code=404, detail="Stitched file not found")
 
 
 @app.get("/api/proxy-video")

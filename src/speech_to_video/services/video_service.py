@@ -180,9 +180,10 @@ class VideoService:
 
         stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
             return {
                 "success": True,
-                "video_url": "/api/stitched",
+                "video_url": f"/api/stitched/{filename}",
                 "segments": seg_urls,
                 "duration": request.duration,
                 "seed": seed,
@@ -430,10 +431,11 @@ class VideoService:
         )
 
         if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
             return {
                 "success": True,
                 "phase_completed": "done",
-                "video_url": "/api/stitched",
+                "video_url": f"/api/stitched/{filename}",
                 "keyframe_images": keyframe_images,
                 "transition_videos": transition_videos,
                 "scene_bible": scene_bible,
@@ -519,9 +521,10 @@ class VideoService:
         # Stitch seamlessly (no visual crossfade, only subtle audio transitions)
         stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
             return {
                 "success": True,
-                "video_url": "/api/stitched",
+                "video_url": f"/api/stitched/{filename}",
                 "segments": seg_urls,
                 "duration": 16,
                 "seed": seed,
@@ -597,7 +600,8 @@ class VideoService:
                 seg_urls.append(r["video_url"])
         stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
-            return {"success": True, "video_url": "/api/stitched", "segments": seg_urls}
+            filename = stitched.get("filename", "stitched_output.mp4")
+            return {"success": True, "video_url": f"/api/stitched/{filename}", "segments": seg_urls}
         return {"success": False, "error": stitched}
 
     def _superbowl_prompt(self, user_prompt: str) -> str:
