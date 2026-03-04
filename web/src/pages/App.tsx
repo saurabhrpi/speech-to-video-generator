@@ -619,6 +619,7 @@ export default function App() {
     setFormPayload(payload)
     setPipelineState(null)
     setPhaseCompleted(null)
+    setPipelineError(null)
     setVideoUrl(null)
     if (stepByStep) {
       await runPipeline(payload, 'plan', null)
@@ -638,7 +639,7 @@ export default function App() {
     if (!formPayload || !pipelineState) return
     setPipelineError(null)
     setStatusMsg('Resuming from where it left off...')
-    const stop = stepByStep ? nextStopAfter(detectLastCompletedPhase(pipelineState)) : undefined
+    const stop = stepByStep ? nextStopAfter(detectLastCompletedPhase(pipelineState)) : null
     await runPipeline(formPayload, stop, pipelineState)
   }
 
