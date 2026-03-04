@@ -31,6 +31,7 @@ export default function App() {
   const [stepByStep, setStepByStep] = useState(false)
   const [pipelineState, setPipelineState] = useState<Record<string, any> | null>(null)
   const [phaseCompleted, setPhaseCompleted] = useState<string | null>(null)
+  const [pipelineError, setPipelineError] = useState<string | null>(null)
   const [formPayload, setFormPayload] = useState<Record<string, any> | null>(null)
 
   const canRecord = useMemo(() => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), [])
@@ -492,6 +493,13 @@ export default function App() {
     return PHASE_ORDER[idx + 1]
   }
 
+  function detectLastCompletedPhase(state: Record<string, any>): string | null {
+    if (state.transition_videos?.length) return 'videos'
+    if (state.keyframe_images?.length) return 'images'
+    if (state.scene_bible) return 'plan'
+    return null
+  }
+
   async function runPipeline(payload: Record<string, any>, stopAfter: string | null, resumeState: Record<string, any> | null) {
     if (!auth?.authenticated && Number(auth?.usage_count || 0) >= Number(auth?.limit || 1)) {
       setLoginRequired(true)
@@ -499,6 +507,7 @@ export default function App() {
       return
     }
     setBusy(true)
+    setPipelineError(null)
     try {
       const phaseLabel = stopAfter ? PHASE_LABELS[stopAfter] || stopAfter : 'all phases'
       const expectedMs = stopAfter ? (PHASE_EXPECTED_MS[stopAfter] || 60_000) : 1_800_000
@@ -518,7 +527,12 @@ export default function App() {
       } catch (e) {
         clearProgressTimer()
         setProgress(0)
-        setStatusMsg('Server error. Please retry.')
+        const errMsg = 'Network error — connection to server lost.'
+        setStatusMsg(errMsg)
+        if (resumeState) {
+          setPipelineState(resumeState)
+          setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
+        }
         return
       }
       if (resp.status === 401) {
@@ -535,7 +549,12 @@ export default function App() {
       } catch {
         clearProgressTimer()
         setProgress(0)
-        setStatusMsg('Server error. Please retry.')
+        const errMsg = 'Server error — response could not be parsed.'
+        setStatusMsg(errMsg)
+        if (resumeState) {
+          setPipelineState(resumeState)
+          setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
+        }
         return
       }
       setJsonOut(JSON.stringify(data, null, 2))
@@ -543,7 +562,20 @@ export default function App() {
       if (!data.success) {
         clearProgressTimer()
         setProgress(0)
-        setStatusMsg(data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'Generation failed')
+        const errMsg = data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'Generation failed'
+        setStatusMsg(errMsg)
+
+        const hasPartialState = data.scene_bible || data.keyframe_images || data.transition_videos
+        if (hasPartialState) {
+          const partial: Record<string, any> = {}
+          if (data.scene_bible) partial.scene_bible = data.scene_bible
+          if (data.stages) partial.stages = data.stages
+          if (data.seed) partial.seed = data.seed
+          if (data.keyframe_images) partial.keyframe_images = data.keyframe_images
+          if (data.transition_videos) partial.transition_videos = data.transition_videos
+          setPipelineState(partial)
+          setPipelineError(errMsg)
+        }
         return
       }
 
@@ -598,6 +630,15 @@ export default function App() {
   async function handleContinuePipeline() {
     if (!formPayload || !pipelineState || !phaseCompleted) return
     const stop = nextStopAfter(phaseCompleted)
+    setPipelineError(null)
+    await runPipeline(formPayload, stop, pipelineState)
+  }
+
+  async function handleResumePipeline() {
+    if (!formPayload || !pipelineState) return
+    setPipelineError(null)
+    setStatusMsg('Resuming from where it left off...')
+    const stop = stepByStep ? nextStopAfter(detectLastCompletedPhase(pipelineState)) : undefined
     await runPipeline(formPayload, stop, pipelineState)
   }
 
@@ -605,12 +646,14 @@ export default function App() {
     const label = phaseCompleted ? (PHASE_LABELS[phaseCompleted] || phaseCompleted) : ''
     setPhaseCompleted(null)
     setFormPayload(null)
+    setPipelineError(null)
     setStatusMsg(label ? `Pipeline stopped after ${label}.` : 'Pipeline stopped.')
   }
 
   function handleStartOver() {
     setPipelineState(null)
     setPhaseCompleted(null)
+    setPipelineError(null)
     setFormPayload(null)
     setVideoUrl(null)
     setJsonOut('')
@@ -807,6 +850,36 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {pipelineError && pipelineState && !phaseCompleted && !busy && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-destructive">Pipeline failed</h3>
+              <p className="text-sm text-muted-foreground mt-1">{pipelineError}</p>
+            </div>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {pipelineState.scene_bible && <div>Plan: saved</div>}
+              {pipelineState.keyframe_images && (
+                <div>Images: {pipelineState.keyframe_images.length} generated</div>
+              )}
+              {pipelineState.transition_videos && (
+                <div>
+                  Videos: {pipelineState.transition_videos.length} of{' '}
+                  {(pipelineState.keyframe_images?.length || 1) - 1} transitions done
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button onClick={handleResumePipeline} disabled={busy}>
+                Resume from where it failed
+              </Button>
+              <Button variant="outline" onClick={handleStartOver} disabled={busy}>
+                Start Over
+              </Button>
+            </div>
+          </div>
+        )}
+
         <section className="space-y-3">
           {mode === 'timelapse' ? (
             <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} stepByStep={stepByStep} onStepByStepChange={setStepByStep} />

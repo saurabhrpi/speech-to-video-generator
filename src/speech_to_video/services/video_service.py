@@ -332,12 +332,19 @@ class VideoService:
             }
 
         # --- Phase 3: Generate transition videos via Kling (first+last frame) ---
-        if "transition_videos" in resume and resume["transition_videos"]:
-            transition_videos = resume["transition_videos"]
-            logger.info("[Timelapse] Resuming with %d existing transition videos", len(transition_videos))
-        else:
-            transition_videos: List[str] = []
+        total_transitions_needed = len(keyframe_images) - 1
+        transition_videos: List[str] = list(resume.get("transition_videos") or [])
+        start_idx = len(transition_videos)
 
+        if start_idx >= total_transitions_needed:
+            logger.info("[Timelapse] Resuming with all %d transition videos already done", len(transition_videos))
+        elif start_idx > 0:
+            logger.info("[Timelapse] Resuming transitions from %d->%d (%d of %d done)",
+                        start_idx + 1, start_idx + 2, start_idx, total_transitions_needed)
+        else:
+            pass
+
+        if start_idx < total_transitions_needed:
             camera = request.camera_motion.lower() if request.camera_motion else "static"
             camera_cues = {
                 "static": "Static locked-off camera, no camera movement.",
@@ -348,7 +355,7 @@ class VideoService:
             }
             camera_instruction = camera_cues.get(camera, camera_cues["static"])
 
-            for i in range(len(keyframe_images) - 1):
+            for i in range(start_idx, total_transitions_needed):
                 from_kf = keyframe_images[i]
                 to_kf = keyframe_images[i + 1]
 
@@ -404,12 +411,15 @@ class VideoService:
                         i + 1, i + 2, elapsed_s, video_url,
                     )
 
-            if not transition_videos:
-                return {
-                    "success": False,
-                    "error": "No transition videos were generated",
-                    "keyframe_images": keyframe_images,
-                }
+        if not transition_videos:
+            return {
+                "success": False,
+                "error": "No transition videos were generated",
+                "keyframe_images": keyframe_images,
+                "scene_bible": scene_bible,
+                "stages": stages,
+                "seed": seed,
+            }
 
         if stop_after == "videos":
             return {
