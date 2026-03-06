@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
@@ -196,6 +196,7 @@ class VideoService:
         request: TimelapseRequest,
         stop_after: Optional[str] = None,
         resume_state: Optional[Dict] = None,
+        on_progress: Optional[Callable] = None,
     ) -> Dict:
         """
         Multi-step timelapse pipeline with optional pause points.
@@ -205,9 +206,14 @@ class VideoService:
             - scene_bible, stages, seed  -> skip Phase 1
             - keyframe_images            -> skip Phase 2
             - transition_videos          -> skip Phase 3
+        on_progress: callback(phase, step, total, message, partial_result=None)
         """
         import random
         from ..utils.video import stitch_timelapse_clips
+
+        def _notify(phase: str, step: int, total: int, message: str, partial_result: Optional[Dict] = None):
+            if on_progress:
+                on_progress(phase=phase, step=step, total=total, message=message, partial_result=partial_result)
 
         if not self.settings.aimlapi_api_key:
             return {"success": False, "error": "AIMLAPI key not configured. Set AIMLAPI_API_KEY in .env"}
@@ -221,7 +227,9 @@ class VideoService:
             seed = resume.get("seed", random.randint(1, 2**31 - 1))
             num_stages = len(stages)
             logger.info("[Timelapse] Resuming with existing plan (%d stages)", num_stages)
+            _notify("plan", 1, 1, f"Using existing plan ({num_stages} stages)")
         else:
+            _notify("plan", 0, 1, "Generating plan via GPT...")
             seed = random.randint(1, 2**31 - 1)
             num_stages = 7
             plan = self.openai_client.generate_scene_bible_and_stages(
@@ -237,6 +245,9 @@ class VideoService:
             )
             scene_bible = plan["scene_bible"]
             stages = plan["stages"]
+            _notify("plan", 1, 1, "Plan complete", partial_result={
+                "scene_bible": scene_bible, "stages": stages, "seed": seed,
+            })
 
         if stop_after == "plan":
             return {
@@ -252,6 +263,7 @@ class VideoService:
         if "keyframe_images" in resume and resume["keyframe_images"]:
             keyframe_images = resume["keyframe_images"]
             logger.info("[Timelapse] Resuming with %d existing keyframe images", len(keyframe_images))
+            _notify("images", len(keyframe_images), len(keyframe_images), f"Using {len(keyframe_images)} existing images")
         else:
             keyframe_images: List[Dict] = []
             prev_image_url: Optional[str] = None
@@ -259,6 +271,7 @@ class VideoService:
             for i, stage in enumerate(stages):
                 stage_desc = stage.get("description", "")
                 edit_delta = stage.get("edit_delta", "")
+                _notify("images", i, len(stages), f"Generating image {i + 1} of {len(stages)}")
 
                 if i == 0:
                     prompt = (
@@ -320,6 +333,11 @@ class VideoService:
                 })
                 prev_image_url = image_url
 
+            _notify("images", len(stages), len(stages), "All images generated", partial_result={
+                "scene_bible": scene_bible, "stages": stages, "seed": seed,
+                "keyframe_images": keyframe_images,
+            })
+
         if stop_after == "images":
             return {
                 "success": True,
@@ -338,6 +356,7 @@ class VideoService:
 
         if start_idx >= total_transitions_needed:
             logger.info("[Timelapse] Resuming with all %d transition videos already done", len(transition_videos))
+            _notify("videos", total_transitions_needed, total_transitions_needed, "All transitions already done")
         elif start_idx > 0:
             logger.info("[Timelapse] Resuming transitions from %d->%d (%d of %d done)",
                         start_idx + 1, start_idx + 2, start_idx, total_transitions_needed)
@@ -358,6 +377,9 @@ class VideoService:
             for i in range(start_idx, total_transitions_needed):
                 from_kf = keyframe_images[i]
                 to_kf = keyframe_images[i + 1]
+
+                _notify("videos", i, total_transitions_needed,
+                        f"Generating transition {i + 1} of {total_transitions_needed}")
 
                 transition_prompt = stages[i].get("transition_prompt", "")
                 if not transition_prompt:
@@ -410,6 +432,13 @@ class VideoService:
                         "[Timelapse] Transition %d->%d completed in %ds: %s",
                         i + 1, i + 2, elapsed_s, video_url,
                     )
+                    _notify("videos", i + 1, total_transitions_needed,
+                            f"Transition {i + 1} of {total_transitions_needed} complete",
+                            partial_result={
+                                "scene_bible": scene_bible, "stages": stages, "seed": seed,
+                                "keyframe_images": keyframe_images,
+                                "transition_videos": list(transition_videos),
+                            })
 
         if not transition_videos:
             return {
@@ -434,6 +463,7 @@ class VideoService:
             }
 
         # --- Phase 4: Stitch with 1.5x speed ---
+        _notify("stitch", 0, 1, "Stitching videos...")
         stitched = stitch_timelapse_clips(
             video_sources=transition_videos,
             speed=1.5,
@@ -442,6 +472,7 @@ class VideoService:
 
         if stitched.get("success"):
             filename = stitched.get("filename", "stitched_output.mp4")
+            _notify("stitch", 1, 1, "Done")
             return {
                 "success": True,
                 "phase_completed": "done",

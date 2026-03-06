@@ -475,15 +475,10 @@ export default function App() {
   const PHASE_ORDER = ['plan', 'images', 'videos'] as const
   const PHASE_LABELS: Record<string, string> = {
     plan: 'Planning (GPT)',
-    images: 'Image Generation (Dzine)',
+    images: 'Image Generation',
     videos: 'Video Transitions (Kling)',
+    stitch: 'Stitching',
     done: 'Stitching',
-  }
-  const PHASE_EXPECTED_MS: Record<string, number> = {
-    plan: 15_000,
-    images: 180_000,
-    videos: 1_500_000,
-    done: 1_800_000,
   }
 
   function nextStopAfter(currentPhase: string | null): string | null {
@@ -500,6 +495,33 @@ export default function App() {
     return null
   }
 
+  const POLL_INTERVAL = 3000
+  const MAX_NETWORK_FAILS = 10
+
+  function calcProgress(phase: string | null, step: number, total: number, stopAfter: string | null): number {
+    if (!phase || total <= 0) return 0
+    const phaseRatio = step / total
+    if (stopAfter) return Math.min(phaseRatio * 100, 99.5)
+    const ranges: Record<string, [number, number]> = {
+      plan: [0, 5], images: [5, 40], videos: [40, 95], stitch: [95, 100],
+    }
+    const range = ranges[phase]
+    if (!range) return 0
+    const [start, end] = range
+    return Math.min(start + (end - start) * phaseRatio, 99.5)
+  }
+
+  function extractPartial(data: Record<string, any>): Record<string, any> | null {
+    if (!data.scene_bible && !data.keyframe_images && !data.transition_videos) return null
+    const p: Record<string, any> = {}
+    if (data.scene_bible) p.scene_bible = data.scene_bible
+    if (data.stages) p.stages = data.stages
+    if (data.seed) p.seed = data.seed
+    if (data.keyframe_images) p.keyframe_images = data.keyframe_images
+    if (data.transition_videos) p.transition_videos = data.transition_videos
+    return p
+  }
+
   async function runPipeline(payload: Record<string, any>, stopAfter: string | null, resumeState: Record<string, any> | null) {
     if (!auth?.authenticated && Number(auth?.usage_count || 0) >= Number(auth?.limit || 1)) {
       setLoginRequired(true)
@@ -508,92 +530,144 @@ export default function App() {
     }
     setBusy(true)
     setPipelineError(null)
+    setPhaseCompleted(null)
+
     try {
-      const phaseLabel = stopAfter ? PHASE_LABELS[stopAfter] || stopAfter : 'all phases'
-      const expectedMs = stopAfter ? (PHASE_EXPECTED_MS[stopAfter] || 60_000) : 1_800_000
-      beginProgress(`Running ${phaseLabel}...`, expectedMs)
+      setStatusMsg('Starting...')
+      setProgress(0)
 
       const body: Record<string, any> = { ...payload }
       if (stopAfter) body.stop_after = stopAfter
       if (resumeState) body.resume_state = resumeState
 
-      let resp: Response
+      // 1. Start the job
+      let startResp: Response
       try {
-        resp = await fetch(`${API_BASE}/api/generate/timelapse`, {
+        startResp = await fetch(`${API_BASE}/api/generate/timelapse`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
-      } catch (e) {
-        clearProgressTimer()
-        setProgress(0)
-        const errMsg = 'Network error — connection to server lost.'
-        setStatusMsg(errMsg)
-        if (resumeState) {
-          setPipelineState(resumeState)
-          setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
-        }
-        return
-      }
-      if (resp.status === 401) {
-        setLoginRequired(true)
-        clearProgressTimer()
-        setProgress(0)
-        setStatusMsg('Sign in required to continue.')
-        setBusy(false)
-        return
-      }
-      let data: ApiResult
-      try {
-        data = await resp.json()
       } catch {
-        clearProgressTimer()
-        setProgress(0)
-        const errMsg = 'Server error — response could not be parsed.'
-        setStatusMsg(errMsg)
+        setStatusMsg('Network error — could not reach server.')
         if (resumeState) {
           setPipelineState(resumeState)
-          setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
+          setPipelineError('Network error — could not reach server. Your previous progress is preserved — click Resume to retry.')
         }
         return
       }
-      setJsonOut(JSON.stringify(data, null, 2))
 
-      if (!data.success) {
-        clearProgressTimer()
+      if (startResp.status === 401) {
+        setLoginRequired(true)
+        setStatusMsg('Sign in required to continue.')
+        return
+      }
+
+      let startData: Record<string, any>
+      try {
+        startData = await startResp.json()
+      } catch {
+        setStatusMsg('Server returned an invalid response.')
+        if (resumeState) {
+          setPipelineState(resumeState)
+          setPipelineError('Server returned an invalid response. Your previous progress is preserved — click Resume to retry.')
+        }
+        return
+      }
+
+      const jobId = startData.job_id as string | undefined
+      if (!jobId) {
+        setStatusMsg('Server did not return a job ID.')
+        return
+      }
+
+      // 2. Poll for status
+      let lastPartial: Record<string, any> | null = resumeState
+      let networkFailCount = 0
+      let result: Record<string, any> | null = null
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL))
+
+        let jobData: Record<string, any>
+        try {
+          const r = await fetch(`${API_BASE}/api/jobs/${jobId}`)
+          if (r.status === 404) {
+            const errMsg = 'Server restarted — job was lost.'
+            setStatusMsg(errMsg)
+            setProgress(0)
+            if (lastPartial) {
+              setPipelineState(lastPartial)
+              setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
+            }
+            return
+          }
+          jobData = await r.json()
+          networkFailCount = 0
+        } catch {
+          networkFailCount++
+          if (networkFailCount >= MAX_NETWORK_FAILS) {
+            const errMsg = 'Lost connection to server.'
+            setStatusMsg(errMsg)
+            setProgress(0)
+            if (lastPartial) {
+              setPipelineState(lastPartial)
+              setPipelineError(errMsg + ' Your previous progress is preserved — click Resume to retry.')
+            }
+            return
+          }
+          continue
+        }
+
+        if (jobData.partial_result) lastPartial = jobData.partial_result
+
+        const msg = (jobData.message as string) || 'Processing...'
+        setStatusMsg(msg)
+        setProgress(calcProgress(jobData.phase, jobData.step ?? 0, jobData.total_steps ?? 0, stopAfter))
+
+        if (jobData.status === 'completed' || jobData.status === 'failed') {
+          result = jobData.result as Record<string, any> | null
+          break
+        }
+      }
+
+      // 3. Process result
+      if (!result) {
+        setStatusMsg('No result returned from server.')
         setProgress(0)
-        const errMsg = data.error ? `Error: ${typeof data.error === 'string' ? data.error : 'Generation failed'}` : 'Generation failed'
+        return
+      }
+
+      setJsonOut(JSON.stringify(result, null, 2))
+
+      if (!result.success) {
+        setProgress(0)
+        const errMsg = result.error
+          ? `Error: ${typeof result.error === 'string' ? result.error : 'Generation failed'}`
+          : 'Generation failed'
         setStatusMsg(errMsg)
 
-        const hasPartialState = data.scene_bible || data.keyframe_images || data.transition_videos
-        if (hasPartialState) {
-          const partial: Record<string, any> = {}
-          if (data.scene_bible) partial.scene_bible = data.scene_bible
-          if (data.stages) partial.stages = data.stages
-          if (data.seed) partial.seed = data.seed
-          if (data.keyframe_images) partial.keyframe_images = data.keyframe_images
-          if (data.transition_videos) partial.transition_videos = data.transition_videos
+        const partial = extractPartial(result) || lastPartial
+        if (partial) {
           setPipelineState(partial)
           setPipelineError(errMsg)
         }
         return
       }
 
-      const completed = data.phase_completed as string | undefined
+      const completed = result.phase_completed as string | undefined
       if (completed && completed !== 'done') {
-        const accumulated: Record<string, any> = {}
-        if (data.scene_bible) accumulated.scene_bible = data.scene_bible
-        if (data.stages) accumulated.stages = data.stages
-        if (data.seed) accumulated.seed = data.seed
-        if (data.keyframe_images) accumulated.keyframe_images = data.keyframe_images
-        if (data.transition_videos) accumulated.transition_videos = data.transition_videos
-        setPipelineState(accumulated)
+        const accumulated = extractPartial(result)
+        if (accumulated) setPipelineState(accumulated)
         setPhaseCompleted(completed)
-        endProgress(`Phase complete: ${PHASE_LABELS[completed] || completed}`)
+        setProgress(100)
+        setStatusMsg(`Phase complete: ${PHASE_LABELS[completed] || completed}`)
+        setTimeout(() => { setStatusMsg(''); setProgress(0) }, 1200)
         return
       }
 
-      const raw = data.video_url as string | undefined
+      const raw = result.video_url as string | undefined
       if (raw) {
         const url = /^https?:/i.test(raw) ? raw : `${API_BASE}${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`
         setStatusMsg('Preparing video...')
@@ -601,12 +675,13 @@ export default function App() {
         await preloadWithFallback(url, 15000)
         setVideoUrl(url)
         setPendingUrl(null)
-        endProgress('Ready')
+        setProgress(100)
+        setStatusMsg('Ready')
         setPipelineState(null)
         setPhaseCompleted(null)
+        setTimeout(() => { setStatusMsg(''); setProgress(0) }, 1200)
         ;(async () => { try { await fetchSession() } catch {} })()
       } else {
-        clearProgressTimer()
         setProgress(0)
         setStatusMsg('No video URL returned')
       }

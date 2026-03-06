@@ -514,6 +514,8 @@ def timelapse_options():
 
 @app.post("/api/generate/timelapse")
 async def generate_timelapse(request: Request):
+    from ..utils.job_manager import create_job, update_job, start_job
+
     if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
         raise HTTPException(status_code=401, detail="login_required")
 
@@ -547,13 +549,46 @@ async def generate_timelapse(request: Request):
         freeform_description=(body.get("freeform_description") or "").strip(),
     )
 
-    stop_after = body.get("stop_after")  # "plan" | "images" | "videos" | None
-    resume_state = body.get("resume_state")  # dict with prior phase outputs
+    stop_after = body.get("stop_after")
+    resume_state = body.get("resume_state")
 
-    result = service.generate_timelapse_v2(req, stop_after=stop_after, resume_state=resume_state)
-    if result.get("video_url"):
-        _inc_usage(request)
-    return JSONResponse(result)
+    job_id = create_job()
+
+    def on_progress(phase, step, total, message, partial_result=None):
+        updates = {"phase": phase, "step": step, "total_steps": total, "message": message}
+        if partial_result is not None:
+            updates["partial_result"] = partial_result
+        update_job(job_id, **updates)
+
+    start_job(
+        job_id,
+        service.generate_timelapse_v2,
+        req,
+        stop_after=stop_after,
+        resume_state=resume_state,
+        on_progress=on_progress,
+    )
+
+    return JSONResponse({"job_id": job_id})
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job_status(request: Request, job_id: str):
+    from ..utils.job_manager import get_job, update_job
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.get("status") == "completed" and not job.get("usage_counted"):
+        result = job.get("result") or {}
+        if result.get("video_url"):
+            _inc_usage(request)
+            update_job(job_id, usage_counted=True)
+
+    job.pop("created_at", None)
+    job.pop("usage_counted", None)
+    return JSONResponse(job)
 
 
 # --- Ads ---
