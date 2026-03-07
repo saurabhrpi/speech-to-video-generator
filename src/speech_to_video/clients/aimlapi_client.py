@@ -145,7 +145,7 @@ class AIMLAPIClient:
             backoff *= 2.0
         return last or {"error": "No response", "_status_code": 0}
 
-    def poll_until_complete(self, job_id: str, max_wait: int = 300, interval: int = 5, status_path: Optional[str] = None) -> Dict[str, Any]:
+    def poll_until_complete(self, job_id: str, max_wait: int = 600, interval: int = 5, status_path: Optional[str] = None) -> Dict[str, Any]:
         import time
 
         env_max = int(os.getenv("AIMLAPI_MAX_WAIT_SECONDS", str(max_wait)))
