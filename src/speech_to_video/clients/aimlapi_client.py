@@ -250,7 +250,7 @@ class AIMLAPIClient:
         model: Optional[str] = None,
         last_image_url: Optional[str] = None,
         duration: Optional[int] = None,
-        max_wait: int = 300,
+        max_wait: int = 600,
     ) -> Dict[str, Any]:
         """
         High-level: submit Kling image-to-video job, poll until done, return video URL.
