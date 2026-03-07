@@ -495,7 +495,13 @@ export default function App() {
     return null
   }
 
-  const POLL_INTERVAL = 3000
+  const POLL_INTERVALS: Record<string, number> = {
+    plan: 2000,
+    images: 3000,
+    videos: 5000,
+    stitch: 30000,
+  }
+  const DEFAULT_POLL_INTERVAL = 3000
   const MAX_NETWORK_FAILS = 10
 
   function calcProgress(phase: string | null, step: number, total: number, stopAfter: string | null): number {
@@ -581,14 +587,16 @@ export default function App() {
         return
       }
 
-      // 2. Poll for status
+      // 2. Poll for status — adaptive interval per phase
       let lastPartial: Record<string, any> | null = resumeState
       let networkFailCount = 0
       let result: Record<string, any> | null = null
+      let currentPhase: string | null = null
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        await new Promise(r => setTimeout(r, POLL_INTERVAL))
+        const interval = POLL_INTERVALS[currentPhase ?? ''] ?? DEFAULT_POLL_INTERVAL
+        await new Promise(r => setTimeout(r, interval))
 
         let jobData: Record<string, any>
         try {
@@ -621,6 +629,7 @@ export default function App() {
         }
 
         if (jobData.partial_result) lastPartial = jobData.partial_result
+        currentPhase = (jobData.phase as string) || currentPhase
 
         const msg = (jobData.message as string) || 'Processing...'
         setStatusMsg(msg)
