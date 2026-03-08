@@ -46,12 +46,43 @@ def _save(items: List[Dict], namespace: Optional[str] = None) -> None:
         json.dump(items, f, ensure_ascii=False, indent=2)
 
 
-def add_clip(url: str, note: Optional[str] = None, namespace: Optional[str] = None) -> Dict:
+def add_clip(url: str, note: Optional[str] = None, namespace: Optional[str] = None, json_response: Optional[str] = None) -> Dict:
     items = _load(namespace)
-    entry = {"url": url, "note": (note or "").strip(), "ts": int(time.time())}
+    ts = int(time.time())
+    entry = {"url": url, "note": (note or "").strip(), "ts": ts, "has_response": bool(json_response)}
     items.append(entry)
     _save(items, namespace)
+    if json_response:
+        _save_response(ts, json_response, namespace)
     return entry
+
+
+def _response_dir(namespace: Optional[str] = None) -> str:
+    base = _base_dir()
+    if namespace:
+        ns = _sanitize_segment(namespace)
+        d = os.path.join(base, ns, "responses")
+    else:
+        d = os.path.join(base, "responses")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _save_response(ts: int, json_response: str, namespace: Optional[str] = None) -> str:
+    d = _response_dir(namespace)
+    path = os.path.join(d, f"{ts}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json_response)
+    return path
+
+
+def get_response(ts: int, namespace: Optional[str] = None) -> Optional[str]:
+    d = _response_dir(namespace)
+    path = os.path.join(d, f"{ts}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 def list_clips(namespace: Optional[str] = None) -> List[Dict]:

@@ -1,9 +1,14 @@
-from typing import Dict, List, Optional
+import logging
+from typing import Callable, Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
+from ..models.timelapse import TimelapseRequest, compose_timelapse_prompt
 from ..utils.config import Settings, get_settings
 from ..utils.video import stitch_videos
+
+
+logger = logging.getLogger(__name__)
 
 
 class VideoService:
@@ -112,6 +117,336 @@ class VideoService:
             "total_duration": total_duration,
         }
 
+    def generate_timelapse(self, request: TimelapseRequest) -> Dict:
+        """
+        Generate an interior design timelapse video from structured input.
+        Composes a rich prompt, then routes to single or multi-phase generation.
+        """
+        import os
+        import random
+        from ..utils.video import stitch_videos_seamless
+
+        composed_prompt = compose_timelapse_prompt(request)
+        seed = random.randint(1, 2**31 - 1)
+
+        model = os.getenv("TIMELAPSE_MODEL", "openai/sora-2-t2v")
+        endpoint_path = os.getenv("TIMELAPSE_ENDPOINT_PATH", "/video/generations")
+        status_path = os.getenv("TIMELAPSE_STATUS_PATH", "/video/generations")
+
+        if request.duration <= 12:
+            result = self._single_generation(
+                composed_prompt,
+                request.duration,
+                "high",
+                seed=seed,
+                model=model,
+                aspect_ratio="16:9",
+                endpoint_path=endpoint_path,
+                status_path=status_path,
+                resolution=self.settings.default_resolution_medium,
+            )
+            if result.get("success"):
+                result["composed_prompt"] = composed_prompt
+                result["seed"] = seed
+            return result
+
+        # Multi-phase: use construction-progression scene splitter
+        scenes = self.openai_client.create_timelapse_progression(
+            composed_prompt, request.duration
+        )
+
+        seg_urls: List[str] = []
+        for idx, scene in enumerate(scenes):
+            scene_prompt = scene.get("prompt", composed_prompt)
+            scene_duration = int(scene.get("duration", 10))
+            r = self._single_generation(
+                scene_prompt,
+                scene_duration,
+                "high",
+                seed=seed,
+                model=model,
+                aspect_ratio="16:9",
+                endpoint_path=endpoint_path,
+                status_path=status_path,
+                resolution=self.settings.default_resolution_medium,
+            )
+            if not r.get("success"):
+                r["_failed_phase"] = idx + 1
+                r["_generated_phases"] = seg_urls
+                r["composed_prompt"] = composed_prompt
+                return r
+            if r.get("video_url"):
+                seg_urls.append(r["video_url"])
+
+        stitched = stitch_videos_seamless(seg_urls)
+        if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
+            return {
+                "success": True,
+                "video_url": f"/api/stitched/{filename}",
+                "segments": seg_urls,
+                "duration": request.duration,
+                "seed": seed,
+                "composed_prompt": composed_prompt,
+            }
+        return {"success": False, "error": stitched, "composed_prompt": composed_prompt}
+
+    def generate_timelapse_v2(
+        self,
+        request: TimelapseRequest,
+        stop_after: Optional[str] = None,
+        resume_state: Optional[Dict] = None,
+        on_progress: Optional[Callable] = None,
+    ) -> Dict:
+        """
+        Iterative timelapse pipeline: GPT plans each stage after seeing the
+        previous image, with per-stage pause points.
+
+        stop_after: "plan" | "stage_1" | "stage_2" | ... | "stage_N" | "videos" | None
+        resume_state: dict with previously computed partial outputs
+        on_progress: callback(phase, step, total, message, partial_result=None)
+        """
+        import random
+        import time as _t
+        from ..utils.video import stitch_timelapse_clips
+
+        NUM_STAGES = 7
+
+        def _notify(phase: str, step: int, total: int, message: str, partial_result: Optional[Dict] = None):
+            if on_progress:
+                on_progress(phase=phase, step=step, total=total, message=message, partial_result=partial_result)
+
+        if not self.settings.aimlapi_api_key:
+            return {"success": False, "error": "AIMLAPI key not configured. Set AIMLAPI_API_KEY in .env"}
+
+        resume = resume_state or {}
+        seed = resume.get("seed", random.randint(1, 2**31 - 1))
+
+        def _state_snapshot():
+            return {
+                "scene_bible": scene_bible,
+                "stages": list(stages),
+                "seed": seed,
+                "keyframe_images": list(keyframe_images),
+                "transition_videos": list(transition_videos),
+            }
+
+        # --- Phase 1: Scene Bible + Stage 1 description ---
+        scene_bible = resume.get("scene_bible", "")
+        stages: List[Dict] = list(resume.get("stages") or [])
+        keyframe_images: List[Dict] = list(resume.get("keyframe_images") or [])
+        transition_videos: List[str] = list(resume.get("transition_videos") or [])
+
+        if not scene_bible:
+            _notify("plan", 0, 1, "Generating scene bible + stage 1 description...")
+            plan = self.openai_client.generate_scene_bible_only(
+                room_type=request.room_type,
+                style=request.style,
+                features=request.features,
+                materials=request.materials,
+                lighting=request.lighting,
+                camera_motion=request.camera_motion,
+                progression=request.progression,
+                freeform=request.freeform_description,
+            )
+            scene_bible = plan["scene_bible"]
+            stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": "", "transition_prompt": ""}]
+            _notify("plan", 1, 1, "Plan complete", partial_result=_state_snapshot())
+        else:
+            _notify("plan", 1, 1, f"Using existing plan ({len(stages)} stages)")
+
+        if stop_after == "plan":
+            return {
+                "success": True, "phase_completed": "plan", "pipeline": "v2",
+                **_state_snapshot(),
+            }
+
+        # --- Iterative stages: generate image, then plan next stage ---
+        completed_stages = len(keyframe_images)
+
+        for stage_idx in range(completed_stages, NUM_STAGES):
+            stage_num = stage_idx + 1
+            phase_name = f"stage_{stage_num}"
+
+            if stage_idx == 0:
+                # Stage 1: text-to-image from description
+                stage_desc = stages[0]["description"]
+                prompt = (
+                    f"SAME ROOM, SAME CAMERA, EXACT SAME LAYOUT. {scene_bible} "
+                    f"Current state of this room: {stage_desc}"
+                )
+                _notify(phase_name, 0, 2, f"Stage {stage_num}: generating initial image...")
+                logger.info("[Timelapse] Stage %d: T2I via Nano Banana Pro", stage_num)
+                img_result = self.aiml_client.generate_image(
+                    prompt=prompt, aspect_ratio="16:9", resolution="1K",
+                )
+            else:
+                # Stages 2+: GPT sees previous image → edit delta → image edit
+                if stage_idx >= len(stages):
+                    prev_img = keyframe_images[-1]
+                    prev_desc = stages[-1].get("description", "") or stages[-1].get("edit_delta", "")
+                    is_cleanup = (stage_num == 2)
+
+                    _notify(phase_name, 0, 2, f"Stage {stage_num}: GPT planning next edit...")
+                    logger.info("[Timelapse] Stage %d: GPT vision planning (cleanup=%s)", stage_num, is_cleanup)
+
+                    gpt_result = self.openai_client.generate_next_stage(
+                        scene_bible=scene_bible,
+                        prev_description=prev_desc,
+                        prev_image_url=prev_img["image_url"],
+                        stage_num=stage_num,
+                        total_stages=NUM_STAGES,
+                        is_cleanup_stage=is_cleanup,
+                    )
+                    stages.append({
+                        "stage": stage_num,
+                        "description": gpt_result["edit_delta"],
+                        "edit_delta": gpt_result["edit_delta"],
+                        "transition_prompt": gpt_result["transition_prompt"],
+                    })
+
+                edit_delta = stages[stage_idx]["edit_delta"]
+                prev_image_url = keyframe_images[-1]["image_url"]
+
+                prompt = (
+                    f"In this image, make the following changes: {edit_delta} "
+                    f"Keep everything else in the image exactly the same."
+                )
+                _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
+                logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
+                img_result = self.aiml_client.generate_image(
+                    prompt=prompt, image_urls=[prev_image_url],
+                    aspect_ratio="16:9", resolution="1K",
+                )
+
+            if not img_result.get("success"):
+                return {
+                    "success": False,
+                    "error": f"Image generation failed at stage {stage_num}",
+                    "image_error": img_result.get("error"),
+                    **_state_snapshot(),
+                }
+
+            images = img_result.get("images", [])
+            if not images:
+                return {
+                    "success": False,
+                    "error": f"No image URL returned for stage {stage_num}",
+                    "raw": img_result,
+                    **_state_snapshot(),
+                }
+
+            image_url = images[0]
+            keyframe_images.append({
+                "stage": stage_num,
+                "image_url": image_url,
+                "description": stages[stage_idx].get("description", ""),
+            })
+            _notify(phase_name, 2, 2, f"Stage {stage_num} complete", partial_result=_state_snapshot())
+
+            if stop_after == phase_name:
+                return {
+                    "success": True, "phase_completed": phase_name, "pipeline": "v2",
+                    **_state_snapshot(),
+                }
+
+        # --- Video transitions via Seedance (or configured I2V model) ---
+        total_transitions = len(keyframe_images) - 1
+        start_idx = len(transition_videos)
+
+        if start_idx >= total_transitions:
+            _notify("videos", total_transitions, total_transitions, "All transitions already done")
+        elif start_idx > 0:
+            logger.info("[Timelapse] Resuming transitions from %d (%d of %d done)",
+                        start_idx + 1, start_idx, total_transitions)
+
+        if start_idx < total_transitions:
+            camera = request.camera_motion.lower() if request.camera_motion else "static"
+            camera_cues = {
+                "static": "Static locked-off camera, no camera movement.",
+                "slow_pan": "Slow cinematic horizontal pan.",
+                "dolly": "Gentle dolly push-in toward the subject.",
+                "orbit": "Slow orbit around the scene center.",
+                "crane_up": "Smooth crane rise upward revealing the space.",
+            }
+            camera_instruction = camera_cues.get(camera, camera_cues["static"])
+            i2v_model = self.settings.i2v_model
+            i2v_resolution = self.settings.i2v_resolution
+
+            for i in range(start_idx, total_transitions):
+                from_kf = keyframe_images[i]
+                to_kf = keyframe_images[i + 1]
+                _notify("videos", i, total_transitions,
+                        f"Generating transition {i + 1} of {total_transitions}")
+
+                transition_prompt = stages[i].get("transition_prompt", "")
+                if not transition_prompt:
+                    transition_prompt = "Smooth renovation transformation, surfaces and materials evolving."
+
+                motion_prompt = (
+                    f"Timelapse transition: {transition_prompt} "
+                    f"{camera_instruction} "
+                    "Smooth continuous transformation preserving room geometry."
+                )
+
+                logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
+                t0 = _t.time()
+                i2v_result = self.aiml_client.generate_and_poll_i2v(
+                    image_url=from_kf["image_url"],
+                    last_image_url=to_kf["image_url"],
+                    prompt=motion_prompt,
+                    model=i2v_model,
+                    resolution=i2v_resolution,
+                    duration=5,
+                )
+                elapsed_s = int(_t.time() - t0)
+
+                if not i2v_result.get("success"):
+                    logger.error("[Timelapse] Transition %d->%d FAILED after %ds: %s",
+                                 i + 1, i + 2, elapsed_s, i2v_result.get("error"))
+                    return {
+                        "success": False,
+                        "error": f"Transition video failed between stage {i + 1} and {i + 2}",
+                        "video_error": i2v_result.get("error"),
+                        **_state_snapshot(),
+                    }
+
+                video_url = i2v_result.get("video_url")
+                if video_url:
+                    transition_videos.append(video_url)
+                    logger.info("[Timelapse] Transition %d->%d completed in %ds: %s",
+                                i + 1, i + 2, elapsed_s, video_url)
+                    _notify("videos", i + 1, total_transitions,
+                            f"Transition {i + 1} of {total_transitions} complete",
+                            partial_result=_state_snapshot())
+
+        if not transition_videos:
+            return {"success": False, "error": "No transition videos were generated", **_state_snapshot()}
+
+        if stop_after == "videos":
+            return {
+                "success": True, "phase_completed": "videos", "pipeline": "v2",
+                **_state_snapshot(),
+            }
+
+        # --- Stitch with 1.5x speed ---
+        _notify("stitch", 0, 1, "Stitching videos...")
+        stitched = stitch_timelapse_clips(
+            video_sources=transition_videos, speed=1.5, dissolve=False,
+            hold_first_frame=2.0,
+        )
+
+        if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
+            _notify("stitch", 1, 1, "Done")
+            return {
+                "success": True, "phase_completed": "done",
+                "video_url": f"/api/stitched/{filename}",
+                "pipeline": "v2",
+                **_state_snapshot(),
+            }
+        return {"success": False, "error": stitched.get("error", "Stitching failed"), **_state_snapshot()}
+
     def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
         """
         Generate a seamless 16-second video by creating two 8-second clips with continuity.
@@ -183,9 +518,10 @@ class VideoService:
         # Stitch seamlessly (no visual crossfade, only subtle audio transitions)
         stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
+            filename = stitched.get("filename", "stitched_output.mp4")
             return {
                 "success": True,
-                "video_url": "/api/stitched",
+                "video_url": f"/api/stitched/{filename}",
                 "segments": seg_urls,
                 "duration": 16,
                 "seed": seed,
@@ -261,7 +597,8 @@ class VideoService:
                 seg_urls.append(r["video_url"])
         stitched = stitch_videos_seamless(seg_urls)
         if stitched.get("success"):
-            return {"success": True, "video_url": "/api/stitched", "segments": seg_urls}
+            filename = stitched.get("filename", "stitched_output.mp4")
+            return {"success": True, "video_url": f"/api/stitched/{filename}", "segments": seg_urls}
         return {"success": False, "error": stitched}
 
     def _superbowl_prompt(self, user_prompt: str) -> str:
