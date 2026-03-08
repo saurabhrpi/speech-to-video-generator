@@ -431,7 +431,10 @@ class VideoService:
 
         # --- Stitch with 1.5x speed ---
         _notify("stitch", 0, 1, "Stitching videos...")
-        stitched = stitch_timelapse_clips(video_sources=transition_videos, speed=1.5, dissolve=False)
+        stitched = stitch_timelapse_clips(
+            video_sources=transition_videos, speed=1.5, dissolve=False,
+            hold_first_frame=2.0,
+        )
 
         if stitched.get("success"):
             filename = stitched.get("filename", "stitched_output.mp4")

@@ -331,10 +331,12 @@ def stitch_timelapse_clips(
     speed: float = 1.5,
     dissolve: bool = False,
     dissolve_duration: float = 0.3,
+    hold_first_frame: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Stitch timelapse transition clips with speed adjustment and optional dissolve.
     Accepts URLs or local file paths.
+    hold_first_frame: seconds to hold the first frame as a still before the transitions.
     """
     result: Dict[str, Any] = {
         "success": False,
@@ -381,6 +383,12 @@ def stitch_timelapse_clips(
             clips = [c.with_speed_scaled(speed) for c in raw_clips]
         else:
             clips = list(raw_clips)
+
+        if hold_first_frame > 0 and clips:
+            from moviepy import ImageClip
+            first_frame = clips[0].get_frame(0)
+            still = ImageClip(first_frame).with_duration(hold_first_frame).with_fps(clips[0].fps or 30)
+            clips = [still] + clips
 
         if dissolve and len(clips) >= 2:
             mod: List = []
