@@ -195,28 +195,34 @@ class AIMLAPIClient:
         model: Optional[str] = None,
         last_image_url: Optional[str] = None,
         duration: Optional[int] = None,
+        resolution: Optional[str] = None,
+        camera_fixed: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
-        Generate a video from an image (and optionally a last-frame image) using
-        Kling's image-to-video model. Uses the v2 /video/generations endpoint.
+        Generate a video from an image (and optionally a last-frame image).
+        Supports Kling, Seedance, and other AIMLAPI I2V models.
         """
         import time
 
         base = self.settings.aimlapi_base_url.rstrip("/").replace("/v2", "")
         url = f"{base}/v2/video/generations"
-        resolved_model = model or self.settings.kling_i2v_model
+        resolved_model = model or self.settings.i2v_model
         body: Dict[str, Any] = {
             "model": resolved_model,
             "prompt": prompt,
             "image_url": image_url,
         }
         if last_image_url:
-            if "video-o1" in resolved_model:
-                body["last_image_url"] = last_image_url
-            else:
-                body["tail_image_url"] = last_image_url
+            body["last_image_url"] = last_image_url
         if duration:
             body["duration"] = int(duration)
+        if resolution:
+            body["resolution"] = resolution
+        is_seedance = "seedance" in resolved_model.lower()
+        if is_seedance:
+            body["watermark"] = False
+            if camera_fixed is not None:
+                body["camerafixed"] = camera_fixed
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
@@ -251,13 +257,16 @@ class AIMLAPIClient:
         last_image_url: Optional[str] = None,
         duration: Optional[int] = None,
         max_wait: int = 600,
+        resolution: Optional[str] = None,
+        camera_fixed: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
-        High-level: submit Kling image-to-video job, poll until done, return video URL.
+        High-level: submit I2V job (Kling, Seedance, etc.), poll until done, return video URL.
         """
         data = self.generate_image_to_video(
             image_url, prompt, model=model,
             last_image_url=last_image_url, duration=duration,
+            resolution=resolution, camera_fixed=camera_fixed,
         )
         status_code = int(data.get("_status_code", 0))
         if not (200 <= status_code < 300):

@@ -472,11 +472,13 @@ export default function App() {
     setRecordingStream(null)
   }
 
-  const PHASE_ORDER = ['plan', 'images', 'videos'] as const
+  const NUM_STAGES = 7
+  const STAGE_PHASES = Array.from({ length: NUM_STAGES }, (_, i) => `stage_${i + 1}`)
+  const PHASE_ORDER = ['plan', ...STAGE_PHASES, 'videos'] as const
   const PHASE_LABELS: Record<string, string> = {
-    plan: 'Planning (GPT)',
-    images: 'Image Generation',
-    videos: 'Video Transitions (Kling)',
+    plan: 'Scene Bible + Stage 1 Plan',
+    ...Object.fromEntries(STAGE_PHASES.map((p, i) => [p, `Stage ${i + 1} Image`])),
+    videos: 'Video Transitions (Seedance)',
     stitch: 'Stitching',
     done: 'Stitching',
   }
@@ -490,14 +492,15 @@ export default function App() {
 
   function detectLastCompletedPhase(state: Record<string, any>): string | null {
     if (state.transition_videos?.length) return 'videos'
-    if (state.keyframe_images?.length) return 'images'
+    const nImages = state.keyframe_images?.length ?? 0
+    if (nImages > 0) return `stage_${nImages}`
     if (state.scene_bible) return 'plan'
     return null
   }
 
   const POLL_INTERVALS: Record<string, number> = {
     plan: 2000,
-    images: 3000,
+    stage: 3000,
     videos: 5000,
     stitch: 30000,
   }
@@ -508,8 +511,15 @@ export default function App() {
     if (!phase || total <= 0) return 0
     const phaseRatio = step / total
     if (stopAfter) return Math.min(phaseRatio * 100, 99.5)
+    const stageMatch = phase.match(/^stage_(\d+)$/)
+    if (stageMatch) {
+      const stageNum = parseInt(stageMatch[1], 10)
+      const stageStart = 3 + ((stageNum - 1) / NUM_STAGES) * 47
+      const stageEnd = 3 + (stageNum / NUM_STAGES) * 47
+      return Math.min(stageStart + (stageEnd - stageStart) * phaseRatio, 99.5)
+    }
     const ranges: Record<string, [number, number]> = {
-      plan: [0, 5], images: [5, 40], videos: [40, 95], stitch: [95, 100],
+      plan: [0, 3], videos: [50, 95], stitch: [95, 100],
     }
     const range = ranges[phase]
     if (!range) return 0
@@ -595,7 +605,8 @@ export default function App() {
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const interval = POLL_INTERVALS[currentPhase ?? ''] ?? DEFAULT_POLL_INTERVAL
+        const phaseKey = currentPhase?.startsWith('stage_') ? 'stage' : (currentPhase ?? '')
+        const interval = POLL_INTERVALS[phaseKey] ?? DEFAULT_POLL_INTERVAL
         await new Promise(r => setTimeout(r, interval))
 
         let jobData: Record<string, any>
@@ -829,15 +840,15 @@ export default function App() {
               <h3 className="text-sm font-semibold">
                 Phase complete: {PHASE_LABELS[phaseCompleted] || phaseCompleted}
               </h3>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {PHASE_ORDER.map((p, i) => (
                   <div
                     key={p}
-                    className={`h-2 w-8 rounded-full ${
+                    className={`h-2 rounded-full ${
                       PHASE_ORDER.indexOf(phaseCompleted as any) >= i
                         ? 'bg-primary'
                         : 'bg-muted'
-                    }`}
+                    } ${p.startsWith('stage_') ? 'w-4' : 'w-6'}`}
                     title={PHASE_LABELS[p]}
                   />
                 ))}
@@ -851,32 +862,16 @@ export default function App() {
                   <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.scene_bible}</p>
                 </div>
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Stages ({pipelineState.stages.length})
-                  </span>
-                  <div className="mt-1 space-y-1.5">
-                    {pipelineState.stages.map((s: any, i: number) => (
-                      <div key={i} className="rounded bg-muted p-2">
-                        <div className="text-xs font-medium">
-                          {i === 0 ? 'Stage 1 — Full Description' : `Stage ${i + 1} — Edit`}
-                        </div>
-                        <div className="text-sm">{s.description}</div>
-                        {s.transition_prompt && (
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            Transition: {s.transition_prompt}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stage 1 Description</span>
+                  <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.stages[0]?.description}</p>
                 </div>
               </div>
             )}
 
-            {phaseCompleted === 'images' && pipelineState.keyframe_images && (
+            {phaseCompleted?.startsWith('stage_') && pipelineState.keyframe_images && (
               <div className="space-y-3">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Keyframe Images ({pipelineState.keyframe_images.length})
+                  Keyframe Images ({pipelineState.keyframe_images.length} of {NUM_STAGES})
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {pipelineState.keyframe_images.map((kf: any, i: number) => (
@@ -892,6 +887,24 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+                {pipelineState.stages && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stage Descriptions</span>
+                    {pipelineState.stages.map((s: any, i: number) => (
+                      <div key={i} className="rounded bg-muted p-2">
+                        <div className="text-xs font-medium">
+                          {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — ${i === 1 ? 'Cleanup' : 'Edit'}`}
+                        </div>
+                        <div className="text-sm">{s.description || s.edit_delta}</div>
+                        {s.transition_prompt && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Transition: {s.transition_prompt}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

@@ -315,6 +315,152 @@ class OpenAIClient:
 
         return scenes
 
+    def generate_scene_bible_only(
+        self,
+        room_type: str,
+        style: str,
+        features: List[str],
+        materials: List[str],
+        lighting: str,
+        camera_motion: str,
+        progression: str,
+        freeform: str = "",
+    ) -> Dict[str, str]:
+        features_str = ", ".join(features) if features else "standard fixtures"
+        materials_str = ", ".join(materials) if materials else "appropriate materials"
+        freeform_clause = f"\nAdditional direction: {freeform}" if freeform.strip() else ""
+
+        response = self.client.chat.completions.create(
+            model=self.settings.openai_chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert architectural visualization director.\n\n"
+                        "Produce TWO things for a room renovation timelapse:\n\n"
+                        "1. SCENE BIBLE (MAX 300 chars): Camera position/lens, room shape & "
+                        "dimensions, architectural bones (walls, ceiling, floor, windows, doors), "
+                        "perspective, light direction, render style. Terse comma-separated shorthand.\n\n"
+                        "2. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
+                        "room BEFORE any renovation. Describe surfaces, damage, clutter, exposed "
+                        "wiring, stains — everything the camera sees. Be specific and visual.\n\n"
+                        "NEVER mention people, crews, workers, hands, or tools.\n\n"
+                        "Respond in EXACTLY this format:\n"
+                        "SCENE_BIBLE: [text]\n"
+                        "STAGE_1: [text]"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Room: {room_type}\nStyle goal: {style}\n"
+                        f"Features: {features_str}\nMaterials: {materials_str}\n"
+                        f"Lighting: {lighting}\nCamera: {camera_motion}\n"
+                        f"Progression: {progression}{freeform_clause}"
+                    ),
+                },
+            ],
+            temperature=0.7,
+        )
+
+        content = response.choices[0].message.content or ""
+        scene_bible = ""
+        stage_1_desc = ""
+        for line in content.split("\n"):
+            line = line.strip()
+            upper = line.upper()
+            if upper.startswith("SCENE_BIBLE:"):
+                scene_bible = line[len("SCENE_BIBLE:"):].strip()
+            elif upper.startswith("STAGE_1:"):
+                stage_1_desc = line[len("STAGE_1:"):].strip()
+
+        if not scene_bible:
+            scene_bible = (
+                f"Ultra photorealistic {style} {room_type}, locked camera, 24mm lens, "
+                f"eye-level centered, {lighting} lighting, arch-viz."
+            )
+        if not stage_1_desc:
+            stage_1_desc = f"Dilapidated {room_type}, bare walls, exposed wiring, damaged surfaces."
+
+        return {"scene_bible": scene_bible, "stage_1_description": stage_1_desc}
+
+    def generate_next_stage(
+        self,
+        scene_bible: str,
+        prev_description: str,
+        prev_image_url: str,
+        stage_num: int,
+        total_stages: int,
+        is_cleanup_stage: bool = False,
+    ) -> Dict[str, str]:
+        if is_cleanup_stage:
+            task_focus = (
+                "Focus on DEMOLITION and CLEANUP: remove debris, rip out damaged fixtures, "
+                "strip peeling paint, remove exposed wiring, clear clutter. "
+                "This stage is about REMOVAL, not adding anything new."
+            )
+        else:
+            task_focus = (
+                "Focus on RENOVATION and BEAUTIFICATION: install new surfaces, fixtures, "
+                "furnishings, or finishes. Be specific about what changes."
+            )
+
+        response = self.client.chat.completions.create(
+            model=self.settings.openai_chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an architectural renovation director. You will see an image of a room "
+                        "and its text description. Plan the NEXT renovation step.\n\n"
+                        f"This is stage {stage_num} of {total_stages}. {task_focus}\n\n"
+                        f"Scene constants: {scene_bible}\n\n"
+                        "Produce TWO things:\n"
+                        "1. EDIT (MAX 200 chars): Specific changes to make to THIS image. "
+                        "Name exact elements to add, remove, or modify. Keep it simple and concrete.\n"
+                        "2. TRANSITION (MAX 100 chars): How the scene visually morphs from the "
+                        "previous state to this new state. Focus on material/surface changes.\n\n"
+                        "NEVER mention people, workers, hands, or tools.\n\n"
+                        "Respond EXACTLY:\n"
+                        "EDIT: [text]\n"
+                        "TRANSITION: [text]"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Previous stage description: {prev_description}",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": prev_image_url},
+                        },
+                    ],
+                },
+            ],
+            temperature=0.7,
+        )
+
+        content = response.choices[0].message.content or ""
+        edit_delta = ""
+        transition_prompt = ""
+        for line in content.split("\n"):
+            line = line.strip()
+            upper = line.upper()
+            if upper.startswith("EDIT:"):
+                edit_delta = line[len("EDIT:"):].strip()
+            elif upper.startswith("TRANSITION:"):
+                transition_prompt = line[len("TRANSITION:"):].strip()
+
+        if not edit_delta:
+            edit_delta = "Continue renovation — improve surfaces and fixtures."
+        if not transition_prompt:
+            transition_prompt = "Smooth transformation of surfaces and materials."
+
+        return {"edit_delta": edit_delta, "transition_prompt": transition_prompt}
+
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
         """
         Use GPT to intelligently split a prompt into two parts for seamless 2-clip video generation.

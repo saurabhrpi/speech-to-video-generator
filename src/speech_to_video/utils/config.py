@@ -34,6 +34,9 @@ class Settings:
     dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
     dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
     kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
+    seedance_i2v_model: str = os.environ.get("SEEDANCE_I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
+    i2v_model: str = os.environ.get("I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
+    i2v_resolution: str = os.environ.get("I2V_RESOLUTION", "720p")
     nano_banana_t2i_model: str = os.environ.get("NANO_BANANA_T2I_MODEL", "google/nano-banana-pro")
     nano_banana_edit_model: str = os.environ.get("NANO_BANANA_EDIT_MODEL", "google/nano-banana-pro-edit")
 
