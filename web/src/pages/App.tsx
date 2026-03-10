@@ -531,6 +531,9 @@ export default function App() {
     if (!data.scene_bible && !data.keyframe_images && !data.transition_videos) return null
     const p: Record<string, any> = {}
     if (data.scene_bible) p.scene_bible = data.scene_bible
+    if (data.crew) p.crew = data.crew
+    if (data.elements) p.elements = data.elements
+    if (data.renovated_elements) p.renovated_elements = data.renovated_elements
     if (data.stages) p.stages = data.stages
     if (data.seed) p.seed = data.seed
     if (data.keyframe_images) p.keyframe_images = data.keyframe_images
@@ -861,6 +864,26 @@ export default function App() {
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Scene Bible</span>
                   <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.scene_bible}</p>
                 </div>
+                {pipelineState.crew && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Crew (3 Workers)</span>
+                    <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.crew}</p>
+                  </div>
+                )}
+                {pipelineState.elements?.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Elements to Renovate ({pipelineState.elements.length})
+                    </span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {pipelineState.elements.map((e: string, i: number) => (
+                        <span key={i} className="inline-block rounded-full bg-muted px-2.5 py-0.5 text-xs">
+                          {e}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stage 1 Description</span>
                   <p className="mt-1 text-sm bg-muted rounded p-2">{pipelineState.stages[0]?.description}</p>
@@ -870,6 +893,23 @@ export default function App() {
 
             {phaseCompleted?.startsWith('stage_') && pipelineState.keyframe_images && (
               <div className="space-y-3">
+                {pipelineState.elements?.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Renovation Progress
+                    </span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {pipelineState.elements.map((e: string, i: number) => {
+                        const done = (pipelineState.renovated_elements || []).includes(e)
+                        return (
+                          <span key={i} className={`inline-block rounded-full px-2.5 py-0.5 text-xs ${done ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                            {done ? '✓ ' : ''}{e}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Keyframe Images ({pipelineState.keyframe_images.length} of {NUM_STAGES})
                 </span>
@@ -894,6 +934,9 @@ export default function App() {
                       <div key={i} className="rounded bg-muted p-2">
                         <div className="text-xs font-medium">
                           {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — ${i === 1 ? 'Cleanup' : 'Edit'}`}
+                          {s.renovated_element?.length > 0 && (
+                            <span className="ml-1.5 text-primary">({s.renovated_element.join(', ')})</span>
+                          )}
                         </div>
                         <div className="text-sm">{s.description || s.edit_delta}</div>
                         {s.transition_prompt && (

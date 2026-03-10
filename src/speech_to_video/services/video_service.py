@@ -225,20 +225,26 @@ class VideoService:
         def _state_snapshot():
             return {
                 "scene_bible": scene_bible,
+                "crew": crew,
+                "elements": list(all_elements),
+                "renovated_elements": list(renovated_elements),
                 "stages": list(stages),
                 "seed": seed,
                 "keyframe_images": list(keyframe_images),
                 "transition_videos": list(transition_videos),
             }
 
-        # --- Phase 1: Scene Bible + Stage 1 description ---
+        # --- Phase 1: Scene Bible + Crew + Elements + Stage 1 description ---
         scene_bible = resume.get("scene_bible", "")
+        crew = resume.get("crew", "")
+        all_elements: List[str] = list(resume.get("elements") or [])
+        renovated_elements: List[str] = list(resume.get("renovated_elements") or [])
         stages: List[Dict] = list(resume.get("stages") or [])
         keyframe_images: List[Dict] = list(resume.get("keyframe_images") or [])
         transition_videos: List[str] = list(resume.get("transition_videos") or [])
 
         if not scene_bible:
-            _notify("plan", 0, 1, "Generating scene bible + stage 1 description...")
+            _notify("plan", 0, 1, "Generating scene bible, crew, elements + stage 1 description...")
             plan = self.openai_client.generate_scene_bible_only(
                 room_type=request.room_type,
                 style=request.style,
@@ -250,7 +256,12 @@ class VideoService:
                 freeform=request.freeform_description,
             )
             scene_bible = plan["scene_bible"]
+            crew = plan["crew"]
+            all_elements = plan["elements"]
             stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": "", "transition_prompt": ""}]
+            logger.info("[Timelapse] Scene bible: %s", scene_bible)
+            logger.info("[Timelapse] Crew: %s", crew)
+            logger.info("[Timelapse] Elements to renovate: %s", all_elements)
             _notify("plan", 1, 1, "Plan complete", partial_result=_state_snapshot())
         else:
             _notify("plan", 1, 1, f"Using existing plan ({len(stages)} stages)")
@@ -264,16 +275,34 @@ class VideoService:
         # --- Iterative stages: generate image, then plan next stage ---
         completed_stages = len(keyframe_images)
 
+        # Build cumulative room state from completed stages using material summaries
+        element_material: Dict[str, str] = {}
+        for s in stages:
+            mat = s.get("material", "")
+            if mat:
+                for elem in (s.get("renovated_element") or []):
+                    element_material[elem.lower().strip()] = mat
+
+        def _build_room_state() -> str:
+            parts = []
+            for elem in all_elements:
+                key = elem.lower().strip()
+                if key in element_material:
+                    parts.append(f"{elem} = {element_material[key]}")
+                else:
+                    parts.append(f"{elem} = original / not yet renovated")
+            return "; ".join(parts) if parts else "all elements in original state"
+
         for stage_idx in range(completed_stages, NUM_STAGES):
             stage_num = stage_idx + 1
             phase_name = f"stage_{stage_num}"
 
             if stage_idx == 0:
-                # Stage 1: text-to-image from description
                 stage_desc = stages[0]["description"]
                 prompt = (
                     f"SAME ROOM, SAME CAMERA, EXACT SAME LAYOUT. {scene_bible} "
-                    f"Current state of this room: {stage_desc}"
+                    f"Current state of this room: {stage_desc} "
+                    "The room is empty — no workers or people present."
                 )
                 _notify(phase_name, 0, 2, f"Stage {stage_num}: generating initial image...")
                 logger.info("[Timelapse] Stage %d: T2I via Nano Banana Pro", stage_num)
@@ -281,39 +310,64 @@ class VideoService:
                     prompt=prompt, aspect_ratio="16:9", resolution="1K",
                 )
             else:
-                # Stages 2+: GPT sees previous image → edit delta → image edit
                 if stage_idx >= len(stages):
                     prev_img = keyframe_images[-1]
                     prev_desc = stages[-1].get("description", "") or stages[-1].get("edit_delta", "")
                     is_cleanup = (stage_num == 2)
+                    room_state = _build_room_state()
 
                     _notify(phase_name, 0, 2, f"Stage {stage_num}: GPT planning next edit...")
                     logger.info("[Timelapse] Stage %d: GPT vision planning (cleanup=%s)", stage_num, is_cleanup)
+                    logger.info("[Timelapse] Stage %d room state: %s", stage_num, room_state)
 
                     gpt_result = self.openai_client.generate_next_stage(
                         scene_bible=scene_bible,
+                        crew=crew,
                         prev_description=prev_desc,
                         prev_image_url=prev_img["image_url"],
                         stage_num=stage_num,
                         total_stages=NUM_STAGES,
+                        all_elements=all_elements,
+                        renovated_elements=renovated_elements,
                         is_cleanup_stage=is_cleanup,
+                        room_state=room_state,
                     )
+                    newly_done = gpt_result.get("renovated_element", [])
+                    mat_text = gpt_result.get("material", "")
+                    for elem in newly_done:
+                        if elem not in renovated_elements:
+                            renovated_elements.append(elem)
+                        if mat_text:
+                            element_material[elem.lower().strip()] = mat_text
+                    logger.info("[Timelapse] Stage %d element(s): %s | Renovated so far: %s",
+                                stage_num, newly_done, renovated_elements)
+
                     stages.append({
                         "stage": stage_num,
                         "description": gpt_result["edit_delta"],
                         "edit_delta": gpt_result["edit_delta"],
+                        "image_prompt": gpt_result.get("image_prompt", gpt_result["edit_delta"]),
                         "transition_prompt": gpt_result["transition_prompt"],
+                        "renovated_element": newly_done,
+                        "material": mat_text,
                     })
 
-                edit_delta = stages[stage_idx]["edit_delta"]
+                img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
                 prev_image_url = keyframe_images[-1]["image_url"]
 
                 prompt = (
-                    f"In this image, make the following changes: {edit_delta} "
-                    f"Keep everything else in the image exactly the same."
+                    f"{img_prompt} "
+                    "SCENE PERMANENCE: All room surfaces, walls, floor, ceiling, fixtures, "
+                    "and furniture NOT described above stay exactly as-is — same material, "
+                    "position, size, and color. "
+                    "WORKERS: Only the workers described above are visible. Any workers from "
+                    "the previous image who are NOT mentioned above have left the frame — "
+                    "remove them entirely. Workers must match the NEW poses and tools "
+                    "described, NOT their previous positions."
                 )
                 _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
                 logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
+                logger.info("[Timelapse] Stage %d image_prompt: %s", stage_num, img_prompt)
                 img_result = self.aiml_client.generate_image(
                     prompt=prompt, image_urls=[prev_image_url],
                     aspect_ratio="16:9", resolution="1K",
@@ -381,12 +435,12 @@ class VideoService:
 
                 transition_prompt = stages[i].get("transition_prompt", "")
                 if not transition_prompt:
-                    transition_prompt = "Smooth renovation transformation, surfaces and materials evolving."
+                    transition_prompt = "Worker renovates one surface element."
 
                 motion_prompt = (
-                    f"Timelapse transition: {transition_prompt} "
+                    f"{transition_prompt} "
                     f"{camera_instruction} "
-                    "Smooth continuous transformation preserving room geometry."
+                    "Only the described change happens. Everything else stays still."
                 )
 
                 logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
@@ -419,6 +473,37 @@ class VideoService:
                     _notify("videos", i + 1, total_transitions,
                             f"Transition {i + 1} of {total_transitions} complete",
                             partial_result=_state_snapshot())
+
+        # --- Final pan shot of the completed room ---
+        if keyframe_images and len(transition_videos) == total_transitions:
+            _notify("videos", total_transitions, total_transitions + 1,
+                    "Generating final reveal pan...")
+            logger.info("[Timelapse] Generating final pan shot")
+            last_kf = keyframe_images[-1]
+            i2v_model = self.settings.i2v_model
+            i2v_resolution = self.settings.i2v_resolution
+            t0 = _t.time()
+            pan_result = self.aiml_client.generate_and_poll_i2v(
+                image_url=last_kf["image_url"],
+                prompt=(
+                    "Slow cinematic pan revealing the fully renovated room. "
+                    "Camera smoothly sweeps across the space to capture every "
+                    "detail of the finished renovation. No workers present — "
+                    "the room is pristine and complete."
+                ),
+                model=i2v_model,
+                resolution=i2v_resolution,
+                duration=5,
+                camera_fixed=False,
+            )
+            elapsed_s = int(_t.time() - t0)
+            pan_url = pan_result.get("video_url")
+            if pan_url:
+                transition_videos.append(pan_url)
+                logger.info("[Timelapse] Final pan completed in %ds: %s", elapsed_s, pan_url)
+            else:
+                logger.warning("[Timelapse] Final pan failed after %ds, skipping: %s",
+                               elapsed_s, pan_result.get("error"))
 
         if not transition_videos:
             return {"success": False, "error": "No transition videos were generated", **_state_snapshot()}
