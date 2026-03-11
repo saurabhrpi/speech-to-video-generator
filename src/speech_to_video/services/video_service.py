@@ -357,13 +357,8 @@ class VideoService:
 
                 prompt = (
                     f"{img_prompt} "
-                    "SCENE PERMANENCE: All room surfaces, walls, floor, ceiling, fixtures, "
-                    "and furniture NOT described above stay exactly as-is — same material, "
-                    "position, size, and color. "
-                    "WORKERS: Only the workers described above are visible. Any workers from "
-                    "the previous image who are NOT mentioned above have left the frame — "
-                    "remove them entirely. Workers must match the NEW poses and tools "
-                    "described, NOT their previous positions."
+                    "All other surfaces unchanged. "
+                    "Only the described workers are visible — remove any others from the previous image."
                 )
                 _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
                 logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
