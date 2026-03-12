@@ -436,6 +436,7 @@ class OpenAIClient:
         renovated_elements: List[str],
         is_cleanup_stage: bool = False,
         room_state: str = "",
+        last_lead: str = "",
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
         remaining_str = ", ".join(remaining) if remaining else "none"
@@ -511,6 +512,17 @@ class OpenAIClient:
                     "doing the work (e.g., kneeling to lay tiles, on a ladder painting, "
                     "carrying and placing furniture). Describe WHICH worker is doing WHAT "
                     "with WHICH tool. Max 3 workers visible at once.\n\n"
+                    + (f"ROTATION: Last stage's lead worker was [{last_lead}]. "
+                       "Pick a DIFFERENT crew member as the lead (closest to the element, "
+                       "doing the primary task) this stage.\n"
+                       if last_lead else ""
+                    ) +
+                    "POSE VARIETY: EVERY worker must have a visually DIFFERENT body "
+                    "position, height, AND room location than they had in the previous "
+                    "stage. Changing only the tool is NOT enough — the whole posture must "
+                    "change. BAD: crouching at outlet with pliers → crouching at outlet "
+                    "with screwdriver. GOOD: crouching at outlet → standing on ladder at "
+                    "ceiling, or kneeling on floor at center of room.\n\n" +
                     "Produce FIVE things:\n"
                     "1. EDIT (MAX 250 chars): The narrative description of the change "
                     "for human review. Which worker does what with which tool.\n"
@@ -536,8 +548,19 @@ class OpenAIClient:
                     "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
                     "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
                     "or 'walls: deep matte greige paint'. 'none' for cleanup.\n"
-                    "5. TRANSITION (MAX 80 chars): A short, literal description of the "
-                    "physical change the camera sees. Factual only.\n\n"
+                    "5. TRANSITION (MAX 120 chars): An animation-ready description for a "
+                    "video model that will create a 5-second clip transitioning from the "
+                    "PREVIOUS image to the NEW image. Describe:\n"
+                    "   - What the ACTIVE workers physically DO on screen (e.g. 'woman rolls "
+                    "paint across the wall; man brushes edges from ladder').\n"
+                    "   - The visible surface change that results (e.g. 'wall gradually "
+                    "turns greige').\n"
+                    "   - If workers from the previous stage are NO LONGER present, say "
+                    "'[description] walks off-camera' FIRST. If a NEW worker enters, say "
+                    "'[description] walks in from doorway'.\n"
+                    "   - NEVER mention objects appearing/growing/morphing from thin air.\n"
+                    "   - Example: 'Man in grey hoodie walks off-camera. Woman in coveralls "
+                    "rolls greige paint across left wall, then right wall.'\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
@@ -641,12 +664,31 @@ class OpenAIClient:
 
         material_clean = material if material.lower() not in ("none", "") else ""
 
+        lead_worker = ""
+        try:
+            import re
+            worker_entries = re.split(r"Worker\s+[A-Z]:\s*", crew)
+            worker_descs = [w.strip().rstrip(".").strip() for w in worker_entries if w.strip()]
+            prompt_lower = image_prompt.lower()
+            earliest_pos = len(prompt_lower) + 1
+            for desc in worker_descs:
+                keywords = [k.strip() for k in desc.split(",") if k.strip()]
+                if len(keywords) >= 2:
+                    search_term = keywords[1].lower().strip()
+                    pos = prompt_lower.find(search_term)
+                    if 0 <= pos < earliest_pos:
+                        earliest_pos = pos
+                        lead_worker = desc
+        except Exception:
+            pass
+
         return {
             "edit_delta": edit_delta,
             "image_prompt": image_prompt,
             "transition_prompt": transition_prompt,
             "renovated_element": newly_renovated,
             "material": material_clean,
+            "lead_worker": lead_worker,
         }
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:

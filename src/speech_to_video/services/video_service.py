@@ -293,6 +293,10 @@ class VideoService:
                     parts.append(f"{elem} = original / not yet renovated")
             return "; ".join(parts) if parts else "all elements in original state"
 
+        last_lead = ""
+        if stages and len(stages) > 1:
+            last_lead = stages[-1].get("lead_worker", "")
+
         for stage_idx in range(completed_stages, NUM_STAGES):
             stage_num = stage_idx + 1
             phase_name = f"stage_{stage_num}"
@@ -331,16 +335,18 @@ class VideoService:
                         renovated_elements=renovated_elements,
                         is_cleanup_stage=is_cleanup,
                         room_state=room_state,
+                        last_lead=last_lead,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
                     mat_text = gpt_result.get("material", "")
+                    last_lead = gpt_result.get("lead_worker", "")
                     for elem in newly_done:
                         if elem not in renovated_elements:
                             renovated_elements.append(elem)
                         if mat_text:
                             element_material[elem.lower().strip()] = mat_text
-                    logger.info("[Timelapse] Stage %d element(s): %s | Renovated so far: %s",
-                                stage_num, newly_done, renovated_elements)
+                    logger.info("[Timelapse] Stage %d element(s): %s | Lead: %s | Renovated so far: %s",
+                                stage_num, newly_done, last_lead, renovated_elements)
 
                     stages.append({
                         "stage": stage_num,
@@ -350,6 +356,7 @@ class VideoService:
                         "transition_prompt": gpt_result["transition_prompt"],
                         "renovated_element": newly_done,
                         "material": mat_text,
+                        "lead_worker": last_lead,
                     })
 
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
@@ -428,14 +435,14 @@ class VideoService:
                 _notify("videos", i, total_transitions,
                         f"Generating transition {i + 1} of {total_transitions}")
 
-                transition_prompt = stages[i].get("transition_prompt", "")
+                transition_prompt = stages[i + 1].get("transition_prompt", "")
                 if not transition_prompt:
-                    transition_prompt = "Worker renovates one surface element."
+                    transition_prompt = "Workers actively renovate the room."
 
                 motion_prompt = (
                     f"{transition_prompt} "
                     f"{camera_instruction} "
-                    "Only the described change happens. Everything else stays still."
+                    "Room structure stays fixed. No objects appear from thin air."
                 )
 
                 logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
@@ -477,15 +484,21 @@ class VideoService:
             last_kf = keyframe_images[-1]
             i2v_model = self.settings.i2v_model
             i2v_resolution = self.settings.i2v_resolution
+
+            room_details = _build_room_state()
+            pan_prompt = (
+                f"Slow gentle camera pan across this exact room. "
+                f"Room contents: {room_details}. "
+                f"{scene_bible}. "
+                "No workers, no people. The room is empty, still, and pristine. "
+                "Camera glides smoothly. Nothing moves or changes."
+            )
+            logger.info("[Timelapse] Final pan prompt: %s", pan_prompt)
+
             t0 = _t.time()
             pan_result = self.aiml_client.generate_and_poll_i2v(
                 image_url=last_kf["image_url"],
-                prompt=(
-                    "Slow cinematic pan revealing the fully renovated room. "
-                    "Camera smoothly sweeps across the space to capture every "
-                    "detail of the finished renovation. No workers present — "
-                    "the room is pristine and complete."
-                ),
+                prompt=pan_prompt,
                 model=i2v_model,
                 resolution=i2v_resolution,
                 duration=5,
