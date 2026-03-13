@@ -413,13 +413,10 @@ class VideoService:
             _notify(hero_phase, 0, 1, "Generating final hero shot (no workers)...")
             logger.info("[Timelapse] Generating hero shot from stage %d image", NUM_STAGES)
 
-            room_details = _build_room_state()
             hero_prompt = (
-                f"Completed renovation — pristine empty room, no people, no tools, "
-                f"no ladders, no equipment. Room details: {room_details}. "
-                f"{scene_bible}. "
-                "Bright, clean, magazine-quality interior photo. "
-                "Every surface is finished and flawless."
+                "Same exact room, same angle, same lighting. "
+                "Remove all people, tools, ladders, and equipment. "
+                "The room is empty and pristine. Nothing else changes."
             )
             logger.info("[Timelapse] Hero prompt: %s", hero_prompt)
             prev_image_url = keyframe_images[-1]["image_url"]
