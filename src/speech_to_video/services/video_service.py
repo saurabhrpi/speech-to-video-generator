@@ -406,6 +406,46 @@ class VideoService:
                     **_state_snapshot(),
                 }
 
+        # --- Hero shot: final image with no workers ---
+        hero_needed = len(keyframe_images) == NUM_STAGES and len(stages) >= NUM_STAGES
+        if hero_needed:
+            hero_phase = "hero"
+            _notify(hero_phase, 0, 1, "Generating final hero shot (no workers)...")
+            logger.info("[Timelapse] Generating hero shot from stage %d image", NUM_STAGES)
+
+            room_details = _build_room_state()
+            hero_prompt = (
+                f"Completed renovation — pristine empty room, no people, no tools, "
+                f"no ladders, no equipment. Room details: {room_details}. "
+                f"{scene_bible}. "
+                "Bright, clean, magazine-quality interior photo. "
+                "Every surface is finished and flawless."
+            )
+            logger.info("[Timelapse] Hero prompt: %s", hero_prompt)
+            prev_image_url = keyframe_images[-1]["image_url"]
+            hero_result = self.aiml_client.generate_image(
+                prompt=hero_prompt, image_urls=[prev_image_url],
+                aspect_ratio="16:9", resolution="1K",
+            )
+            if hero_result.get("success"):
+                hero_images = hero_result.get("images", [])
+                if hero_images:
+                    keyframe_images.append({
+                        "stage": NUM_STAGES + 1,
+                        "image_url": hero_images[0],
+                        "description": "Final result — fully renovated room, no workers.",
+                    })
+                    logger.info("[Timelapse] Hero shot complete: %s", hero_images[0])
+                    _notify(hero_phase, 1, 1, "Hero shot complete", partial_result=_state_snapshot())
+            else:
+                logger.warning("[Timelapse] Hero shot failed, skipping: %s", hero_result.get("error"))
+
+            if stop_after == hero_phase:
+                return {
+                    "success": True, "phase_completed": hero_phase, "pipeline": "v2",
+                    **_state_snapshot(),
+                }
+
         # --- Video transitions via Seedance (or configured I2V model) ---
         total_transitions = len(keyframe_images) - 1
         start_idx = len(transition_videos)
@@ -430,9 +470,10 @@ class VideoService:
             i2v_resolution = self.settings.i2v_resolution
 
             for i in range(start_idx, total_transitions):
+                video_phase = f"video_{i + 1}"
                 from_kf = keyframe_images[i]
                 to_kf = keyframe_images[i + 1]
-                _notify("videos", i, total_transitions,
+                _notify(video_phase, 0, 1,
                         f"Generating transition {i + 1} of {total_transitions}")
 
                 transition_prompt = stages[i + 1].get("transition_prompt", "")
@@ -472,9 +513,15 @@ class VideoService:
                     transition_videos.append(video_url)
                     logger.info("[Timelapse] Transition %d->%d completed in %ds: %s",
                                 i + 1, i + 2, elapsed_s, video_url)
-                    _notify("videos", i + 1, total_transitions,
+                    _notify(video_phase, 1, 1,
                             f"Transition {i + 1} of {total_transitions} complete",
                             partial_result=_state_snapshot())
+
+                if stop_after == video_phase:
+                    return {
+                        "success": True, "phase_completed": video_phase, "pipeline": "v2",
+                        **_state_snapshot(),
+                    }
 
         # --- Final pan shot of the completed room ---
         if keyframe_images and len(transition_videos) == total_transitions:

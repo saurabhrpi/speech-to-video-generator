@@ -474,11 +474,13 @@ export default function App() {
 
   const NUM_STAGES = 7
   const STAGE_PHASES = Array.from({ length: NUM_STAGES }, (_, i) => `stage_${i + 1}`)
-  const PHASE_ORDER = ['plan', ...STAGE_PHASES, 'videos'] as const
+  const VIDEO_PHASES = Array.from({ length: NUM_STAGES - 1 }, (_, i) => `video_${i + 1}`)
+  const PHASE_ORDER = ['plan', ...STAGE_PHASES, 'hero', ...VIDEO_PHASES] as const
   const PHASE_LABELS: Record<string, string> = {
     plan: 'Scene Bible + Stage 1 Plan',
     ...Object.fromEntries(STAGE_PHASES.map((p, i) => [p, `Stage ${i + 1} Image`])),
-    videos: 'Video Transitions (Seedance)',
+    hero: 'Final Result (No Workers)',
+    ...Object.fromEntries(VIDEO_PHASES.map((p, i) => [p, `Transition Video ${i + 1}→${i + 2}`])),
     stitch: 'Stitching',
     done: 'Stitching',
   }
@@ -491,8 +493,10 @@ export default function App() {
   }
 
   function detectLastCompletedPhase(state: Record<string, any>): string | null {
-    if (state.transition_videos?.length) return 'videos'
+    const nVideos = state.transition_videos?.length ?? 0
+    if (nVideos > 0) return `video_${nVideos}`
     const nImages = state.keyframe_images?.length ?? 0
+    if (nImages > NUM_STAGES) return 'hero'
     if (nImages > 0) return `stage_${nImages}`
     if (state.scene_bible) return 'plan'
     return null
@@ -501,7 +505,8 @@ export default function App() {
   const POLL_INTERVALS: Record<string, number> = {
     plan: 2000,
     stage: 3000,
-    videos: 5000,
+    hero: 3000,
+    video: 5000,
     stitch: 30000,
   }
   const DEFAULT_POLL_INTERVAL = 3000
@@ -518,8 +523,16 @@ export default function App() {
       const stageEnd = 3 + (stageNum / NUM_STAGES) * 47
       return Math.min(stageStart + (stageEnd - stageStart) * phaseRatio, 99.5)
     }
+    const videoMatch = phase.match(/^video_(\d+)$/)
+    if (videoMatch) {
+      const videoNum = parseInt(videoMatch[1], 10)
+      const totalVids = NUM_STAGES - 1
+      const videoStart = 53 + ((videoNum - 1) / totalVids) * 42
+      const videoEnd = 53 + (videoNum / totalVids) * 42
+      return Math.min(videoStart + (videoEnd - videoStart) * phaseRatio, 99.5)
+    }
     const ranges: Record<string, [number, number]> = {
-      plan: [0, 3], videos: [50, 95], stitch: [95, 100],
+      plan: [0, 3], hero: [50, 53], stitch: [95, 100],
     }
     const range = ranges[phase]
     if (!range) return 0
@@ -608,7 +621,7 @@ export default function App() {
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const phaseKey = currentPhase?.startsWith('stage_') ? 'stage' : (currentPhase ?? '')
+        const phaseKey = currentPhase?.startsWith('stage_') ? 'stage' : currentPhase?.startsWith('video_') ? 'video' : (currentPhase ?? '')
         const interval = POLL_INTERVALS[phaseKey] ?? DEFAULT_POLL_INTERVAL
         await new Promise(r => setTimeout(r, interval))
 
@@ -851,7 +864,7 @@ export default function App() {
                       PHASE_ORDER.indexOf(phaseCompleted as any) >= i
                         ? 'bg-primary'
                         : 'bg-muted'
-                    } ${p.startsWith('stage_') ? 'w-4' : 'w-6'}`}
+                    } ${p.startsWith('stage_') || p.startsWith('video_') ? 'w-3' : p === 'hero' ? 'w-4' : 'w-5'}`}
                     title={PHASE_LABELS[p]}
                   />
                 ))}
@@ -951,37 +964,108 @@ export default function App() {
               </div>
             )}
 
-            {phaseCompleted === 'videos' && pipelineState.transition_videos && (
+            {phaseCompleted === 'hero' && pipelineState.keyframe_images && (
               <div className="space-y-3">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Transition Videos ({pipelineState.transition_videos.length})
+                  Final Result — No Workers
                 </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {pipelineState.transition_videos.map((url: string, i: number) => (
-                    <div key={i} className="space-y-1">
-                      <video
-                        src={url}
-                        className="w-full rounded border aspect-video object-cover"
-                        controls
-                        preload="metadata"
-                        muted
-                        playsInline
-                      />
-                      <div className="text-xs text-center text-muted-foreground">
-                        Transition {i + 1} &rarr; {i + 2}
+                {pipelineState.keyframe_images.length > NUM_STAGES && (
+                  <img
+                    src={pipelineState.keyframe_images[pipelineState.keyframe_images.length - 1].image_url}
+                    alt="Final result"
+                    className="w-full max-w-lg rounded border aspect-video object-cover"
+                  />
+                )}
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    Show all {pipelineState.keyframe_images.length} keyframe images
+                  </summary>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+                    {pipelineState.keyframe_images.map((kf: any, i: number) => (
+                      <div key={i} className="space-y-1">
+                        <img
+                          src={kf.image_url}
+                          alt={`Stage ${kf.stage}`}
+                          className="w-full rounded border aspect-video object-cover"
+                        />
+                        <div className="text-xs text-center text-muted-foreground truncate" title={kf.description}>
+                          {kf.stage > NUM_STAGES ? 'Final' : `Stage ${kf.stage}`}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            {phaseCompleted?.startsWith('video_') && pipelineState.transition_videos && (() => {
+              const vidIdx = parseInt(phaseCompleted.replace('video_', ''), 10) - 1
+              const latestUrl = pipelineState.transition_videos[vidIdx]
+              return (
+                <div className="space-y-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Transition Video {vidIdx + 1} → {vidIdx + 2}
+                    <span className="ml-2 text-muted-foreground/60">
+                      ({pipelineState.transition_videos.length} of {NUM_STAGES - 1} done)
+                    </span>
+                  </span>
+                  {latestUrl && (
+                    <video
+                      src={latestUrl}
+                      className="w-full max-w-lg rounded border aspect-video"
+                      controls
+                      autoPlay
+                      muted
+                      playsInline
+                    />
+                  )}
+                  {pipelineState.transition_videos.length > 1 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Show all {pipelineState.transition_videos.length} completed videos
+                      </summary>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {pipelineState.transition_videos.map((url: string, i: number) => (
+                          <div key={i} className="space-y-1">
+                            <video
+                              src={url}
+                              className="w-full rounded border aspect-video object-cover"
+                              controls
+                              preload="metadata"
+                              muted
+                              playsInline
+                            />
+                            <div className="text-xs text-center text-muted-foreground">
+                              {i + 1} → {i + 2}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )
+            })()}
+
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button onClick={handleContinuePipeline} disabled={busy}>
                 {nextStopAfter(phaseCompleted)
                   ? `Continue to ${PHASE_LABELS[nextStopAfter(phaseCompleted)!] || 'next phase'}`
                   : 'Finish & Stitch'}
               </Button>
+              {(phaseCompleted === 'plan' || (phaseCompleted?.startsWith('stage_') && phaseCompleted !== `stage_${NUM_STAGES}`)) && (
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!formPayload || !pipelineState) return
+                    setPipelineError(null)
+                    runPipeline(formPayload, `stage_${NUM_STAGES}`, pipelineState)
+                  }}
+                >
+                  Generate Remaining Images
+                </Button>
+              )}
               <Button variant="secondary" onClick={handleStopPipeline} disabled={busy}>
                 Stop
               </Button>
