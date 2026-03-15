@@ -936,7 +936,7 @@ export default function App() {
                     {pipelineState.stages.map((s: any, i: number) => (
                       <div key={i} className="rounded bg-muted p-2">
                         <div className="text-xs font-medium">
-                          {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — ${i === 1 ? 'Cleanup' : 'Edit'}`}
+                          {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — Edit`}
                           {s.renovated_element?.length > 0 && (
                             <span className="ml-1.5 text-primary">({s.renovated_element.join(', ')})</span>
                           )}

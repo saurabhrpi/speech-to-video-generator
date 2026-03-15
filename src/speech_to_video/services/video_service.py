@@ -309,11 +309,10 @@ class VideoService:
                 if stage_idx >= len(stages):
                     prev_img = keyframe_images[-1]
                     prev_desc = stages[-1].get("description", "") or stages[-1].get("edit_delta", "")
-                    is_cleanup = (stage_num == 2)
                     room_state = _build_room_state()
 
                     _notify(phase_name, 0, 2, f"Stage {stage_num}: GPT planning next edit...")
-                    logger.info("[Timelapse] Stage %d: GPT vision planning (cleanup=%s)", stage_num, is_cleanup)
+                    logger.info("[Timelapse] Stage %d: GPT vision planning", stage_num)
                     logger.info("[Timelapse] Stage %d room state: %s", stage_num, room_state)
 
                     gpt_result = self.openai_client.generate_next_stage(
@@ -324,7 +323,6 @@ class VideoService:
                         total_stages=NUM_STAGES,
                         all_elements=all_elements,
                         renovated_elements=renovated_elements,
-                        is_cleanup_stage=is_cleanup,
                         room_state=room_state,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
@@ -349,10 +347,7 @@ class VideoService:
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
                 prev_image_url = keyframe_images[-1]["image_url"]
 
-                prompt = (
-                    f"{img_prompt} "
-                    "All other surfaces unchanged. No people, no tools, no equipment."
-                )
+                prompt = f"{img_prompt}"
                 _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
                 logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
                 logger.info("[Timelapse] Stage %d image_prompt: %s", stage_num, img_prompt)

@@ -357,9 +357,10 @@ class OpenAIClient:
                         "NO specific fixture types, NO materials, NO sub-components. "
                         "STRICTLY 5-7 items.\n\n"
                         "3. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
-                        "room BEFORE any renovation. Describe surfaces, damage, clutter, exposed "
-                        "wiring, stains. Be specific and visual. NO people, NO workers. "
-                        "Describe ONLY what the camera sees — do not invent objects not visible.\n\n"
+                        "room BEFORE any renovation. The room is EMPTY — NO loose items, NO "
+                        "clutter, NO boxes, NO newspapers, NO debris on the floor. Describe "
+                        "only surface-level wear: scuffs, stains, cracks, patchy paint, dated "
+                        "fixtures. NO people. Be specific and visual.\n\n"
                         "Respond in EXACTLY this format:\n"
                         "SCENE_BIBLE: [text]\n"
                         "ELEMENTS: [comma-separated list]\n"
@@ -420,7 +421,6 @@ class OpenAIClient:
         total_stages: int,
         all_elements: List[str],
         renovated_elements: List[str],
-        is_cleanup_stage: bool = False,
         room_state: str = "",
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
@@ -428,54 +428,34 @@ class OpenAIClient:
         renovated_str = ", ".join(renovated_elements) if renovated_elements else "none yet"
         stages_left = total_stages - stage_num
 
-        if is_cleanup_stage:
-            task_focus = (
-                "LIGHT TIDYING of the room: sweep loose debris off the floor, remove "
-                "scattered clutter and trash. That is ALL. Surfaces KEEP their existing "
-                "wear, age, stains, and patina — the floor still looks scuffed, walls "
-                "still look patchy and dated, ceiling still shows its age. This is NOT "
-                "restoration. The room should look tidied, NOT renovated or pristine."
-            )
+        task_focus = (
+            "RENOVATION: ADD or UPGRADE one element — install new materials, new "
+            "surfaces, new fixtures. The change must be VISUALLY DRAMATIC — a full "
+            "surface or material transformation visible at room scale."
+        )
+        if stages_left <= 0 and len(remaining) > 1:
             element_rule = (
-                "This is the cleanup stage — no specific element from the list is being "
-                "RENOVATED. Just tidy up loose items. ELEMENT must be 'none' because "
-                "cleanup is NOT renovation. MATERIAL must also be 'none'."
+                f"This is the LAST stage. Renovate ALL remaining elements "
+                f"({remaining_str}) in this one stage."
+            )
+        elif len(remaining) > stages_left > 0:
+            element_rule = (
+                f"REMAINING: {remaining_str} ({len(remaining)} left, "
+                f"{stages_left} stages after this). You may group 2 related "
+                "elements to ensure all are covered by the final stage."
             )
         else:
-            task_focus = (
-                "RENOVATION ONLY. Cleanup is DONE — do NOT remove, clean, or strip "
-                "anything further. Only ADD or UPGRADE: install new materials, new "
-                "surfaces, new fixtures, new furnishings. The change must be VISUALLY "
-                "DRAMATIC — a full surface or material transformation visible at room "
-                "scale. Not a tiny detail fix."
+            element_rule = (
+                f"REMAINING: {remaining_str}. "
+                f"DONE: {renovated_str}. "
+                "Pick EXACTLY ONE element to renovate."
             )
-            if stages_left <= 0 and len(remaining) > 1:
-                element_rule = (
-                    f"This is the LAST stage. Renovate ALL remaining elements "
-                    f"({remaining_str}) in this one stage."
-                )
-            elif len(remaining) > stages_left > 0:
-                element_rule = (
-                    f"REMAINING: {remaining_str} ({len(remaining)} left, "
-                    f"{stages_left} stages after this). You may group 2 related "
-                    "elements to ensure all are covered by the final stage."
-                )
-            else:
-                element_rule = (
-                    f"REMAINING: {remaining_str}. "
-                    f"DONE: {renovated_str}. "
-                    "Pick EXACTLY ONE element to renovate."
-                )
 
         room_state_block = ""
         if room_state:
             room_state_block = (
-                f"CURRENT ROOM STATE (overrides scene bible for renovated elements):\n"
-                f"{room_state}\n"
-                "CRITICAL: In your IMAGE_PROMPT, describe each element using its CURRENT "
-                "material from the list above — NOT the original scene bible material. "
-                "If floor = 'pale porcelain tiles', write 'porcelain tile floor', "
-                "NEVER 'oak floor'.\n\n"
+                f"CURRENT ROOM STATE (for your awareness of what has been done):\n"
+                f"{room_state}\n\n"
             )
 
         messages = [
@@ -498,31 +478,26 @@ class OpenAIClient:
                     "Produce FOUR things:\n"
                     "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
                     "stage. Describe the transformation result, not any human action.\n"
-                    "2. IMAGE_PROMPT (MAX 280 chars): Visual description for the image model. "
-                    "Write in this EXACT order — most important first:\n"
-                    "   a) CHANGE (first sentence): What the renovated element looks like "
-                    "NOW. Be specific about the FULL result — e.g. 'Entire floor covered "
-                    "in large pale porcelain tiles with light grout.' not just 'porcelain "
-                    "tile floor'. This is the PRIMARY instruction the image model must follow.\n"
-                    "   b) CONTEXT (second, brief): Other room elements in 1 short phrase. "
-                    "Use CURRENT materials from ROOM STATE for renovated elements. "
-                    "Example: 'Greige walls, white ceiling, original window and door.'\n"
+                    "2. IMAGE_PROMPT (MAX 200 chars): A SHORT editing instruction for the "
+                    "image model. Describe ONLY the element being changed — nothing else.\n"
                     "   Rules:\n"
-                    "   - NO people, NO workers, NO tools, NO ladders, NO equipment.\n"
-                    "   - Existing elements (door, window, glazing) are upgraded IN PLACE — "
-                    "SAME opening height, SAME opening width, SAME wall position. The "
-                    "surrounding wall structure NEVER changes. Never use words like "
-                    "'full-height', 'floor-to-ceiling', or 'enlarged'. Only the material, "
-                    "finish, and hardware of the element change — NOT the size of the opening.\n"
-                    "   - For UNCHANGED elements, write 'original [element]' only — do NOT "
-                    "repeat defect adjectives (yellowed, stained, scuffed, chipped, etc.). "
-                    "The image model treats adjectives as instructions.\n"
-                    "   - Describe only what is PRESENT and VISIBLE.\n"
+                    "   - Describe ONLY the renovated element's new appearance. Be specific "
+                    "about the FULL result — e.g. 'Entire floor covered in large pale "
+                    "porcelain tiles with light grout.'\n"
+                    "   - Do NOT mention ANY other element in the room. The image model "
+                    "already has the previous image — unchanged elements are preserved "
+                    "automatically.\n"
+                    "   - End with 'Change nothing else.'\n"
+                    "   - NO people, NO workers, NO tools, NO ladders.\n"
+                    "   - For door, window, or glazing: you MUST include the phrase "
+                    "'same size opening' in the IMAGE_PROMPT. SAME height, SAME width, "
+                    "SAME position. Never say 'full-height', 'floor-to-ceiling', or "
+                    "'enlarged'. Only material/finish/hardware change.\n"
                     "3. ELEMENT: Which element(s) from the canonical list are being "
-                    "renovated. 'none' for cleanup. Use EXACT names from the list.\n"
+                    "renovated. Use EXACT names from the list.\n"
                     "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
                     "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
-                    "or 'walls: deep matte greige paint'. 'none' for cleanup.\n\n"
+                    "or 'walls: deep matte greige paint'.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
@@ -610,10 +585,6 @@ class OpenAIClient:
         raw_elements = [e.strip() for e in element_done.split(",") if e.strip()] if element_done else []
         canonical_set = {e.lower() for e in all_elements}
         newly_renovated = [e for e in raw_elements if e.lower() in canonical_set and e.lower() != "none"]
-
-        if is_cleanup_stage and newly_renovated:
-            logger.warning("[GPT] Cleanup stage tried to claim elements %s as renovated — ignoring", newly_renovated)
-            newly_renovated = []
 
         material_clean = material if material.lower() not in ("none", "") else ""
 
