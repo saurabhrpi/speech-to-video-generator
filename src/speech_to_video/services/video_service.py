@@ -225,7 +225,6 @@ class VideoService:
         def _state_snapshot():
             return {
                 "scene_bible": scene_bible,
-                "crew": crew,
                 "elements": list(all_elements),
                 "renovated_elements": list(renovated_elements),
                 "stages": list(stages),
@@ -234,9 +233,8 @@ class VideoService:
                 "transition_videos": list(transition_videos),
             }
 
-        # --- Phase 1: Scene Bible + Crew + Elements + Stage 1 description ---
+        # --- Phase 1: Scene Bible + Elements + Stage 1 description ---
         scene_bible = resume.get("scene_bible", "")
-        crew = resume.get("crew", "")
         all_elements: List[str] = list(resume.get("elements") or [])
         renovated_elements: List[str] = list(resume.get("renovated_elements") or [])
         stages: List[Dict] = list(resume.get("stages") or [])
@@ -244,7 +242,7 @@ class VideoService:
         transition_videos: List[str] = list(resume.get("transition_videos") or [])
 
         if not scene_bible:
-            _notify("plan", 0, 1, "Generating scene bible, crew, elements + stage 1 description...")
+            _notify("plan", 0, 1, "Generating scene bible, elements + stage 1 description...")
             plan = self.openai_client.generate_scene_bible_only(
                 room_type=request.room_type,
                 style=request.style,
@@ -256,11 +254,9 @@ class VideoService:
                 freeform=request.freeform_description,
             )
             scene_bible = plan["scene_bible"]
-            crew = plan["crew"]
             all_elements = plan["elements"]
-            stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": "", "transition_prompt": ""}]
+            stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": ""}]
             logger.info("[Timelapse] Scene bible: %s", scene_bible)
-            logger.info("[Timelapse] Crew: %s", crew)
             logger.info("[Timelapse] Elements to renovate: %s", all_elements)
             _notify("plan", 1, 1, "Plan complete", partial_result=_state_snapshot())
         else:
@@ -293,10 +289,6 @@ class VideoService:
                     parts.append(f"{elem} = original / not yet renovated")
             return "; ".join(parts) if parts else "all elements in original state"
 
-        last_lead = ""
-        if stages and len(stages) > 1:
-            last_lead = stages[-1].get("lead_worker", "")
-
         for stage_idx in range(completed_stages, NUM_STAGES):
             stage_num = stage_idx + 1
             phase_name = f"stage_{stage_num}"
@@ -306,7 +298,7 @@ class VideoService:
                 prompt = (
                     f"SAME ROOM, SAME CAMERA, EXACT SAME LAYOUT. {scene_bible} "
                     f"Current state of this room: {stage_desc} "
-                    "The room is empty — no workers or people present."
+                    "Empty room, no people."
                 )
                 _notify(phase_name, 0, 2, f"Stage {stage_num}: generating initial image...")
                 logger.info("[Timelapse] Stage %d: T2I via Nano Banana Pro", stage_num)
@@ -326,7 +318,6 @@ class VideoService:
 
                     gpt_result = self.openai_client.generate_next_stage(
                         scene_bible=scene_bible,
-                        crew=crew,
                         prev_description=prev_desc,
                         prev_image_url=prev_img["image_url"],
                         stage_num=stage_num,
@@ -335,28 +326,24 @@ class VideoService:
                         renovated_elements=renovated_elements,
                         is_cleanup_stage=is_cleanup,
                         room_state=room_state,
-                        last_lead=last_lead,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
                     mat_text = gpt_result.get("material", "")
-                    last_lead = gpt_result.get("lead_worker", "")
                     for elem in newly_done:
                         if elem not in renovated_elements:
                             renovated_elements.append(elem)
                         if mat_text:
                             element_material[elem.lower().strip()] = mat_text
-                    logger.info("[Timelapse] Stage %d element(s): %s | Lead: %s | Renovated so far: %s",
-                                stage_num, newly_done, last_lead, renovated_elements)
+                    logger.info("[Timelapse] Stage %d element(s): %s | Renovated so far: %s",
+                                stage_num, newly_done, renovated_elements)
 
                     stages.append({
                         "stage": stage_num,
                         "description": gpt_result["edit_delta"],
                         "edit_delta": gpt_result["edit_delta"],
                         "image_prompt": gpt_result.get("image_prompt", gpt_result["edit_delta"]),
-                        "transition_prompt": gpt_result["transition_prompt"],
                         "renovated_element": newly_done,
                         "material": mat_text,
-                        "lead_worker": last_lead,
                     })
 
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
@@ -364,8 +351,7 @@ class VideoService:
 
                 prompt = (
                     f"{img_prompt} "
-                    "All other surfaces unchanged. "
-                    "Only the described workers are visible — remove any others from the previous image."
+                    "All other surfaces unchanged. No people, no tools, no equipment."
                 )
                 _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
                 logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
@@ -406,44 +392,7 @@ class VideoService:
                     **_state_snapshot(),
                 }
 
-        # --- Hero shot: final image with no workers ---
-        hero_needed = len(keyframe_images) == NUM_STAGES and len(stages) >= NUM_STAGES
-        if hero_needed:
-            hero_phase = "hero"
-            _notify(hero_phase, 0, 1, "Generating final hero shot (no workers)...")
-            logger.info("[Timelapse] Generating hero shot from stage %d image", NUM_STAGES)
-
-            hero_prompt = (
-                "Same exact room, same angle, same lighting. "
-                "Remove all people, tools, ladders, and equipment. "
-                "The room is empty and pristine. Nothing else changes."
-            )
-            logger.info("[Timelapse] Hero prompt: %s", hero_prompt)
-            prev_image_url = keyframe_images[-1]["image_url"]
-            hero_result = self.aiml_client.generate_image(
-                prompt=hero_prompt, image_urls=[prev_image_url],
-                aspect_ratio="16:9", resolution="1K",
-            )
-            if hero_result.get("success"):
-                hero_images = hero_result.get("images", [])
-                if hero_images:
-                    keyframe_images.append({
-                        "stage": NUM_STAGES + 1,
-                        "image_url": hero_images[0],
-                        "description": "Final result — fully renovated room, no workers.",
-                    })
-                    logger.info("[Timelapse] Hero shot complete: %s", hero_images[0])
-                    _notify(hero_phase, 1, 1, "Hero shot complete", partial_result=_state_snapshot())
-            else:
-                logger.warning("[Timelapse] Hero shot failed, skipping: %s", hero_result.get("error"))
-
-            if stop_after == hero_phase:
-                return {
-                    "success": True, "phase_completed": hero_phase, "pipeline": "v2",
-                    **_state_snapshot(),
-                }
-
-        # --- Video transitions via Seedance (or configured I2V model) ---
+        # --- Video transitions via configured I2V model ---
         total_transitions = len(keyframe_images) - 1
         start_idx = len(transition_videos)
 
@@ -465,6 +414,7 @@ class VideoService:
             camera_instruction = camera_cues.get(camera, camera_cues["static"])
             i2v_model = self.settings.i2v_model
             i2v_resolution = self.settings.i2v_resolution
+            i2v_duration = self.settings.i2v_duration
 
             for i in range(start_idx, total_transitions):
                 video_phase = f"video_{i + 1}"
@@ -473,14 +423,12 @@ class VideoService:
                 _notify(video_phase, 0, 1,
                         f"Generating transition {i + 1} of {total_transitions}")
 
-                transition_prompt = stages[i + 1].get("transition_prompt", "")
-                if not transition_prompt:
-                    transition_prompt = "Workers actively renovate the room."
-
+                from_desc = stages[i].get("description", "")
+                to_desc = stages[i + 1].get("description", "")
                 motion_prompt = (
-                    f"{transition_prompt} "
-                    f"{camera_instruction} "
-                    "Room structure stays fixed. No objects appear from thin air."
+                    f"Time-lapse transformation: {from_desc} smoothly transforms into {to_desc}. "
+                    f"No people, no tools. {camera_instruction} "
+                    "Room structure stays fixed. Surfaces and materials change gradually."
                 )
 
                 logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
@@ -491,7 +439,7 @@ class VideoService:
                     prompt=motion_prompt,
                     model=i2v_model,
                     resolution=i2v_resolution,
-                    duration=5,
+                    duration=i2v_duration,
                 )
                 elapsed_s = int(_t.time() - t0)
 
@@ -534,8 +482,7 @@ class VideoService:
                 f"Slow gentle camera pan across this exact room. "
                 f"Room contents: {room_details}. "
                 f"{scene_bible}. "
-                "No workers, no people. The room is empty, still, and pristine. "
-                "Camera glides smoothly. Nothing moves or changes."
+                "Empty pristine room. Camera glides smoothly. Nothing moves or changes."
             )
             logger.info("[Timelapse] Final pan prompt: %s", pan_prompt)
 
@@ -545,7 +492,7 @@ class VideoService:
                 prompt=pan_prompt,
                 model=i2v_model,
                 resolution=i2v_resolution,
-                duration=5,
+                duration=i2v_duration,
                 camera_fixed=False,
             )
             elapsed_s = int(_t.time() - t0)

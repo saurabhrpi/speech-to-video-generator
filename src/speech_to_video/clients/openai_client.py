@@ -340,16 +340,11 @@ class OpenAIClient:
                     "role": "system",
                     "content": (
                         "You are an expert architectural visualization director.\n\n"
-                        "Produce FOUR things for a room renovation timelapse:\n\n"
+                        "Produce THREE things for a room renovation timelapse:\n\n"
                         "1. SCENE BIBLE (MAX 300 chars): Camera position/lens, room shape & "
                         "dimensions, architectural bones (walls, ceiling, floor, windows, doors), "
                         "perspective, light direction, render style. Terse comma-separated shorthand.\n\n"
-                        "2. CREW (MAX 200 chars): Define EXACTLY 3 renovation workers who will "
-                        "appear throughout the timelapse. Give each a distinct look "
-                        "(gender, clothing color, headwear). Example: 'Worker A: male, blue overalls, "
-                        "yellow hard hat. Worker B: female, grey jumpsuit, safety goggles. "
-                        "Worker C: male, white t-shirt, brown tool belt.'\n\n"
-                        "3. ELEMENTS: List the HIGH-LEVEL visual element groups in this room as a "
+                        "2. ELEMENTS: List the HIGH-LEVEL visual element groups in this room as a "
                         "comma-separated list. EXACTLY 5 to 7 items. Group related sub-parts into "
                         "ONE element. Use GENERIC FUNCTIONAL CATEGORY names — the element name "
                         "describes the SLOT in the room, not the specific fixture that fills it.\n"
@@ -361,13 +356,12 @@ class OpenAIClient:
                         "Each element must be a single word or two-word generic label. "
                         "NO specific fixture types, NO materials, NO sub-components. "
                         "STRICTLY 5-7 items.\n\n"
-                        "4. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
-                        "room BEFORE any renovation — no workers present yet. Describe surfaces, "
-                        "damage, clutter, exposed wiring, stains. Be specific and visual. "
+                        "3. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
+                        "room BEFORE any renovation. Describe surfaces, damage, clutter, exposed "
+                        "wiring, stains. Be specific and visual. NO people, NO workers. "
                         "Describe ONLY what the camera sees — do not invent objects not visible.\n\n"
                         "Respond in EXACTLY this format:\n"
                         "SCENE_BIBLE: [text]\n"
-                        "CREW: [text]\n"
                         "ELEMENTS: [comma-separated list]\n"
                         "STAGE_1: [text]"
                     ),
@@ -387,7 +381,6 @@ class OpenAIClient:
 
         content = response.choices[0].message.content or ""
         scene_bible = ""
-        crew = ""
         elements = ""
         stage_1_desc = ""
         for line in content.split("\n"):
@@ -395,8 +388,6 @@ class OpenAIClient:
             upper = line.upper()
             if upper.startswith("SCENE_BIBLE:"):
                 scene_bible = line[len("SCENE_BIBLE:"):].strip()
-            elif upper.startswith("CREW:"):
-                crew = line[len("CREW:"):].strip()
             elif upper.startswith("ELEMENTS:"):
                 elements = line[len("ELEMENTS:"):].strip()
             elif upper.startswith("STAGE_1:"):
@@ -406,12 +397,6 @@ class OpenAIClient:
             scene_bible = (
                 f"Ultra photorealistic {style} {room_type}, locked camera, 24mm lens, "
                 f"eye-level centered, {lighting} lighting, arch-viz."
-            )
-        if not crew:
-            crew = (
-                "Worker A: male, blue overalls, yellow hard hat. "
-                "Worker B: female, grey jumpsuit, safety goggles. "
-                "Worker C: male, white t-shirt, brown tool belt."
             )
         if not elements:
             elements = "floor, left wall, right wall, back wall, ceiling, window, door frame, light fixtures"
@@ -423,14 +408,12 @@ class OpenAIClient:
         return {
             "scene_bible": scene_bible,
             "stage_1_description": stage_1_desc,
-            "crew": crew,
             "elements": elements_list,
         }
 
     def generate_next_stage(
         self,
         scene_bible: str,
-        crew: str,
         prev_description: str,
         prev_image_url: str,
         stage_num: int,
@@ -439,7 +422,6 @@ class OpenAIClient:
         renovated_elements: List[str],
         is_cleanup_stage: bool = False,
         room_state: str = "",
-        last_lead: str = "",
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
         remaining_str = ", ".join(remaining) if remaining else "none"
@@ -448,14 +430,15 @@ class OpenAIClient:
 
         if is_cleanup_stage:
             task_focus = (
-                "COMPREHENSIVE CLEANUP of the ENTIRE room in ONE pass. ALL debris, "
-                "ALL peeling paint, ALL exposed wiring, ALL clutter, ALL damaged fixtures "
-                "must be removed in this single stage. After this stage, the room should "
-                "be bare, clean, and ready for renovation. Do not leave anything for later."
+                "LIGHT TIDYING of the room: sweep loose debris off the floor, remove "
+                "scattered clutter and trash. That is ALL. Surfaces KEEP their existing "
+                "wear, age, stains, and patina — the floor still looks scuffed, walls "
+                "still look patchy and dated, ceiling still shows its age. This is NOT "
+                "restoration. The room should look tidied, NOT renovated or pristine."
             )
             element_rule = (
                 "This is the cleanup stage — no specific element from the list is being "
-                "RENOVATED. Clean EVERYTHING at once. ELEMENT must be 'none' because "
+                "RENOVATED. Just tidy up loose items. ELEMENT must be 'none' because "
                 "cleanup is NOT renovation. MATERIAL must also be 'none'."
             )
         else:
@@ -501,78 +484,50 @@ class OpenAIClient:
                 "content": (
                     "You are an architectural renovation director. You will see an image of "
                     "a room and its text description. Plan the NEXT renovation step.\n\n"
+                    "IMPORTANT: There are NO people, NO workers, NO humans in this timelapse. "
+                    "Renovations happen as if by magic — surfaces transform, materials change, "
+                    "fixtures upgrade. Never mention people, hands, tools, crews, or ladders.\n\n"
                     f"This is stage {stage_num} of {total_stages}. {task_focus}\n\n"
-                    f"Scene constants: {scene_bible}\n"
-                    f"Crew: {crew}\n\n"
+                    f"Scene constants: {scene_bible}\n\n"
                     f"{room_state_block}"
                     f"ELEMENT SELECTION: {element_rule}\n\n"
                     "PERMANENCE RULE: Every element visible in the image that is NOT being "
                     "changed in this stage MUST remain exactly as-is — same position, size, "
                     "and appearance. Do NOT remove, shrink, move, or alter anything that "
                     "isn't explicitly part of this stage's edit.\n\n"
-                    "CREW RULE: Every renovation change MUST be performed by one or more of "
-                    "the 3 crew members. Nothing changes on its own. A worker must be visibly "
-                    "doing the work (e.g., kneeling to lay tiles, on a ladder painting, "
-                    "carrying and placing furniture). Describe WHICH worker is doing WHAT "
-                    "with WHICH tool. Max 3 workers visible at once.\n\n"
-                    + (f"ROTATION: Last stage's lead worker was [{last_lead}]. "
-                       "Pick a DIFFERENT crew member as the lead (closest to the element, "
-                       "doing the primary task) this stage.\n"
-                       if last_lead else ""
-                    ) +
-                    "POSE VARIETY: EVERY worker must have a visually DIFFERENT body "
-                    "position, height, AND room location than they had in the previous "
-                    "stage. Changing only the tool is NOT enough — the whole posture must "
-                    "change. BAD: crouching at outlet with pliers → crouching at outlet "
-                    "with screwdriver. GOOD: crouching at outlet → standing on ladder at "
-                    "ceiling, or kneeling on floor at center of room.\n\n" +
-                    "Produce FIVE things:\n"
-                    "1. EDIT (MAX 250 chars): The narrative description of the change "
-                    "for human review. Which worker does what with which tool.\n"
-                    "2. IMAGE_PROMPT (MAX 280 chars): A visual description for the image "
-                    "generation model. Write in this EXACT order — most important first:\n"
+                    "Produce FOUR things:\n"
+                    "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
+                    "stage. Describe the transformation result, not any human action.\n"
+                    "2. IMAGE_PROMPT (MAX 280 chars): Visual description for the image model. "
+                    "Write in this EXACT order — most important first:\n"
                     "   a) CHANGE (first sentence): What the renovated element looks like "
                     "NOW. Be specific about the FULL result — e.g. 'Entire floor covered "
                     "in large pale porcelain tiles with light grout.' not just 'porcelain "
                     "tile floor'. This is the PRIMARY instruction the image model must follow.\n"
-                    "   b) WORKERS (second sentence): ONLY workers active in THIS stage. "
-                    "Physical descriptions (clothing, gender), NEVER labels. Active poses "
-                    "with tools, positioned AT/NEAR the element. Workers not active are "
-                    "OFF-CAMERA — do not mention them.\n"
-                    "   c) CONTEXT (last, brief): Other room elements in 1 short phrase. "
+                    "   b) CONTEXT (second, brief): Other room elements in 1 short phrase. "
                     "Use CURRENT materials from ROOM STATE for renovated elements. "
                     "Example: 'Greige walls, white ceiling, original window and door.'\n"
                     "   Rules:\n"
-                    "   - Existing elements (door, window) are upgraded IN PLACE, same "
-                    "opening size. Never say 'new' as if adding something.\n"
+                    "   - NO people, NO workers, NO tools, NO ladders, NO equipment.\n"
+                    "   - Existing elements (door, window, glazing) are upgraded IN PLACE — "
+                    "SAME opening height, SAME opening width, SAME wall position. The "
+                    "surrounding wall structure NEVER changes. Never use words like "
+                    "'full-height', 'floor-to-ceiling', or 'enlarged'. Only the material, "
+                    "finish, and hardware of the element change — NOT the size of the opening.\n"
+                    "   - For UNCHANGED elements, write 'original [element]' only — do NOT "
+                    "repeat defect adjectives (yellowed, stained, scuffed, chipped, etc.). "
+                    "The image model treats adjectives as instructions.\n"
                     "   - Describe only what is PRESENT and VISIBLE.\n"
                     "3. ELEMENT: Which element(s) from the canonical list are being "
                     "renovated. 'none' for cleanup. Use EXACT names from the list.\n"
                     "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
                     "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
-                    "or 'walls: deep matte greige paint'. 'none' for cleanup.\n"
-                    "5. TRANSITION (MAX 150 chars): An animation-ready description for a "
-                    "video model that will create a 5-second clip transitioning from the "
-                    "PREVIOUS image to the NEW image.\n"
-                    "   CONTINUITY RULE: The video must be physically plausible. Anything "
-                    "NOT visible in the previous image — workers, tools, materials — must "
-                    "visibly ENTER the frame (walked in through doorway, carried in, handed "
-                    "from off-camera, pulled from a bag). Nothing appears from thin air. "
-                    "Anything that disappears must visibly EXIT (walked out, carried out, "
-                    "set down off-camera). Think about what the camera ACTUALLY SEES "
-                    "changing between the two frames and describe the physical motion.\n"
-                    "   Format: First describe entries/exits, then describe the work "
-                    "actions and the resulting surface change.\n"
-                    "   Example: 'Man in black tee walks off-camera through the doorway. "
-                    "Woman in grey jumpsuit walks in carrying a roller and paint tray, "
-                    "rolls greige paint up the walls. Man in navy overalls enters from "
-                    "doorway with masking tape, kneels and tapes along the window frame.'\n\n"
+                    "or 'walls: deep matte greige paint'. 'none' for cleanup.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
                     "ELEMENT: [element name(s)]\n"
-                    "MATERIAL: [text]\n"
-                    "TRANSITION: [text]"
+                    "MATERIAL: [text]"
                 ),
             },
             {
@@ -597,7 +552,7 @@ class OpenAIClient:
         )
 
         def _parse_response(content: str):
-            ed, ip, el, mat, tr = "", "", "", "", ""
+            ed, ip, el, mat = "", "", "", ""
             for line in content.split("\n"):
                 line = line.strip()
                 upper = line.upper()
@@ -609,12 +564,10 @@ class OpenAIClient:
                     el = line[len("ELEMENT:"):].strip()
                 elif upper.startswith("MATERIAL:"):
                     mat = line[len("MATERIAL:"):].strip()
-                elif upper.startswith("TRANSITION:"):
-                    tr = line[len("TRANSITION:"):].strip()
-            return ed, ip, el, mat, tr
+            return ed, ip, el, mat
 
         content = response.choices[0].message.content or ""
-        edit_delta, image_prompt, element_done, material, transition_prompt = _parse_response(content)
+        edit_delta, image_prompt, element_done, material = _parse_response(content)
 
         if not image_prompt:
             backoff = 2.0
@@ -628,7 +581,7 @@ class OpenAIClient:
                         temperature=0.7,
                     )
                     retry_content = retry_resp.choices[0].message.content or ""
-                    ed2, ip2, el2, mat2, tr2 = _parse_response(retry_content)
+                    ed2, ip2, el2, mat2 = _parse_response(retry_content)
                     if ip2:
                         logger.info("[GPT] IMAGE_PROMPT recovered on retry %d", attempt)
                         if not edit_delta and ed2:
@@ -638,8 +591,6 @@ class OpenAIClient:
                             element_done = el2
                         if not material and mat2:
                             material = mat2
-                        if not transition_prompt and tr2:
-                            transition_prompt = tr2
                         break
                 except Exception as exc:
                     logger.warning("[GPT] Retry %d failed: %s", attempt, exc)
@@ -647,18 +598,14 @@ class OpenAIClient:
 
         if not image_prompt:
             remaining_names = ", ".join(remaining[:2]) if remaining else "surfaces"
-            crew_parts = crew.split(".")
-            crew_desc = crew_parts[0].replace("Worker A:", "").strip() if crew_parts else "worker in overalls"
             image_prompt = (
                 f"Room with freshly renovated {remaining_names}. "
-                f"{crew_desc} actively works with tools. Everything else unchanged."
+                "Empty room, no people. Everything else unchanged."
             )
             logger.error("[GPT] IMAGE_PROMPT missing after all retries, using safe fallback: %s", image_prompt)
 
         if not edit_delta:
-            edit_delta = "A worker continues renovation — improving surfaces and fixtures."
-        if not transition_prompt:
-            transition_prompt = "Worker actively transforms the surface with tools."
+            edit_delta = "Renovation continues — surfaces and fixtures are upgraded."
 
         raw_elements = [e.strip() for e in element_done.split(",") if e.strip()] if element_done else []
         canonical_set = {e.lower() for e in all_elements}
@@ -670,31 +617,11 @@ class OpenAIClient:
 
         material_clean = material if material.lower() not in ("none", "") else ""
 
-        lead_worker = ""
-        try:
-            import re
-            worker_entries = re.split(r"Worker\s+[A-Z]:\s*", crew)
-            worker_descs = [w.strip().rstrip(".").strip() for w in worker_entries if w.strip()]
-            prompt_lower = image_prompt.lower()
-            earliest_pos = len(prompt_lower) + 1
-            for desc in worker_descs:
-                keywords = [k.strip() for k in desc.split(",") if k.strip()]
-                if len(keywords) >= 2:
-                    search_term = keywords[1].lower().strip()
-                    pos = prompt_lower.find(search_term)
-                    if 0 <= pos < earliest_pos:
-                        earliest_pos = pos
-                        lead_worker = desc
-        except Exception:
-            pass
-
         return {
             "edit_delta": edit_delta,
             "image_prompt": image_prompt,
-            "transition_prompt": transition_prompt,
             "renovated_element": newly_renovated,
             "material": material_clean,
-            "lead_worker": lead_worker,
         }
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:

@@ -200,29 +200,46 @@ class AIMLAPIClient:
     ) -> Dict[str, Any]:
         """
         Generate a video from an image (and optionally a last-frame image).
-        Supports Kling, Seedance, and other AIMLAPI I2V models.
+        Supports Hailuo, Kling, Seedance, and other AIMLAPI I2V models.
         """
         import time
 
         base = self.settings.aimlapi_base_url.rstrip("/").replace("/v2", "")
-        url = f"{base}/v2/video/generations"
         resolved_model = model or self.settings.i2v_model
-        body: Dict[str, Any] = {
-            "model": resolved_model,
-            "prompt": prompt,
-            "image_url": image_url,
-        }
-        if last_image_url:
-            body["last_image_url"] = last_image_url
-        if duration:
-            body["duration"] = int(duration)
-        if resolution:
-            body["resolution"] = resolution
+        is_hailuo = "hailuo" in resolved_model.lower() or "minimax" in resolved_model.lower()
         is_seedance = "seedance" in resolved_model.lower()
-        if is_seedance:
-            body["watermark"] = False
-            if camera_fixed is not None:
-                body["camerafixed"] = camera_fixed
+
+        if is_hailuo:
+            url = f"{base}/generate/video/minimax/generation"
+            body: Dict[str, Any] = {
+                "model": resolved_model,
+                "prompt": prompt,
+                "image_url": image_url,
+                "enhance_prompt": False,
+            }
+            if last_image_url:
+                body["last_image_url"] = last_image_url
+            if duration:
+                body["duration"] = int(duration)
+            if resolution:
+                body["resolution"] = resolution
+        else:
+            url = f"{base}/v2/video/generations"
+            body = {
+                "model": resolved_model,
+                "prompt": prompt,
+                "image_url": image_url,
+            }
+            if last_image_url:
+                body["last_image_url"] = last_image_url
+            if duration:
+                body["duration"] = int(duration)
+            if resolution:
+                body["resolution"] = resolution
+            if is_seedance:
+                body["watermark"] = False
+                if camera_fixed is not None:
+                    body["camerafixed"] = camera_fixed
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))
@@ -261,8 +278,11 @@ class AIMLAPIClient:
         camera_fixed: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
-        High-level: submit I2V job (Kling, Seedance, etc.), poll until done, return video URL.
+        High-level: submit I2V job (Hailuo, Kling, Seedance, etc.), poll until done, return video URL.
         """
+        resolved_model = model or self.settings.i2v_model
+        is_hailuo = "hailuo" in resolved_model.lower() or "minimax" in resolved_model.lower()
+
         data = self.generate_image_to_video(
             image_url, prompt, model=model,
             last_image_url=last_image_url, duration=duration,
@@ -279,10 +299,11 @@ class AIMLAPIClient:
                 return {"success": True, "video_url": video_url}
             return {"success": False, "error": "No job_id in response", "raw": data}
 
+        poll_path = "/generate/video/minimax/generation" if is_hailuo else "/v2/video/generations"
         poll_result = self.poll_until_complete(
             job_id=str(job_id),
             max_wait=max_wait,
-            status_path="/v2/video/generations",
+            status_path=poll_path,
         )
         video_url = self._extract_video_url(poll_result)
         if video_url:
