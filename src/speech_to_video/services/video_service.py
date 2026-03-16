@@ -315,6 +315,26 @@ class VideoService:
                     logger.info("[Timelapse] Stage %d: GPT vision planning", stage_num)
                     logger.info("[Timelapse] Stage %d room state: %s", stage_num, room_state)
 
+                    remaining_now = [e for e in all_elements if e not in renovated_elements]
+                    surface_names = {"floor", "walls", "ceiling", "window", "door", "lighting"}
+                    additions_remaining = [e for e in remaining_now if e.lower() not in surface_names]
+                    surfaces_remaining = [e for e in remaining_now if e.lower() in surface_names]
+                    stages_left = NUM_STAGES - stage_num
+                    addition_stages_needed = len(additions_remaining) * 2
+                    total_needed = len(surfaces_remaining) + addition_stages_needed
+                    grouping_hint = ""
+                    if additions_remaining and total_needed > stages_left + 1:
+                        grouping_hint = (
+                            f"MANDATORY GROUPING: You have {stages_left + 1} stages left "
+                            f"(including this one) but {len(surfaces_remaining)} surfaces "
+                            f"({', '.join(surfaces_remaining)}) and "
+                            f"{len(additions_remaining)} addition(s) "
+                            f"({', '.join(additions_remaining)}) that each need 2 stages. "
+                            f"You MUST group 2 surface changes into a single stage NOW to "
+                            f"free up a stage for the addition(s)."
+                        )
+                        logger.info("[Timelapse] Stage %d grouping hint: %s", stage_num, grouping_hint)
+
                     gpt_result = self.openai_client.generate_next_stage(
                         scene_bible=scene_bible,
                         prev_description=prev_desc,
@@ -324,16 +344,20 @@ class VideoService:
                         all_elements=all_elements,
                         renovated_elements=renovated_elements,
                         room_state=room_state,
+                        grouping_hint=grouping_hint,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
                     mat_text = gpt_result.get("material", "")
-                    for elem in newly_done:
-                        if elem not in renovated_elements:
-                            renovated_elements.append(elem)
-                        if mat_text:
+                    is_partial = gpt_result.get("is_partial", False)
+                    if not is_partial:
+                        for elem in newly_done:
+                            if elem not in renovated_elements:
+                                renovated_elements.append(elem)
+                    if mat_text:
+                        for elem in newly_done:
                             element_material[elem.lower().strip()] = mat_text
-                    logger.info("[Timelapse] Stage %d element(s): %s | Renovated so far: %s",
-                                stage_num, newly_done, renovated_elements)
+                    logger.info("[Timelapse] Stage %d element(s): %s | Partial: %s | Renovated so far: %s",
+                                stage_num, newly_done, is_partial, renovated_elements)
 
                     stages.append({
                         "stage": stage_num,
@@ -342,6 +366,7 @@ class VideoService:
                         "image_prompt": gpt_result.get("image_prompt", gpt_result["edit_delta"]),
                         "renovated_element": newly_done,
                         "material": mat_text,
+                        "is_partial": is_partial,
                     })
 
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]

@@ -422,6 +422,7 @@ class OpenAIClient:
         all_elements: List[str],
         renovated_elements: List[str],
         room_state: str = "",
+        grouping_hint: str = "",
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
         remaining_str = ", ".join(remaining) if remaining else "none"
@@ -437,9 +438,11 @@ class OpenAIClient:
             "shelving, accent features — anything not currently in the image).\n"
             "ADDITION RULE: If an element is an ADDITION (not currently visible in "
             "the room), spread it across 2 stages: first the structure/frame, then "
-            "the finishing/details. To free up stages, group 2 surface changes into "
-            "one stage earlier."
+            "the finishing/details."
         )
+        if grouping_hint:
+            task_focus += f"\n{grouping_hint}"
+
         if stages_left <= 0 and len(remaining) > 1:
             element_rule = (
                 f"This is the LAST stage. Renovate ALL remaining elements "
@@ -482,7 +485,7 @@ class OpenAIClient:
                     "changed in this stage MUST remain exactly as-is — same position, size, "
                     "and appearance. Do NOT remove, shrink, move, or alter anything that "
                     "isn't explicitly part of this stage's edit.\n\n"
-                    "Produce FOUR things:\n"
+                    "Produce FIVE things:\n"
                     "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
                     "stage. Describe the transformation result, not any human action.\n"
                     "2. IMAGE_PROMPT (MAX 200 chars): A SHORT editing instruction for the "
@@ -503,16 +506,22 @@ class OpenAIClient:
                     "   - Never say 'full-height', 'floor-to-ceiling', or 'enlarged'. "
                     "For door/window/glazing, include 'same size opening'. "
                     "Only material/finish/hardware change.\n"
+                    "   - For ADDITIONS (elements not currently in the image), you MUST "
+                    "specify the exact placement — which wall, which area. The image "
+                    "model cannot guess where to place something new.\n"
                     "3. ELEMENT: Which element(s) from the canonical list are being "
                     "renovated. Use EXACT names from the list.\n"
                     "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
                     "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
-                    "or 'walls: deep matte greige paint'.\n\n"
+                    "or 'walls: deep matte greige paint'.\n"
+                    "5. PARTIAL: 'yes' if this is phase 1 of a 2-stage addition (the element "
+                    "still needs finishing next stage). 'no' if the element is fully done.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
                     "ELEMENT: [element name(s)]\n"
-                    "MATERIAL: [text]"
+                    "MATERIAL: [text]\n"
+                    "PARTIAL: [yes/no]"
                 ),
             },
             {
@@ -537,7 +546,7 @@ class OpenAIClient:
         )
 
         def _parse_response(content: str):
-            ed, ip, el, mat = "", "", "", ""
+            ed, ip, el, mat, partial = "", "", "", "", ""
             for line in content.split("\n"):
                 line = line.strip()
                 upper = line.upper()
@@ -549,10 +558,12 @@ class OpenAIClient:
                     el = line[len("ELEMENT:"):].strip()
                 elif upper.startswith("MATERIAL:"):
                     mat = line[len("MATERIAL:"):].strip()
-            return ed, ip, el, mat
+                elif upper.startswith("PARTIAL:"):
+                    partial = line[len("PARTIAL:"):].strip()
+            return ed, ip, el, mat, partial
 
         content = response.choices[0].message.content or ""
-        edit_delta, image_prompt, element_done, material = _parse_response(content)
+        edit_delta, image_prompt, element_done, material, partial_flag = _parse_response(content)
 
         if not image_prompt:
             backoff = 2.0
@@ -566,7 +577,7 @@ class OpenAIClient:
                         temperature=0.7,
                     )
                     retry_content = retry_resp.choices[0].message.content or ""
-                    ed2, ip2, el2, mat2 = _parse_response(retry_content)
+                    ed2, ip2, el2, mat2, par2 = _parse_response(retry_content)
                     if ip2:
                         logger.info("[GPT] IMAGE_PROMPT recovered on retry %d", attempt)
                         if not edit_delta and ed2:
@@ -576,6 +587,8 @@ class OpenAIClient:
                             element_done = el2
                         if not material and mat2:
                             material = mat2
+                        if not partial_flag and par2:
+                            partial_flag = par2
                         break
                 except Exception as exc:
                     logger.warning("[GPT] Retry %d failed: %s", attempt, exc)
@@ -597,12 +610,14 @@ class OpenAIClient:
         newly_renovated = [e for e in raw_elements if e.lower() in canonical_set and e.lower() != "none"]
 
         material_clean = material if material.lower() not in ("none", "") else ""
+        is_partial = partial_flag.lower().strip() in ("yes", "true", "1")
 
         return {
             "edit_delta": edit_delta,
             "image_prompt": image_prompt,
             "renovated_element": newly_renovated,
             "material": material_clean,
+            "is_partial": is_partial,
         }
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
