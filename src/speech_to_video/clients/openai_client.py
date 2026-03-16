@@ -431,7 +431,14 @@ class OpenAIClient:
         task_focus = (
             "RENOVATION: ADD or UPGRADE one element — install new materials, new "
             "surfaces, new fixtures. The change must be VISUALLY DRAMATIC — a full "
-            "surface or material transformation visible at room scale."
+            "surface or material transformation visible at room scale.\n"
+            "ORDERING RULE: Renovate SURFACE changes first (floor, walls, ceiling, "
+            "window, door, lighting), then ADDITIONS last (built-ins, cabinetry, "
+            "shelving, accent features — anything not currently in the image).\n"
+            "ADDITION RULE: If an element is an ADDITION (not currently visible in "
+            "the room), spread it across 2 stages: first the structure/frame, then "
+            "the finishing/details. To free up stages, group 2 surface changes into "
+            "one stage earlier."
         )
         if stages_left <= 0 and len(remaining) > 1:
             element_rule = (
@@ -442,7 +449,7 @@ class OpenAIClient:
             element_rule = (
                 f"REMAINING: {remaining_str} ({len(remaining)} left, "
                 f"{stages_left} stages after this). You may group 2 related "
-                "elements to ensure all are covered by the final stage."
+                "surface elements to free up stages for additions."
             )
         else:
             element_rule = (
