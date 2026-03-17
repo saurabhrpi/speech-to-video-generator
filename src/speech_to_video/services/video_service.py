@@ -226,6 +226,7 @@ class VideoService:
             return {
                 "scene_bible": scene_bible,
                 "elements": list(all_elements),
+                "addition_elements": list(addition_elements),
                 "renovated_elements": list(renovated_elements),
                 "stages": list(stages),
                 "seed": seed,
@@ -236,6 +237,7 @@ class VideoService:
         # --- Phase 1: Scene Bible + Elements + Stage 1 description ---
         scene_bible = resume.get("scene_bible", "")
         all_elements: List[str] = list(resume.get("elements") or [])
+        addition_elements: List[str] = list(resume.get("addition_elements") or [])
         renovated_elements: List[str] = list(resume.get("renovated_elements") or [])
         stages: List[Dict] = list(resume.get("stages") or [])
         keyframe_images: List[Dict] = list(resume.get("keyframe_images") or [])
@@ -255,9 +257,11 @@ class VideoService:
             )
             scene_bible = plan["scene_bible"]
             all_elements = plan["elements"]
+            addition_elements = plan.get("additions", [])
             stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": ""}]
             logger.info("[Timelapse] Scene bible: %s", scene_bible)
             logger.info("[Timelapse] Elements to renovate: %s", all_elements)
+            logger.info("[Timelapse] Addition elements (GPT-classified): %s", addition_elements)
             _notify("plan", 1, 1, "Plan complete", partial_result=_state_snapshot())
         else:
             _notify("plan", 1, 1, f"Using existing plan ({len(stages)} stages)")
@@ -316,9 +320,22 @@ class VideoService:
                     logger.info("[Timelapse] Stage %d room state: %s", stage_num, room_state)
 
                     remaining_now = [e for e in all_elements if e not in renovated_elements]
-                    surface_names = {"floor", "walls", "ceiling", "window", "door", "lighting"}
-                    additions_remaining = [e for e in remaining_now if e.lower() not in surface_names]
-                    surfaces_remaining = [e for e in remaining_now if e.lower() in surface_names]
+                    if not remaining_now:
+                        logger.info("[Timelapse] Stage %d: all elements renovated, stopping early", stage_num)
+                        last_stage_phase = f"stage_{NUM_STAGES}"
+                        if stop_after and stop_after.startswith("stage_"):
+                            return {
+                                "success": True,
+                                "phase_completed": last_stage_phase,
+                                "pipeline": "v2",
+                                "all_images_done": True,
+                                **_state_snapshot(),
+                            }
+                        break
+
+                    addition_names = {a.lower() for a in addition_elements}
+                    additions_remaining = [e for e in remaining_now if e.lower() in addition_names]
+                    surfaces_remaining = [e for e in remaining_now if e.lower() not in addition_names]
                     stages_left = NUM_STAGES - stage_num
                     addition_stages_needed = len(additions_remaining) * 2
                     total_needed = len(surfaces_remaining) + addition_stages_needed

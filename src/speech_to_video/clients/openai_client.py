@@ -340,14 +340,18 @@ class OpenAIClient:
                     "role": "system",
                     "content": (
                         "You are an expert architectural visualization director.\n\n"
-                        "Produce THREE things for a room renovation timelapse:\n\n"
+                        "Produce FOUR things for a room renovation timelapse:\n\n"
                         "1. SCENE BIBLE (MAX 300 chars): Camera position/lens, room shape & "
                         "dimensions, architectural bones (walls, ceiling, floor, windows, doors), "
                         "perspective, light direction, render style. Terse comma-separated shorthand.\n\n"
                         "2. ELEMENTS: List the HIGH-LEVEL visual element groups in this room as a "
-                        "comma-separated list. EXACTLY 5 to 7 items. Group related sub-parts into "
-                        "ONE element. Use GENERIC FUNCTIONAL CATEGORY names — the element name "
-                        "describes the SLOT in the room, not the specific fixture that fills it.\n"
+                        "comma-separated list. EXACTLY 5 to 7 items. Only include elements that "
+                        "ALREADY EXIST in the space. Do not invent structural elements that would "
+                        "change the fundamental nature of the room (e.g., do not add a ceiling to "
+                        "an open-air space, do not add walls to an open pavilion). Group related "
+                        "sub-parts into ONE element. Use GENERIC FUNCTIONAL CATEGORY names — the "
+                        "element name describes the SLOT in the room, not the specific fixture "
+                        "that fills it.\n"
                         "GOOD: floor, walls, ceiling, window, door, lighting, cabinetry\n"
                         "BAD: chandelier, pendant, sconce (use 'lighting').\n"
                         "BAD: hardwood, tile, carpet (use 'floor').\n"
@@ -355,8 +359,18 @@ class OpenAIClient:
                         "BAD: Wall A drywall, Wall B drywall (use 'walls').\n"
                         "Each element must be a single word or two-word generic label. "
                         "NO specific fixture types, NO materials, NO sub-components. "
-                        "STRICTLY 5-7 items.\n\n"
-                        "3. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
+                        "STRICTLY 5-7 items.\n"
+                        "FEATURE COVERAGE: Every user-requested feature MUST be represented "
+                        "in the ELEMENTS list — either as its own element or grouped into an "
+                        "existing one. Do not drop any feature the user specified.\n"
+                        "FEATURE PROTECTION: User-requested features are DESIRABLE design "
+                        "elements. They should be enhanced or highlighted during renovation — "
+                        "NEVER removed, covered, or replaced.\n\n"
+                        "3. ADDITIONS: From the ELEMENTS list above, list ONLY the elements "
+                        "that do NOT currently exist in the space and would be newly added "
+                        "during renovation (e.g., cabinetry in a bare room, shelving that "
+                        "isn't there yet). If all elements already exist, write 'none'.\n\n"
+                        "4. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
                         "room BEFORE any renovation. The room is EMPTY — NO loose items, NO "
                         "clutter, NO boxes, NO newspapers, NO debris on the floor. Describe "
                         "only surface-level wear: scuffs, stains, cracks, patchy paint, dated "
@@ -364,6 +378,7 @@ class OpenAIClient:
                         "Respond in EXACTLY this format:\n"
                         "SCENE_BIBLE: [text]\n"
                         "ELEMENTS: [comma-separated list]\n"
+                        "ADDITIONS: [comma-separated list or 'none']\n"
                         "STAGE_1: [text]"
                     ),
                 },
@@ -383,6 +398,7 @@ class OpenAIClient:
         content = response.choices[0].message.content or ""
         scene_bible = ""
         elements = ""
+        additions = ""
         stage_1_desc = ""
         for line in content.split("\n"):
             line = line.strip()
@@ -391,6 +407,8 @@ class OpenAIClient:
                 scene_bible = line[len("SCENE_BIBLE:"):].strip()
             elif upper.startswith("ELEMENTS:"):
                 elements = line[len("ELEMENTS:"):].strip()
+            elif upper.startswith("ADDITIONS:"):
+                additions = line[len("ADDITIONS:"):].strip()
             elif upper.startswith("STAGE_1:"):
                 stage_1_desc = line[len("STAGE_1:"):].strip()
 
@@ -405,11 +423,15 @@ class OpenAIClient:
             stage_1_desc = f"Dilapidated {room_type}, bare walls, exposed wiring, damaged surfaces."
 
         elements_list = [e.strip() for e in elements.split(",") if e.strip()]
+        additions_list = [
+            a.strip() for a in additions.split(",") if a.strip()
+        ] if additions.lower() not in ("none", "") else []
 
         return {
             "scene_bible": scene_bible,
             "stage_1_description": stage_1_desc,
             "elements": elements_list,
+            "additions": additions_list,
         }
 
     def generate_next_stage(
@@ -485,6 +507,10 @@ class OpenAIClient:
                     "changed in this stage MUST remain exactly as-is — same position, size, "
                     "and appearance. Do NOT remove, shrink, move, or alter anything that "
                     "isn't explicitly part of this stage's edit.\n\n"
+                    "FEATURE PROTECTION: User-requested features are DESIRABLE design "
+                    "elements. Enhance or highlight them — NEVER remove, cover, or "
+                    "replace them. For example, if the user requested 'exposed brick', "
+                    "the brick must remain visible throughout all stages.\n\n"
                     "Produce FIVE things:\n"
                     "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
                     "stage. Describe the transformation result, not any human action.\n"
@@ -499,10 +525,10 @@ class OpenAIClient:
                     "automatically.\n"
                     "   - End with 'Change nothing else.'\n"
                     "   - NO people, NO workers, NO tools, NO ladders.\n"
-                    "   - Use PLAIN element names only: 'door', 'window', 'ceiling', "
-                    "'floor', 'walls'. NO qualifiers like 'entry', 'accent', 'main', "
-                    "'primary', 'rear'. The image model uses the existing image to "
-                    "locate the element.\n"
+                    "   - In IMAGE_PROMPT, refer to each element using ONLY its exact "
+                    "name from the canonical list — no words before or after it. "
+                    "'door' not 'rear-right door', 'opening' not 'parapet opening'. "
+                    "The image model locates the element from the previous image.\n"
                     "   - Never say 'full-height', 'floor-to-ceiling', or 'enlarged'. "
                     "For door/window/glazing, include 'same size opening'. "
                     "Only material/finish/hardware change.\n"
