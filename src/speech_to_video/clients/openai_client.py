@@ -346,12 +346,15 @@ class OpenAIClient:
                         "perspective, light direction, render style. Terse comma-separated shorthand.\n\n"
                         "2. ELEMENTS: List the HIGH-LEVEL visual element groups in this room as a "
                         "comma-separated list. EXACTLY 5 to 7 items. Only include elements that "
-                        "ALREADY EXIST in the space. Do not invent structural elements that would "
-                        "change the fundamental nature of the room (e.g., do not add a ceiling to "
-                        "an open-air space, do not add walls to an open pavilion). Group related "
-                        "sub-parts into ONE element. Use GENERIC FUNCTIONAL CATEGORY names — the "
-                        "element name describes the SLOT in the room, not the specific fixture "
-                        "that fills it.\n"
+                        "ALREADY EXIST in the space AND have a tangible, visible surface or "
+                        "fixture that can be refinished, repainted, retiled, or replaced. "
+                        "Do not list architectural voids — open air, gaps, or empty spans "
+                        "have no surface to renovate. Do not invent structural elements that "
+                        "would change the fundamental nature of the room (e.g., do not add a "
+                        "ceiling to an open-air space, do not add walls to an open pavilion). "
+                        "Group related sub-parts into ONE element. Use GENERIC FUNCTIONAL "
+                        "CATEGORY names — the element name describes the SLOT in the room, "
+                        "not the specific fixture that fills it.\n"
                         "GOOD: floor, walls, ceiling, window, door, lighting, cabinetry\n"
                         "BAD: chandelier, pendant, sconce (use 'lighting').\n"
                         "BAD: hardwood, tile, carpet (use 'floor').\n"
@@ -445,6 +448,7 @@ class OpenAIClient:
         renovated_elements: List[str],
         room_state: str = "",
         grouping_hint: str = "",
+        user_features: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
         remaining_str = ", ".join(remaining) if remaining else "none"
@@ -507,10 +511,7 @@ class OpenAIClient:
                     "changed in this stage MUST remain exactly as-is — same position, size, "
                     "and appearance. Do NOT remove, shrink, move, or alter anything that "
                     "isn't explicitly part of this stage's edit.\n\n"
-                    "FEATURE PROTECTION: User-requested features are DESIRABLE design "
-                    "elements. Enhance or highlight them — NEVER remove, cover, or "
-                    "replace them. For example, if the user requested 'exposed brick', "
-                    "the brick must remain visible throughout all stages.\n\n"
+                    f"{'FEATURE PROTECTION: The user specifically requested these features: ' + ', '.join(user_features) + '. These are DESIRABLE — enhance or highlight them, NEVER remove, cover, or replace them. When renovating an element that shares space with one of these features, your IMAGE_PROMPT MUST explicitly exclude the feature from the change (e.g., walls refinished in smooth render — exposed brick wall unchanged).' + chr(10) + chr(10) if user_features else ''}"
                     "Produce FIVE things:\n"
                     "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
                     "stage. Describe the transformation result, not any human action.\n"
@@ -529,14 +530,21 @@ class OpenAIClient:
                     "name from the canonical list — no words before or after it. "
                     "'door' not 'rear-right door', 'opening' not 'parapet opening'. "
                     "The image model locates the element from the previous image.\n"
-                    "   - Never say 'full-height', 'floor-to-ceiling', or 'enlarged'. "
-                    "For door/window/glazing, include 'same size opening'. "
-                    "Only material/finish/hardware change.\n"
+                    "   - SURFACE-ONLY RULE: Renovation changes surface treatment "
+                    "(material, finish, color, hardware) — NEVER physical dimensions, "
+                    "footprint, or structural nature. Every element keeps its exact "
+                    "size, shape, position, and opening. Do not enclose open-air "
+                    "spaces, do not resize openings, do not add structure where none "
+                    "exists. A subtle-but-accurate change is always better than a "
+                    "dramatic-but-structurally-wrong one. If the only honest "
+                    "renovation for an element is subtle, do the subtle thing. "
+                    "The image model interprets any dimensional language as "
+                    "an instruction to reshape.\n"
                     "   - For ADDITIONS (elements not currently in the image), you MUST "
                     "specify the exact placement — which wall, which area. The image "
                     "model cannot guess where to place something new.\n"
-                    "3. ELEMENT: Which element(s) from the canonical list are being "
-                    "renovated. Use EXACT names from the list.\n"
+                    f"3. ELEMENT: Pick from EXACTLY this list: [{remaining_str}]. "
+                    "Write the name exactly as shown. Do NOT abbreviate or rephrase.\n"
                     "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
                     "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
                     "or 'walls: deep matte greige paint'.\n"
@@ -565,11 +573,31 @@ class OpenAIClient:
             },
         ]
 
-        response = self.client.chat.completions.create(
-            model=self.settings.openai_chat_model,
-            messages=messages,
-            temperature=0.7,
-        )
+        response = None
+        api_backoff = 3.0
+        for api_attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.settings.openai_chat_model,
+                    messages=messages,
+                    temperature=0.7,
+                )
+                break
+            except Exception as exc:
+                exc_msg = str(exc).lower()
+                is_transient = any(kw in exc_msg for kw in [
+                    "timeout", "download", "invalid_image_url",
+                    "server_error", "rate_limit", "502", "503", "529",
+                ])
+                if is_transient and api_attempt < 3:
+                    logger.warning(
+                        "[GPT] Vision API call failed (attempt %d/4): %s — retrying in %.0fs",
+                        api_attempt + 1, exc, api_backoff,
+                    )
+                    time.sleep(api_backoff)
+                    api_backoff *= 2.0
+                    continue
+                raise
 
         def _parse_response(content: str):
             ed, ip, el, mat, partial = "", "", "", "", ""
@@ -633,7 +661,24 @@ class OpenAIClient:
 
         raw_elements = [e.strip() for e in element_done.split(",") if e.strip()] if element_done else []
         canonical_set = {e.lower() for e in all_elements}
-        newly_renovated = [e for e in raw_elements if e.lower() in canonical_set and e.lower() != "none"]
+        canonical_list_lower = [e.lower() for e in all_elements]
+
+        def _match_element(raw: str) -> Optional[str]:
+            low = raw.lower()
+            if low in canonical_set and low != "none":
+                return raw
+            for canon in canonical_list_lower:
+                if low in canon or canon in low:
+                    idx = canonical_list_lower.index(canon)
+                    logger.info("[GPT] Fuzzy element match: '%s' -> '%s'", raw, all_elements[idx])
+                    return all_elements[idx]
+            return None
+
+        newly_renovated = []
+        for raw in raw_elements:
+            matched = _match_element(raw)
+            if matched and matched not in newly_renovated:
+                newly_renovated.append(matched)
 
         material_clean = material if material.lower() not in ("none", "") else ""
         is_partial = partial_flag.lower().strip() in ("yes", "true", "1")

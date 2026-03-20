@@ -362,6 +362,7 @@ class VideoService:
                         renovated_elements=renovated_elements,
                         room_state=room_state,
                         grouping_hint=grouping_hint,
+                        user_features=request.features,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
                     mat_text = gpt_result.get("material", "")
