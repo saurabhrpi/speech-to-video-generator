@@ -719,4 +719,74 @@ class OpenAIClient:
         
         return {"clip1": clip1, "clip2": clip2}
 
+    def generate_transition_prompt(
+        self,
+        image_url_from: str,
+        image_url_to: str,
+    ) -> str:
+        """
+        Send two images to GPT Vision and get back a transition prompt
+        suitable for an image-to-video model.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are given two images of the same room at different stages "
+                    "of renovation. Write a single short prompt (MAX 150 chars) for "
+                    "a video model that will generate a smooth time-lapse transition "
+                    "from image 1 to image 2.\n\n"
+                    "Rules:\n"
+                    "- Describe what changes between the two images.\n"
+                    "- No people, no tools, no workers.\n"
+                    "- Camera stays fixed. Room structure stays fixed.\n"
+                    "- Surfaces and materials transform gradually.\n\n"
+                    "Respond with ONLY the prompt text, nothing else."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Image 1 (before):"},
+                    {"type": "image_url", "image_url": {"url": image_url_from}},
+                    {"type": "text", "text": "Image 2 (after):"},
+                    {"type": "image_url", "image_url": {"url": image_url_to}},
+                ],
+            },
+        ]
+
+        api_backoff = 3.0
+        for api_attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.settings.openai_chat_model,
+                    messages=messages,
+                    temperature=0.7,
+                )
+                break
+            except Exception as exc:
+                exc_msg = str(exc).lower()
+                is_transient = any(kw in exc_msg for kw in [
+                    "timeout", "download", "invalid_image_url",
+                    "server_error", "rate_limit", "502", "503", "529",
+                ])
+                if is_transient and api_attempt < 3:
+                    logger.warning(
+                        "[GPT] Transition prompt call failed (attempt %d/4): %s — retrying in %.0fs",
+                        api_attempt + 1, exc, api_backoff,
+                    )
+                    time.sleep(api_backoff)
+                    api_backoff *= 2.0
+                    continue
+                raise
+
+        content = response.choices[0].message.content or ""
+        prompt = content.strip()
+        if not prompt:
+            prompt = (
+                "Time-lapse transformation: room surfaces and materials smoothly "
+                "change. No people, no tools. Camera fixed. Gradual transition."
+            )
+        return prompt
+
 

@@ -240,6 +240,9 @@ class AIMLAPIClient:
                 body["watermark"] = False
                 if camera_fixed is not None:
                     body["camerafixed"] = camera_fixed
+            if "kling" in resolved_model.lower():
+                body["generate_audio"] = False
+                body["duration"] = 3
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))

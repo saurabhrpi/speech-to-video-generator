@@ -197,6 +197,7 @@ class VideoService:
         stop_after: Optional[str] = None,
         resume_state: Optional[Dict] = None,
         on_progress: Optional[Callable] = None,
+        video_model: str = "cheap",
     ) -> Dict:
         """
         Iterative timelapse pipeline: GPT plans each stage after seeing the
@@ -222,6 +223,9 @@ class VideoService:
         resume = resume_state or {}
         seed = resume.get("seed", random.randint(1, 2**31 - 1))
 
+        if resume_state and resume_state.get("video_model"):
+            video_model = resume_state["video_model"]
+
         def _state_snapshot():
             return {
                 "scene_bible": scene_bible,
@@ -232,6 +236,8 @@ class VideoService:
                 "seed": seed,
                 "keyframe_images": list(keyframe_images),
                 "transition_videos": list(transition_videos),
+                "transition_prompts": list(transition_prompts),
+                "video_model": video_model,
             }
 
         # --- Phase 1: Scene Bible + Elements + Stage 1 description ---
@@ -242,6 +248,7 @@ class VideoService:
         stages: List[Dict] = list(resume.get("stages") or [])
         keyframe_images: List[Dict] = list(resume.get("keyframe_images") or [])
         transition_videos: List[str] = list(resume.get("transition_videos") or [])
+        transition_prompts: List[str] = list(resume.get("transition_prompts") or [])
 
         if not scene_bible:
             _notify("plan", 0, 1, "Generating scene bible, elements + stage 1 description...")
@@ -450,7 +457,7 @@ class VideoService:
                 "crane_up": "Smooth crane rise upward revealing the space.",
             }
             camera_instruction = camera_cues.get(camera, camera_cues["static"])
-            i2v_model = self.settings.i2v_model
+            i2v_model = self.settings.kling_i2v_model if video_model == "expensive" else self.settings.i2v_model
             i2v_resolution = self.settings.i2v_resolution
             i2v_duration = self.settings.i2v_duration
 
@@ -468,6 +475,7 @@ class VideoService:
                     f"No people, no tools. {camera_instruction} "
                     "Room structure stays fixed. Surfaces and materials change gradually."
                 )
+                transition_prompts.append(motion_prompt)
 
                 logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
                 t0 = _t.time()
@@ -512,7 +520,7 @@ class VideoService:
                     "Generating final reveal pan...")
             logger.info("[Timelapse] Generating final pan shot")
             last_kf = keyframe_images[-1]
-            i2v_model = self.settings.i2v_model
+            i2v_model = self.settings.kling_i2v_model if video_model == "expensive" else self.settings.i2v_model
             i2v_resolution = self.settings.i2v_resolution
 
             room_details = _build_room_state()
@@ -534,6 +542,7 @@ class VideoService:
                 camera_fixed=False,
             )
             elapsed_s = int(_t.time() - t0)
+            transition_prompts.append(pan_prompt)
             pan_url = pan_result.get("video_url")
             if pan_url:
                 transition_videos.append(pan_url)
@@ -568,6 +577,113 @@ class VideoService:
                 **_state_snapshot(),
             }
         return {"success": False, "error": stitched.get("error", "Stitching failed"), **_state_snapshot()}
+
+    def generate_custom_videos(
+        self,
+        image_urls: List[str],
+        model: str = "cheap",
+        stop_after: Optional[str] = None,
+        resume_state: Optional[Dict] = None,
+        on_progress: Optional[Callable] = None,
+    ) -> Dict:
+        """
+        Generate transition videos from user-provided ordered images.
+        Uses GPT Vision to create transition prompts for each pair.
+        Supports step-by-step generation via stop_after/resume_state.
+        """
+        import time as _t
+
+        def _notify(phase, step, total, message, partial_result=None):
+            if on_progress:
+                on_progress(phase, step, total, message, partial_result=partial_result)
+
+        transition_videos: List[str] = []
+        transition_prompts: List[str] = []
+        if resume_state:
+            transition_videos = list(resume_state.get("transition_videos") or [])
+            transition_prompts = list(resume_state.get("transition_prompts") or [])
+
+        def _state_snapshot():
+            return {
+                "image_urls": image_urls,
+                "model": model,
+                "transition_videos": list(transition_videos),
+                "transition_prompts": list(transition_prompts),
+            }
+
+        total_transitions = len(image_urls) - 1
+        start_idx = len(transition_videos)
+
+        if total_transitions < 1:
+            return {"success": False, "error": "Need at least 2 images"}
+
+        if start_idx >= total_transitions:
+            _notify("videos", total_transitions, total_transitions, "All transitions already done")
+            return {
+                "success": True, "phase_completed": "all_done",
+                **_state_snapshot(),
+            }
+
+        resolved_model = self.settings.kling_i2v_model if model == "expensive" else self.settings.i2v_model
+        i2v_resolution = self.settings.i2v_resolution
+        i2v_duration = self.settings.i2v_duration
+
+        for i in range(start_idx, total_transitions):
+            video_phase = f"video_{i + 1}"
+            _notify(video_phase, 0, 2,
+                    f"GPT analyzing images {i + 1} and {i + 2}...")
+
+            prompt = self.openai_client.generate_transition_prompt(
+                image_url_from=image_urls[i],
+                image_url_to=image_urls[i + 1],
+            )
+            transition_prompts.append(prompt)
+            logger.info("[CustomVideo] Transition %d->%d prompt: %s", i + 1, i + 2, prompt)
+
+            _notify(video_phase, 1, 2,
+                    f"Generating transition video {i + 1} of {total_transitions}...")
+
+            logger.info("[CustomVideo] Generating transition %d->%d (%s)", i + 1, i + 2, resolved_model)
+            t0 = _t.time()
+            i2v_result = self.aiml_client.generate_and_poll_i2v(
+                image_url=image_urls[i],
+                last_image_url=image_urls[i + 1],
+                prompt=prompt,
+                model=resolved_model,
+                resolution=i2v_resolution,
+                duration=i2v_duration,
+            )
+            elapsed_s = int(_t.time() - t0)
+
+            if not i2v_result.get("success"):
+                logger.error("[CustomVideo] Transition %d->%d FAILED after %ds: %s",
+                             i + 1, i + 2, elapsed_s, i2v_result.get("error"))
+                return {
+                    "success": False,
+                    "error": f"Transition video failed between image {i + 1} and {i + 2}",
+                    "video_error": i2v_result.get("error"),
+                    **_state_snapshot(),
+                }
+
+            video_url = i2v_result.get("video_url")
+            if video_url:
+                transition_videos.append(video_url)
+                logger.info("[CustomVideo] Transition %d->%d completed in %ds: %s",
+                            i + 1, i + 2, elapsed_s, video_url)
+                _notify(video_phase, 2, 2,
+                        f"Transition {i + 1} of {total_transitions} complete",
+                        partial_result=_state_snapshot())
+
+            if stop_after == video_phase:
+                return {
+                    "success": True, "phase_completed": video_phase,
+                    **_state_snapshot(),
+                }
+
+        return {
+            "success": True, "phase_completed": "all_done",
+            **_state_snapshot(),
+        }
 
     def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
         """
