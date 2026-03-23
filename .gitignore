@@ -59,3 +59,7 @@ web/node_modules/
 web/dist/
 web/.vite/
 web/*.log
+
+#Cursor
+.cursor/
+CLAUDE.md

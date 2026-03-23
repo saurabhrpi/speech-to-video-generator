@@ -23,7 +23,7 @@ from ..services.video_service import VideoService
 from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
 from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response
-from ..utils.video import stitch_videos_detailed
+from ..utils.video import stitch_videos_detailed, stitch_timelapse_clips
 
 
 settings = get_settings()
@@ -552,6 +552,10 @@ async def generate_timelapse(request: Request):
     stop_after = body.get("stop_after")
     resume_state = body.get("resume_state")
 
+    video_model = body.get("video_model", "cheap")
+    if video_model not in ("cheap", "expensive"):
+        video_model = "cheap"
+
     job_id = create_job()
 
     def on_progress(phase, step, total, message, partial_result=None):
@@ -567,9 +571,98 @@ async def generate_timelapse(request: Request):
         stop_after=stop_after,
         resume_state=resume_state,
         on_progress=on_progress,
+        video_model=video_model,
     )
 
     return JSONResponse({"job_id": job_id})
+
+
+@app.post("/api/generate/custom-videos")
+async def generate_custom_videos(request: Request):
+    from ..utils.job_manager import create_job, update_job, start_job
+
+    if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
+        raise HTTPException(status_code=401, detail="login_required")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    image_urls = body.get("image_urls") or []
+    if not isinstance(image_urls, list) or len(image_urls) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 image_urls are required")
+
+    for url in image_urls:
+        if not isinstance(url, str) or not url.startswith("http"):
+            raise HTTPException(status_code=400, detail="All image_urls must be valid HTTP URLs")
+
+    model = body.get("model", "cheap")
+    if model not in ("cheap", "expensive"):
+        raise HTTPException(status_code=400, detail="model must be 'cheap' or 'expensive'")
+
+    stop_after = body.get("stop_after")
+    resume_state = body.get("resume_state")
+
+    job_id = create_job()
+
+    def on_progress(phase, step, total, message, partial_result=None):
+        updates = {"phase": phase, "step": step, "total_steps": total, "message": message}
+        if partial_result is not None:
+            updates["partial_result"] = partial_result
+        update_job(job_id, **updates)
+
+    start_job(
+        job_id,
+        service.generate_custom_videos,
+        image_urls=image_urls,
+        model=model,
+        stop_after=stop_after,
+        resume_state=resume_state,
+        on_progress=on_progress,
+    )
+
+    return JSONResponse({"job_id": job_id})
+
+
+@app.post("/api/generate/stitch-custom")
+async def stitch_custom_videos(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    video_urls = body.get("video_urls") or []
+    if not isinstance(video_urls, list) or len(video_urls) < 1:
+        raise HTTPException(status_code=400, detail="At least 1 video URL is required")
+
+    for url in video_urls:
+        if not isinstance(url, str) or not url.startswith("http"):
+            raise HTTPException(status_code=400, detail="All video_urls must be valid HTTP URLs")
+
+    result = stitch_timelapse_clips(
+        video_sources=video_urls, speed=1.5, dissolve=False, hold_first_frame=0.0,
+    )
+
+    if result.get("success") and result.get("output_path"):
+        out_path = result["output_path"]
+        ns = os.getenv("CLIPS_NAMESPACE", "")
+        user = request.session.get("user") or {}
+        user_ns = user.get("sub") or ""
+        namespace = "/".join([p for p in [ns, user_ns] if p])
+        base_dir = os.getenv("CLIPS_DIR") or os.path.join(os.path.abspath(os.getcwd()), "clips")
+        target_dir = os.path.join(base_dir, *(namespace.split("/") if namespace else []), "stitched")
+        os.makedirs(target_dir, exist_ok=True)
+        import time as _t
+        fname = f"stitched-{int(_t.time())}.mp4"
+        dest = os.path.join(target_dir, fname)
+        try:
+            shutil.copyfile(out_path, dest)
+            result["stitched_url"] = f"/api/stitched/{fname}"
+        except Exception as exc:
+            result.setdefault("error", str(exc))
+
+    return JSONResponse(result)
 
 
 @app.get("/api/jobs/{job_id}")

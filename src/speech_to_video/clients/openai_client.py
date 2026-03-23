@@ -340,14 +340,21 @@ class OpenAIClient:
                     "role": "system",
                     "content": (
                         "You are an expert architectural visualization director.\n\n"
-                        "Produce THREE things for a room renovation timelapse:\n\n"
+                        "Produce FOUR things for a room renovation timelapse:\n\n"
                         "1. SCENE BIBLE (MAX 300 chars): Camera position/lens, room shape & "
                         "dimensions, architectural bones (walls, ceiling, floor, windows, doors), "
                         "perspective, light direction, render style. Terse comma-separated shorthand.\n\n"
                         "2. ELEMENTS: List the HIGH-LEVEL visual element groups in this room as a "
-                        "comma-separated list. EXACTLY 5 to 7 items. Group related sub-parts into "
-                        "ONE element. Use GENERIC FUNCTIONAL CATEGORY names — the element name "
-                        "describes the SLOT in the room, not the specific fixture that fills it.\n"
+                        "comma-separated list. EXACTLY 5 to 7 items. Only include elements that "
+                        "ALREADY EXIST in the space AND have a tangible, visible surface or "
+                        "fixture that can be refinished, repainted, retiled, or replaced. "
+                        "Do not list architectural voids — open air, gaps, or empty spans "
+                        "have no surface to renovate. Do not invent structural elements that "
+                        "would change the fundamental nature of the room (e.g., do not add a "
+                        "ceiling to an open-air space, do not add walls to an open pavilion). "
+                        "Group related sub-parts into ONE element. Use GENERIC FUNCTIONAL "
+                        "CATEGORY names — the element name describes the SLOT in the room, "
+                        "not the specific fixture that fills it.\n"
                         "GOOD: floor, walls, ceiling, window, door, lighting, cabinetry\n"
                         "BAD: chandelier, pendant, sconce (use 'lighting').\n"
                         "BAD: hardwood, tile, carpet (use 'floor').\n"
@@ -355,14 +362,26 @@ class OpenAIClient:
                         "BAD: Wall A drywall, Wall B drywall (use 'walls').\n"
                         "Each element must be a single word or two-word generic label. "
                         "NO specific fixture types, NO materials, NO sub-components. "
-                        "STRICTLY 5-7 items.\n\n"
-                        "3. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
-                        "room BEFORE any renovation. Describe surfaces, damage, clutter, exposed "
-                        "wiring, stains. Be specific and visual. NO people, NO workers. "
-                        "Describe ONLY what the camera sees — do not invent objects not visible.\n\n"
+                        "STRICTLY 5-7 items.\n"
+                        "FEATURE COVERAGE: Every user-requested feature MUST be represented "
+                        "in the ELEMENTS list — either as its own element or grouped into an "
+                        "existing one. Do not drop any feature the user specified.\n"
+                        "FEATURE PROTECTION: User-requested features are DESIRABLE design "
+                        "elements. They should be enhanced or highlighted during renovation — "
+                        "NEVER removed, covered, or replaced.\n\n"
+                        "3. ADDITIONS: From the ELEMENTS list above, list ONLY the elements "
+                        "that do NOT currently exist in the space and would be newly added "
+                        "during renovation (e.g., cabinetry in a bare room, shelving that "
+                        "isn't there yet). If all elements already exist, write 'none'.\n\n"
+                        "4. STAGE 1 DESCRIPTION (MAX 200 chars): The current visible state of the "
+                        "room BEFORE any renovation. The room is EMPTY — NO loose items, NO "
+                        "clutter, NO boxes, NO newspapers, NO debris on the floor. Describe "
+                        "only surface-level wear: scuffs, stains, cracks, patchy paint, dated "
+                        "fixtures. NO people. Be specific and visual.\n\n"
                         "Respond in EXACTLY this format:\n"
                         "SCENE_BIBLE: [text]\n"
                         "ELEMENTS: [comma-separated list]\n"
+                        "ADDITIONS: [comma-separated list or 'none']\n"
                         "STAGE_1: [text]"
                     ),
                 },
@@ -382,6 +401,7 @@ class OpenAIClient:
         content = response.choices[0].message.content or ""
         scene_bible = ""
         elements = ""
+        additions = ""
         stage_1_desc = ""
         for line in content.split("\n"):
             line = line.strip()
@@ -390,6 +410,8 @@ class OpenAIClient:
                 scene_bible = line[len("SCENE_BIBLE:"):].strip()
             elif upper.startswith("ELEMENTS:"):
                 elements = line[len("ELEMENTS:"):].strip()
+            elif upper.startswith("ADDITIONS:"):
+                additions = line[len("ADDITIONS:"):].strip()
             elif upper.startswith("STAGE_1:"):
                 stage_1_desc = line[len("STAGE_1:"):].strip()
 
@@ -404,11 +426,15 @@ class OpenAIClient:
             stage_1_desc = f"Dilapidated {room_type}, bare walls, exposed wiring, damaged surfaces."
 
         elements_list = [e.strip() for e in elements.split(",") if e.strip()]
+        additions_list = [
+            a.strip() for a in additions.split(",") if a.strip()
+        ] if additions.lower() not in ("none", "") else []
 
         return {
             "scene_bible": scene_bible,
             "stage_1_description": stage_1_desc,
             "elements": elements_list,
+            "additions": additions_list,
         }
 
     def generate_next_stage(
@@ -420,114 +446,92 @@ class OpenAIClient:
         total_stages: int,
         all_elements: List[str],
         renovated_elements: List[str],
-        is_cleanup_stage: bool = False,
         room_state: str = "",
+        grouping_hint: str = "",
+        user_features: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         remaining = [e for e in all_elements if e not in renovated_elements]
         remaining_str = ", ".join(remaining) if remaining else "none"
         renovated_str = ", ".join(renovated_elements) if renovated_elements else "none yet"
         stages_left = total_stages - stage_num
 
-        if is_cleanup_stage:
-            task_focus = (
-                "LIGHT TIDYING of the room: sweep loose debris off the floor, remove "
-                "scattered clutter and trash. That is ALL. Surfaces KEEP their existing "
-                "wear, age, stains, and patina — the floor still looks scuffed, walls "
-                "still look patchy and dated, ceiling still shows its age. This is NOT "
-                "restoration. The room should look tidied, NOT renovated or pristine."
-            )
+        task_focus = (
+            "RENOVATION: ADD or UPGRADE one element — install new materials, new "
+            "surfaces, new fixtures. The change must be VISUALLY DRAMATIC — a full "
+            "surface or material transformation visible at room scale.\n"
+            "ORDERING RULE: Renovate SURFACE changes first (floor, walls, ceiling, "
+            "window, door, lighting), then ADDITIONS last (built-ins, cabinetry, "
+            "shelving, accent features — anything not currently in the image).\n"
+            "ADDITION RULE: If an element is an ADDITION (not currently visible in "
+            "the room), spread it across 2 stages: first the structure/frame, then "
+            "the finishing/details."
+        )
+        if grouping_hint:
+            task_focus += f"\n{grouping_hint}"
+
+        if stages_left <= 0 and len(remaining) > 1:
             element_rule = (
-                "This is the cleanup stage — no specific element from the list is being "
-                "RENOVATED. Just tidy up loose items. ELEMENT must be 'none' because "
-                "cleanup is NOT renovation. MATERIAL must also be 'none'."
+                f"This is the LAST stage. Renovate ALL remaining elements "
+                f"({remaining_str}) in this one stage."
+            )
+        elif len(remaining) > stages_left > 0:
+            element_rule = (
+                f"REMAINING: {remaining_str} ({len(remaining)} left, "
+                f"{stages_left} stages after this). You may group 2 related "
+                "surface elements to free up stages for additions."
             )
         else:
-            task_focus = (
-                "RENOVATION ONLY. Cleanup is DONE — do NOT remove, clean, or strip "
-                "anything further. Only ADD or UPGRADE: install new materials, new "
-                "surfaces, new fixtures, new furnishings. The change must be VISUALLY "
-                "DRAMATIC — a full surface or material transformation visible at room "
-                "scale. Not a tiny detail fix."
+            element_rule = (
+                f"REMAINING: {remaining_str}. "
+                f"DONE: {renovated_str}. "
+                "Pick EXACTLY ONE element to renovate."
             )
-            if stages_left <= 0 and len(remaining) > 1:
-                element_rule = (
-                    f"This is the LAST stage. Renovate ALL remaining elements "
-                    f"({remaining_str}) in this one stage."
-                )
-            elif len(remaining) > stages_left > 0:
-                element_rule = (
-                    f"REMAINING: {remaining_str} ({len(remaining)} left, "
-                    f"{stages_left} stages after this). You may group 2 related "
-                    "elements to ensure all are covered by the final stage."
-                )
-            else:
-                element_rule = (
-                    f"REMAINING: {remaining_str}. "
-                    f"DONE: {renovated_str}. "
-                    "Pick EXACTLY ONE element to renovate."
-                )
 
         room_state_block = ""
         if room_state:
             room_state_block = (
-                f"CURRENT ROOM STATE (overrides scene bible for renovated elements):\n"
-                f"{room_state}\n"
-                "CRITICAL: In your IMAGE_PROMPT, describe each element using its CURRENT "
-                "material from the list above — NOT the original scene bible material. "
-                "If floor = 'pale porcelain tiles', write 'porcelain tile floor', "
-                "NEVER 'oak floor'.\n\n"
+                f"CURRENT ROOM STATE (for your awareness of what has been done):\n"
+                f"{room_state}\n\n"
             )
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are an architectural renovation director. You will see an image of "
-                    "a room and its text description. Plan the NEXT renovation step.\n\n"
-                    "IMPORTANT: There are NO people, NO workers, NO humans in this timelapse. "
-                    "Renovations happen as if by magic — surfaces transform, materials change, "
-                    "fixtures upgrade. Never mention people, hands, tools, crews, or ladders.\n\n"
-                    f"This is stage {stage_num} of {total_stages}. {task_focus}\n\n"
-                    f"Scene constants: {scene_bible}\n\n"
+                    "You are an architectural renovation director planning the NEXT "
+                    "step in a room timelapse. No people, no workers, no tools — "
+                    "renovations happen as if by magic.\n\n"
+                    f"Stage {stage_num} of {total_stages}. {task_focus}\n\n"
+                    f"Scene: {scene_bible}\n\n"
                     f"{room_state_block}"
-                    f"ELEMENT SELECTION: {element_rule}\n\n"
-                    "PERMANENCE RULE: Every element visible in the image that is NOT being "
-                    "changed in this stage MUST remain exactly as-is — same position, size, "
-                    "and appearance. Do NOT remove, shrink, move, or alter anything that "
-                    "isn't explicitly part of this stage's edit.\n\n"
-                    "Produce FOUR things:\n"
-                    "1. EDIT (MAX 250 chars): Narrative description of what changes in this "
-                    "stage. Describe the transformation result, not any human action.\n"
-                    "2. IMAGE_PROMPT (MAX 280 chars): Visual description for the image model. "
-                    "Write in this EXACT order — most important first:\n"
-                    "   a) CHANGE (first sentence): What the renovated element looks like "
-                    "NOW. Be specific about the FULL result — e.g. 'Entire floor covered "
-                    "in large pale porcelain tiles with light grout.' not just 'porcelain "
-                    "tile floor'. This is the PRIMARY instruction the image model must follow.\n"
-                    "   b) CONTEXT (second, brief): Other room elements in 1 short phrase. "
-                    "Use CURRENT materials from ROOM STATE for renovated elements. "
-                    "Example: 'Greige walls, white ceiling, original window and door.'\n"
-                    "   Rules:\n"
-                    "   - NO people, NO workers, NO tools, NO ladders, NO equipment.\n"
-                    "   - Existing elements (door, window, glazing) are upgraded IN PLACE — "
-                    "SAME opening height, SAME opening width, SAME wall position. The "
-                    "surrounding wall structure NEVER changes. Never use words like "
-                    "'full-height', 'floor-to-ceiling', or 'enlarged'. Only the material, "
-                    "finish, and hardware of the element change — NOT the size of the opening.\n"
-                    "   - For UNCHANGED elements, write 'original [element]' only — do NOT "
-                    "repeat defect adjectives (yellowed, stained, scuffed, chipped, etc.). "
-                    "The image model treats adjectives as instructions.\n"
-                    "   - Describe only what is PRESENT and VISIBLE.\n"
-                    "3. ELEMENT: Which element(s) from the canonical list are being "
-                    "renovated. 'none' for cleanup. Use EXACT names from the list.\n"
-                    "4. MATERIAL (MAX 60 chars): Short material/appearance summary of the "
-                    "renovated element AFTER this stage. Example: 'floor: pale porcelain tiles' "
-                    "or 'walls: deep matte greige paint'. 'none' for cleanup.\n\n"
+                    f"ELEMENTS: {element_rule}\n\n"
+                    "RULES:\n"
+                    "- Change ONLY the target element's surface treatment (material, "
+                    "finish, color, hardware). Physical dimensions, footprint, shape, orientation, "
+                    "and structural nature never change — a square element stays square, "
+                    "a round one stays round. The image model treats any dimensional "
+                    "or shape language as a reshape instruction. Subtle-but-accurate "
+                    "beats dramatic-but-structurally-wrong.\n"
+                    "- Everything not targeted stays exactly as-is. The image model "
+                    "preserves unchanged elements from the previous image automatically.\n"
+                    "- For ADDITIONS: specify exact placement (which wall, which area).\n"
+                    f"{'- PROTECT: ' + ', '.join(user_features) + '. Enhance/highlight, never remove/cover/replace. IMAGE_PROMPT must explicitly exclude protected features when renovating nearby elements.' + chr(10) if user_features else ''}"
+                    "\nProduce FIVE things:\n"
+                    "1. EDIT (MAX 250 chars): What transforms. No human actions.\n"
+                    "2. IMAGE_PROMPT (MAX 200 chars): Short instruction for the image "
+                    "model. Describe the target element's final pristine appearance — "
+                    "explicitly remove every visible defect from the previous image. "
+                    "Use the element's exact canonical name — no qualifiers ('door' "
+                    "not 'rear-right door'). End with 'Change nothing else.'\n"
+                    f"3. ELEMENT: From [{remaining_str}]. Write exactly as shown.\n"
+                    "4. MATERIAL (MAX 60 chars): e.g. 'floor: pale porcelain tiles'.\n"
+                    "5. PARTIAL: 'yes' if phase 1 of a 2-stage addition, else 'no'.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
                     "ELEMENT: [element name(s)]\n"
-                    "MATERIAL: [text]"
+                    "MATERIAL: [text]\n"
+                    "PARTIAL: [yes/no]"
                 ),
             },
             {
@@ -545,14 +549,34 @@ class OpenAIClient:
             },
         ]
 
-        response = self.client.chat.completions.create(
-            model=self.settings.openai_chat_model,
-            messages=messages,
-            temperature=0.7,
-        )
+        response = None
+        api_backoff = 3.0
+        for api_attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.settings.openai_chat_model,
+                    messages=messages,
+                    temperature=0.7,
+                )
+                break
+            except Exception as exc:
+                exc_msg = str(exc).lower()
+                is_transient = any(kw in exc_msg for kw in [
+                    "timeout", "download", "invalid_image_url",
+                    "server_error", "rate_limit", "502", "503", "529",
+                ])
+                if is_transient and api_attempt < 3:
+                    logger.warning(
+                        "[GPT] Vision API call failed (attempt %d/4): %s — retrying in %.0fs",
+                        api_attempt + 1, exc, api_backoff,
+                    )
+                    time.sleep(api_backoff)
+                    api_backoff *= 2.0
+                    continue
+                raise
 
         def _parse_response(content: str):
-            ed, ip, el, mat = "", "", "", ""
+            ed, ip, el, mat, partial = "", "", "", "", ""
             for line in content.split("\n"):
                 line = line.strip()
                 upper = line.upper()
@@ -564,10 +588,12 @@ class OpenAIClient:
                     el = line[len("ELEMENT:"):].strip()
                 elif upper.startswith("MATERIAL:"):
                     mat = line[len("MATERIAL:"):].strip()
-            return ed, ip, el, mat
+                elif upper.startswith("PARTIAL:"):
+                    partial = line[len("PARTIAL:"):].strip()
+            return ed, ip, el, mat, partial
 
         content = response.choices[0].message.content or ""
-        edit_delta, image_prompt, element_done, material = _parse_response(content)
+        edit_delta, image_prompt, element_done, material, partial_flag = _parse_response(content)
 
         if not image_prompt:
             backoff = 2.0
@@ -581,7 +607,7 @@ class OpenAIClient:
                         temperature=0.7,
                     )
                     retry_content = retry_resp.choices[0].message.content or ""
-                    ed2, ip2, el2, mat2 = _parse_response(retry_content)
+                    ed2, ip2, el2, mat2, par2 = _parse_response(retry_content)
                     if ip2:
                         logger.info("[GPT] IMAGE_PROMPT recovered on retry %d", attempt)
                         if not edit_delta and ed2:
@@ -591,6 +617,8 @@ class OpenAIClient:
                             element_done = el2
                         if not material and mat2:
                             material = mat2
+                        if not partial_flag and par2:
+                            partial_flag = par2
                         break
                 except Exception as exc:
                     logger.warning("[GPT] Retry %d failed: %s", attempt, exc)
@@ -609,19 +637,34 @@ class OpenAIClient:
 
         raw_elements = [e.strip() for e in element_done.split(",") if e.strip()] if element_done else []
         canonical_set = {e.lower() for e in all_elements}
-        newly_renovated = [e for e in raw_elements if e.lower() in canonical_set and e.lower() != "none"]
+        canonical_list_lower = [e.lower() for e in all_elements]
 
-        if is_cleanup_stage and newly_renovated:
-            logger.warning("[GPT] Cleanup stage tried to claim elements %s as renovated — ignoring", newly_renovated)
-            newly_renovated = []
+        def _match_element(raw: str) -> Optional[str]:
+            low = raw.lower()
+            if low in canonical_set and low != "none":
+                return raw
+            for canon in canonical_list_lower:
+                if low in canon or canon in low:
+                    idx = canonical_list_lower.index(canon)
+                    logger.info("[GPT] Fuzzy element match: '%s' -> '%s'", raw, all_elements[idx])
+                    return all_elements[idx]
+            return None
+
+        newly_renovated = []
+        for raw in raw_elements:
+            matched = _match_element(raw)
+            if matched and matched not in newly_renovated:
+                newly_renovated.append(matched)
 
         material_clean = material if material.lower() not in ("none", "") else ""
+        is_partial = partial_flag.lower().strip() in ("yes", "true", "1")
 
         return {
             "edit_delta": edit_delta,
             "image_prompt": image_prompt,
             "renovated_element": newly_renovated,
             "material": material_clean,
+            "is_partial": is_partial,
         }
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
@@ -675,5 +718,75 @@ class OpenAIClient:
             clip2 = f"Continuing seamlessly: {prompt}. Focus on the continuation and conclusion."
         
         return {"clip1": clip1, "clip2": clip2}
+
+    def generate_transition_prompt(
+        self,
+        image_url_from: str,
+        image_url_to: str,
+    ) -> str:
+        """
+        Send two images to GPT Vision and get back a transition prompt
+        suitable for an image-to-video model.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are given two images of the same room at different stages "
+                    "of renovation. Write a single short prompt (MAX 150 chars) for "
+                    "a video model that will generate a smooth time-lapse transition "
+                    "from image 1 to image 2.\n\n"
+                    "Rules:\n"
+                    "- Describe what changes between the two images.\n"
+                    "- No people, no tools, no workers.\n"
+                    "- Camera stays fixed. Room structure stays fixed.\n"
+                    "- Surfaces and materials transform gradually.\n\n"
+                    "Respond with ONLY the prompt text, nothing else."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Image 1 (before):"},
+                    {"type": "image_url", "image_url": {"url": image_url_from}},
+                    {"type": "text", "text": "Image 2 (after):"},
+                    {"type": "image_url", "image_url": {"url": image_url_to}},
+                ],
+            },
+        ]
+
+        api_backoff = 3.0
+        for api_attempt in range(4):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.settings.openai_chat_model,
+                    messages=messages,
+                    temperature=0.7,
+                )
+                break
+            except Exception as exc:
+                exc_msg = str(exc).lower()
+                is_transient = any(kw in exc_msg for kw in [
+                    "timeout", "download", "invalid_image_url",
+                    "server_error", "rate_limit", "502", "503", "529",
+                ])
+                if is_transient and api_attempt < 3:
+                    logger.warning(
+                        "[GPT] Transition prompt call failed (attempt %d/4): %s — retrying in %.0fs",
+                        api_attempt + 1, exc, api_backoff,
+                    )
+                    time.sleep(api_backoff)
+                    api_backoff *= 2.0
+                    continue
+                raise
+
+        content = response.choices[0].message.content or ""
+        prompt = content.strip()
+        if not prompt:
+            prompt = (
+                "Time-lapse transformation: room surfaces and materials smoothly "
+                "change. No people, no tools. Camera fixed. Gradual transition."
+            )
+        return prompt
 
 

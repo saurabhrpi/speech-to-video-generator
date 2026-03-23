@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../components/ui/button'
 import MicVisualizer from '../components/MicVisualizer'
 import TimelapseForm from '../components/TimelapseForm'
+import VideoStudio from '../components/VideoStudio'
 
 type ApiResult = Record<string, any>
 
@@ -27,7 +28,7 @@ export default function App() {
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
   const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
-  const [mode, setMode] = useState<'speech' | 'timelapse'>('timelapse')
+  const [mode, setMode] = useState<'speech' | 'timelapse' | 'video_studio'>('timelapse')
   const [stepByStep, setStepByStep] = useState(false)
   const [pipelineState, setPipelineState] = useState<Record<string, any> | null>(null)
   const [phaseCompleted, setPhaseCompleted] = useState<string | null>(null)
@@ -774,7 +775,7 @@ export default function App() {
       <header className="border-b">
         <div className="container py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold">
-            {mode === 'timelapse' ? 'Interior Timelapse' : 'Speech to Video'}
+            {mode === 'timelapse' ? 'Interior Timelapse' : mode === 'video_studio' ? 'Video Studio' : 'Speech to Video'}
           </h1>
           <div className="flex items-center gap-2">
             {auth?.authenticated && <span className="text-xs text-muted-foreground">Signed in as {auth?.user?.email || 'user'}</span>}
@@ -788,6 +789,12 @@ export default function App() {
               className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'timelapse' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Interior Timelapse
+            </button>
+            <button
+              onClick={() => setMode('video_studio')}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'video_studio' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Video Studio
             </button>
             <button
               onClick={() => setMode('speech')}
@@ -936,7 +943,7 @@ export default function App() {
                     {pipelineState.stages.map((s: any, i: number) => (
                       <div key={i} className="rounded bg-muted p-2">
                         <div className="text-xs font-medium">
-                          {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — ${i === 1 ? 'Cleanup' : 'Edit'}`}
+                          {i === 0 ? 'Stage 1 — Starting State' : `Stage ${i + 1} — Edit`}
                           {s.renovated_element?.length > 0 && (
                             <span className="ml-1.5 text-primary">({s.renovated_element.join(', ')})</span>
                           )}
@@ -1017,6 +1024,19 @@ export default function App() {
                   Generate Remaining Images
                 </Button>
               )}
+              {phaseCompleted?.startsWith('video_') && (
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!formPayload || !pipelineState) return
+                    setPipelineError(null)
+                    runPipeline(formPayload, null, pipelineState)
+                  }}
+                >
+                  Generate Remaining Videos
+                </Button>
+              )}
               <Button variant="secondary" onClick={handleStopPipeline} disabled={busy}>
                 Stop
               </Button>
@@ -1059,6 +1079,8 @@ export default function App() {
         <section className="space-y-3">
           {mode === 'timelapse' ? (
             <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} stepByStep={stepByStep} onStepByStepChange={setStepByStep} />
+          ) : mode === 'video_studio' ? (
+            <VideoStudio busy={busy} onBusyChange={setBusy} onJsonUpdate={setJsonOut} onVideoUrl={setVideoUrl} />
           ) : (
             <>
               {canRecord && (

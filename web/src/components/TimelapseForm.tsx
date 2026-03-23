@@ -31,6 +31,7 @@ export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStep
   const [lighting, setLighting] = useState('natural')
   const [cameraMotion, setCameraMotion] = useState('slow_pan')
   const [progression, setProgression] = useState('construction')
+  const [videoModel, setVideoModel] = useState<'cheap' | 'expensive'>('cheap')
   const [freeform, setFreeform] = useState('')
 
   const [showFeatureSuggestions, setShowFeatureSuggestions] = useState(false)
@@ -79,6 +80,7 @@ export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStep
       lighting,
       camera_motion: cameraMotion,
       progression,
+      video_model: videoModel,
       freeform_description: freeform,
     })
   }
@@ -170,7 +172,18 @@ export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStep
           </select>
         </div>
 
-        {/* Duration is auto-determined by the multi-step pipeline (7 stages) */}
+        {/* Video Model */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Video Model</label>
+          <select
+            value={videoModel}
+            onChange={e => setVideoModel(e.target.value as 'cheap' | 'expensive')}
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="cheap">Cheap (Hailuo)</option>
+            <option value="expensive">Expensive (Kling Pro)</option>
+          </select>
+        </div>
       </div>
 
       {/* Features */}
