@@ -456,9 +456,14 @@ class OpenAIClient:
         stages_left = total_stages - stage_num
 
         task_focus = (
-            "RENOVATION: ADD or UPGRADE one element — install new materials, new "
-            "surfaces, new fixtures. The change must be VISUALLY DRAMATIC — a full "
-            "surface or material transformation visible at room scale.\n"
+            "RENOVATION: ADD or UPGRADE elements — install new materials, new "
+            "surfaces, new fixtures. Every stage must produce a VISUALLY DRAMATIC, "
+            "unmistakable change visible at room scale.\n"
+            "VISUAL IMPACT RULE: If an element alone would produce only a subtle "
+            "change (e.g., ceiling repaint, swapping a window frame, replacing a "
+            "door), group it with other minor elements in ONE stage. Never waste "
+            "a stage on a barely-noticeable change. Major surfaces (floor, walls, "
+            "full cabinetry) deserve their own stage.\n"
             "ORDERING RULE: Renovate SURFACE changes first (floor, walls, ceiling, "
             "window, door, lighting), then ADDITIONS last (built-ins, cabinetry, "
             "shelving, accent features — anything not currently in the image).\n"
@@ -484,7 +489,8 @@ class OpenAIClient:
             element_rule = (
                 f"REMAINING: {remaining_str}. "
                 f"DONE: {renovated_str}. "
-                "Pick EXACTLY ONE element to renovate."
+                "Pick one high-impact element OR group 2-3 minor elements "
+                "that individually would create only a subtle visual change."
             )
 
         room_state_block = ""
@@ -516,22 +522,29 @@ class OpenAIClient:
                     "preserves unchanged elements from the previous image automatically.\n"
                     "- For ADDITIONS: specify exact placement (which wall, which area).\n"
                     f"{'- PROTECT: ' + ', '.join(user_features) + '. Enhance/highlight, never remove/cover/replace. IMAGE_PROMPT must explicitly exclude protected features when renovating nearby elements.' + chr(10) if user_features else ''}"
-                    "\nProduce FIVE things:\n"
+                    "\nProduce SIX things:\n"
                     "1. EDIT (MAX 250 chars): What transforms. No human actions.\n"
                     "2. IMAGE_PROMPT (MAX 200 chars): Short instruction for the image "
-                    "model. Describe the target element's final pristine appearance — "
+                    "model. Describe the target element(s)' final pristine appearance — "
                     "explicitly remove every visible defect from the previous image. "
-                    "Use the element's exact canonical name — no qualifiers ('door' "
+                    "Use each element's exact canonical name — no qualifiers ('door' "
                     "not 'rear-right door'). End with 'Change nothing else.'\n"
-                    f"3. ELEMENT: From [{remaining_str}]. Write exactly as shown.\n"
+                    f"3. ELEMENT: From [{remaining_str}]. Comma-separated if grouping. Write exactly as shown.\n"
                     "4. MATERIAL (MAX 60 chars): e.g. 'floor: pale porcelain tiles'.\n"
-                    "5. PARTIAL: 'yes' if phase 1 of a 2-stage addition, else 'no'.\n\n"
+                    "5. PARTIAL: 'yes' if phase 1 of a 2-stage addition, else 'no'.\n"
+                    "6. MOTION_PROMPT (MAX 150 chars): Prompt for a video model that "
+                    "will generate a time-lapse transition from the PREVIOUS image to "
+                    "the NEXT. Describe ONLY the physical renovation process (e.g. "
+                    "'old flooring is ripped up and new material is laid down'). "
+                    "Do NOT mention final colors, materials, or styles — the video "
+                    "model already has the target image. No people, no tools.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
                     "ELEMENT: [element name(s)]\n"
                     "MATERIAL: [text]\n"
-                    "PARTIAL: [yes/no]"
+                    "PARTIAL: [yes/no]\n"
+                    "MOTION_PROMPT: [text]"
                 ),
             },
             {
@@ -576,7 +589,7 @@ class OpenAIClient:
                 raise
 
         def _parse_response(content: str):
-            ed, ip, el, mat, partial = "", "", "", "", ""
+            ed, ip, el, mat, partial, motion = "", "", "", "", "", ""
             for line in content.split("\n"):
                 line = line.strip()
                 upper = line.upper()
@@ -590,10 +603,12 @@ class OpenAIClient:
                     mat = line[len("MATERIAL:"):].strip()
                 elif upper.startswith("PARTIAL:"):
                     partial = line[len("PARTIAL:"):].strip()
-            return ed, ip, el, mat, partial
+                elif upper.startswith("MOTION_PROMPT:"):
+                    motion = line[len("MOTION_PROMPT:"):].strip()
+            return ed, ip, el, mat, partial, motion
 
         content = response.choices[0].message.content or ""
-        edit_delta, image_prompt, element_done, material, partial_flag = _parse_response(content)
+        edit_delta, image_prompt, element_done, material, partial_flag, motion_prompt = _parse_response(content)
 
         if not image_prompt:
             backoff = 2.0
@@ -607,7 +622,7 @@ class OpenAIClient:
                         temperature=0.7,
                     )
                     retry_content = retry_resp.choices[0].message.content or ""
-                    ed2, ip2, el2, mat2, par2 = _parse_response(retry_content)
+                    ed2, ip2, el2, mat2, par2, mot2 = _parse_response(retry_content)
                     if ip2:
                         logger.info("[GPT] IMAGE_PROMPT recovered on retry %d", attempt)
                         if not edit_delta and ed2:
@@ -619,6 +634,8 @@ class OpenAIClient:
                             material = mat2
                         if not partial_flag and par2:
                             partial_flag = par2
+                        if not motion_prompt and mot2:
+                            motion_prompt = mot2
                         break
                 except Exception as exc:
                     logger.warning("[GPT] Retry %d failed: %s", attempt, exc)
@@ -665,6 +682,7 @@ class OpenAIClient:
             "renovated_element": newly_renovated,
             "material": material_clean,
             "is_partial": is_partial,
+            "motion_prompt": motion_prompt,
         }
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:

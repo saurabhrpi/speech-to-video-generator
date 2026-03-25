@@ -468,13 +468,28 @@ class VideoService:
                 _notify(video_phase, 0, 1,
                         f"Generating transition {i + 1} of {total_transitions}")
 
-                from_desc = stages[i].get("description", "")
-                to_desc = stages[i + 1].get("description", "")
-                motion_prompt = (
-                    f"Time-lapse transformation: {from_desc} smoothly transforms into {to_desc}. "
-                    f"No people, no tools. {camera_instruction} "
-                    "Room structure stays fixed. Surfaces and materials change gradually."
-                )
+                to_stage = stages[i + 1]
+
+                # Use GPT-generated motion prompt (process-only, no materials/styles)
+                motion_prompt = to_stage.get("motion_prompt", "")
+                if motion_prompt:
+                    motion_prompt = f"{motion_prompt} {camera_instruction}"
+                else:
+                    # Fallback for stages without a motion prompt (e.g. resumed from older state)
+                    changed_elements = to_stage.get("renovated_element", [])
+                    if changed_elements:
+                        motion_prompt = (
+                            f"Time-lapse renovation: {', '.join(changed_elements)} "
+                            f"are renovated and transformed. Everything else stays "
+                            f"exactly the same. No people, no tools. {camera_instruction} "
+                            "Room structure stays fixed."
+                        )
+                    else:
+                        motion_prompt = (
+                            f"Time-lapse renovation: surfaces transform and upgrade. "
+                            f"No people, no tools. {camera_instruction} "
+                            "Room structure stays fixed."
+                        )
                 transition_prompts.append(motion_prompt)
 
                 logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
