@@ -392,6 +392,7 @@ class VideoService:
                         "renovated_element": newly_done,
                         "material": mat_text,
                         "is_partial": is_partial,
+                        "motion_prompt": gpt_result.get("motion_prompt", ""),
                     })
 
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
