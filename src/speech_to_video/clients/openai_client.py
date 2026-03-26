@@ -685,6 +685,83 @@ class OpenAIClient:
             "motion_prompt": motion_prompt,
         }
 
+    def audit_stage_bleed(
+        self,
+        prev_image_url: str,
+        new_image_url: str,
+        targeted_elements: List[str],
+        all_elements: List[str],
+        renovated_elements: List[str],
+    ) -> List[str]:
+        """Compare two stage images and return elements that visually changed
+        beyond what was targeted (i.e. bleed from the I2I model).
+
+        Returns a list of element names from *remaining* (not yet renovated,
+        not targeted this stage) that appear to have been renovated by bleed.
+        """
+        remaining = [
+            e for e in all_elements
+            if e not in renovated_elements and e not in targeted_elements
+        ]
+        if not remaining:
+            return []
+
+        remaining_str = ", ".join(remaining)
+        targeted_str = ", ".join(targeted_elements)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a visual QA inspector for a renovation timelapse. "
+                    "You will see two images: BEFORE and AFTER a renovation stage.\n\n"
+                    f"The INTENDED change targeted ONLY: {targeted_str}.\n"
+                    f"These elements have NOT been renovated yet: {remaining_str}.\n\n"
+                    "Your job: compare the two images and identify which of the "
+                    "NOT-YET-RENOVATED elements appear to have ALSO visually changed "
+                    "(new paint, new finish, cleaned up, different material, etc.) "
+                    "even though they were NOT targeted.\n\n"
+                    "Only flag elements with CLEAR, OBVIOUS visual changes — not "
+                    "minor lighting shifts or compression artifacts.\n\n"
+                    "Respond with ONLY a comma-separated list of element names that "
+                    "bled, using the exact names provided. If nothing bled, respond "
+                    "with exactly: NONE"
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "BEFORE (previous stage):"},
+                    {"type": "image_url", "image_url": {"url": prev_image_url}},
+                    {"type": "text", "text": "AFTER (current stage):"},
+                    {"type": "image_url", "image_url": {"url": new_image_url}},
+                ],
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.3,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            logger.info("[GPT] Bleed audit result: %s", content)
+
+            if content.upper() == "NONE":
+                return []
+
+            remaining_lower = {e.lower(): e for e in remaining}
+            bled = []
+            for token in content.split(","):
+                token = token.strip().lower()
+                if token in remaining_lower:
+                    bled.append(remaining_lower[token])
+            return bled
+        except Exception as exc:
+            logger.warning("[GPT] Bleed audit failed, skipping: %s", exc)
+            return []
+
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
         """
         Use GPT to intelligently split a prompt into two parts for seamless 2-clip video generation.

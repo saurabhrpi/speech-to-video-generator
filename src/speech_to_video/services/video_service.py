@@ -430,6 +430,25 @@ class VideoService:
                 "image_url": image_url,
                 "description": stages[stage_idx].get("description", ""),
             })
+
+            # --- Bleed audit: detect elements changed beyond what was targeted ---
+            if stage_num > 1:
+                targeted = stages[stage_idx].get("renovated_element", [])
+                prev_url = keyframe_images[-2]["image_url"]
+                bled = self.openai_client.audit_stage_bleed(
+                    prev_image_url=prev_url,
+                    new_image_url=image_url,
+                    targeted_elements=targeted,
+                    all_elements=all_elements,
+                    renovated_elements=renovated_elements,
+                )
+                if bled:
+                    logger.info("[Timelapse] Stage %d bleed detected: %s (marking as renovated)",
+                                stage_num, bled)
+                    for elem in bled:
+                        if elem not in renovated_elements:
+                            renovated_elements.append(elem)
+
             _notify(phase_name, 2, 2, f"Stage {stage_num} complete", partial_result=_state_snapshot())
 
             if stop_after == phase_name:
@@ -493,21 +512,33 @@ class VideoService:
                         )
                 transition_prompts.append(motion_prompt)
 
-                logger.info("[Timelapse] Generating transition %d->%d (%s)", i + 1, i + 2, i2v_model)
-                t0 = _t.time()
-                i2v_result = self.aiml_client.generate_and_poll_i2v(
-                    image_url=from_kf["image_url"],
-                    last_image_url=to_kf["image_url"],
-                    prompt=motion_prompt,
-                    model=i2v_model,
-                    resolution=i2v_resolution,
-                    duration=i2v_duration,
-                )
-                elapsed_s = int(_t.time() - t0)
+                max_retries = 2
+                i2v_result = None
+                for attempt in range(1, max_retries + 1):
+                    logger.info("[Timelapse] Generating transition %d->%d (%s) attempt %d/%d",
+                                i + 1, i + 2, i2v_model, attempt, max_retries)
+                    _notify(video_phase, 0, 1,
+                            f"Generating transition {i + 1} of {total_transitions}"
+                            + (f" (retry {attempt - 1})" if attempt > 1 else "") + "...")
+                    t0 = _t.time()
+                    i2v_result = self.aiml_client.generate_and_poll_i2v(
+                        image_url=from_kf["image_url"],
+                        last_image_url=to_kf["image_url"],
+                        prompt=motion_prompt,
+                        model=i2v_model,
+                        resolution=i2v_resolution,
+                        duration=i2v_duration,
+                    )
+                    elapsed_s = int(_t.time() - t0)
+
+                    if i2v_result.get("success"):
+                        break
+                    logger.warning("[Timelapse] Transition %d->%d attempt %d FAILED after %ds: %s",
+                                   i + 1, i + 2, attempt, elapsed_s, i2v_result.get("error"))
 
                 if not i2v_result.get("success"):
-                    logger.error("[Timelapse] Transition %d->%d FAILED after %ds: %s",
-                                 i + 1, i + 2, elapsed_s, i2v_result.get("error"))
+                    logger.error("[Timelapse] Transition %d->%d FAILED after %d attempts",
+                                 i + 1, i + 2, max_retries)
                     return {
                         "success": False,
                         "error": f"Transition video failed between stage {i + 1} and {i + 2}",
@@ -548,24 +579,33 @@ class VideoService:
             )
             logger.info("[Timelapse] Final pan prompt: %s", pan_prompt)
 
-            t0 = _t.time()
-            pan_result = self.aiml_client.generate_and_poll_i2v(
-                image_url=last_kf["image_url"],
-                prompt=pan_prompt,
-                model=i2v_model,
-                resolution=i2v_resolution,
-                duration=i2v_duration,
-                camera_fixed=False,
-            )
-            elapsed_s = int(_t.time() - t0)
+            pan_url = None
+            for attempt in range(1, 3):
+                logger.info("[Timelapse] Final pan attempt %d/2", attempt)
+                if attempt > 1:
+                    _notify("videos", total_transitions, total_transitions + 1,
+                            f"Generating final reveal pan (retry {attempt - 1})...")
+                t0 = _t.time()
+                pan_result = self.aiml_client.generate_and_poll_i2v(
+                    image_url=last_kf["image_url"],
+                    prompt=pan_prompt,
+                    model=i2v_model,
+                    resolution=i2v_resolution,
+                    duration=i2v_duration,
+                    camera_fixed=False,
+                )
+                elapsed_s = int(_t.time() - t0)
+                pan_url = pan_result.get("video_url")
+                if pan_url:
+                    break
+                logger.warning("[Timelapse] Final pan attempt %d failed after %ds: %s",
+                               attempt, elapsed_s, pan_result.get("error"))
             transition_prompts.append(pan_prompt)
-            pan_url = pan_result.get("video_url")
             if pan_url:
                 transition_videos.append(pan_url)
                 logger.info("[Timelapse] Final pan completed in %ds: %s", elapsed_s, pan_url)
             else:
-                logger.warning("[Timelapse] Final pan failed after %ds, skipping: %s",
-                               elapsed_s, pan_result.get("error"))
+                logger.warning("[Timelapse] Final pan failed after 2 attempts, skipping")
 
         if not transition_videos:
             return {"success": False, "error": "No transition videos were generated", **_state_snapshot()}
