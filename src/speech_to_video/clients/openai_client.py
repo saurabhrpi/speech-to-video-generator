@@ -685,6 +685,70 @@ class OpenAIClient:
             "motion_prompt": motion_prompt,
         }
 
+    def check_feature_coverage(
+        self,
+        features: List[str],
+        elements: List[str],
+        addition_elements: List[str],
+    ) -> List[str]:
+        """Check which user features are NOT represented in the elements list.
+
+        A feature is 'covered' if an existing element semantically represents it
+        (e.g. 'exposed brick' is covered by 'walls'). Returns the list of
+        features that have no coverage and need to be force-injected.
+        """
+        if not features:
+            return []
+
+        elements_str = ", ".join(elements)
+        additions_str = ", ".join(addition_elements) if addition_elements else "none"
+        features_str = ", ".join(features)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are validating a renovation plan.\n\n"
+                    f"ELEMENTS planned for renovation: {elements_str}\n"
+                    f"ADDITIONS (new elements to add): {additions_str}\n"
+                    f"USER-REQUESTED FEATURES: {features_str}\n\n"
+                    "For each user feature, decide if it is COVERED by any "
+                    "element or addition — either as a direct match or because "
+                    "an element semantically represents it (e.g. 'exposed brick' "
+                    "is covered by 'walls' since brick is a wall treatment; "
+                    "'pendant lights' is covered by 'lighting').\n\n"
+                    "List ONLY the user features that are NOT covered by any "
+                    "element. Use the exact feature names as provided.\n\n"
+                    "If all features are covered, respond with exactly: NONE\n"
+                    "Otherwise respond with a comma-separated list of uncovered "
+                    "feature names."
+                ),
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            logger.info("[GPT] Feature coverage check: %s", content)
+
+            if content.upper() == "NONE":
+                return []
+
+            features_lower = {f.lower(): f for f in features}
+            missing = []
+            for token in content.split(","):
+                token_clean = token.strip().lower()
+                if token_clean in features_lower:
+                    missing.append(features_lower[token_clean])
+            return missing
+        except Exception as exc:
+            logger.warning("[GPT] Feature coverage check failed, skipping: %s", exc)
+            return []
+
     def audit_stage_bleed(
         self,
         prev_image_url: str,

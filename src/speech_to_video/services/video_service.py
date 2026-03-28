@@ -266,6 +266,22 @@ class VideoService:
             all_elements = plan["elements"]
             addition_elements = plan.get("additions", [])
             stages = [{"stage": 1, "description": plan["stage_1_description"], "edit_delta": ""}]
+
+            # --- Feature coverage validation: force-inject missing user features ---
+            if request.features:
+                missing = self.openai_client.check_feature_coverage(
+                    features=request.features,
+                    elements=all_elements,
+                    addition_elements=addition_elements,
+                )
+                for feat in missing:
+                    logger.warning(
+                        "[Timelapse] User feature '%s' not covered by elements %s — force-injecting as addition",
+                        feat, all_elements,
+                    )
+                    all_elements.append(feat.lower())
+                    addition_elements.append(feat.lower())
+
             logger.info("[Timelapse] Scene bible: %s", scene_bible)
             logger.info("[Timelapse] Elements to renovate: %s", all_elements)
             logger.info("[Timelapse] Addition elements (GPT-classified): %s", addition_elements)

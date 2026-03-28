@@ -1,19 +1,19 @@
 # Session Log
 
-## Current Session: 5
-**Date:** 2026-03-25
+## Current Session: 6
+**Date:** 2026-03-26
 **Branch:** interior-timelapse
-**Status:** Problem #1 root cause found and fixed. Kling end-frame control was never working.
+**Status:** Retry logic, bleed audit, and feature coverage validation added. Two test runs analyzed (kitchen + patio).
 
 ## What Happened This Session
-- **Root cause of problem #1**: Kling expects `tail_image_url`, we were sending `last_image_url`. Silently ignored — Kling was freestyling every transition video.
-- **Added MOTION_PROMPT**: GPT now generates process-only transition prompts (no materials/styles). Had to fix a bug where it was produced but never stored in the stage dict.
-- **PROTECT rule updated**: Clarified that only the feature's own texture is preserved, not surrounding surfaces.
-- **Changes not yet committed.**
+- **Transition video retry**: Transitions and final pan now retry up to 2 attempts on failure instead of bailing to user.
+- **Bleed audit**: GPT Vision compares before/after each stage, marks unintended element changes as renovated so GPT skips them. Worked correctly (returned NONE on patio run — no bleed detected, low delta was a different problem).
+- **Feature coverage validation**: After plan generation, GPT checks if all user features are represented in elements. Missing features are force-injected as additions. Fixes river pebbles being silently dropped.
+- **Patio test revealed**: low-delta stages (brick cleaning), GPT inventing questionable elements (steps, drainage), drain destroyed then re-added with wrong design. Known problem #4 (indoor/outdoor prompt mismatch) confirmed.
 
 ## Next Step
-Test a full end-to-end generation with all three fixes active (tail_image_url + MOTION_PROMPT wired through + updated PROTECT rule). Evaluate transition video quality with real end-frame control.
+Test patio generation with feature injection active — verify river pebbles actually appear. Then address low-delta stages (bleed audit doesn't help when the stage is correctly executed but visually subtle).
 
 ## Open Questions
-- Does Kling actually honor `tail_image_url` well, or will there still be quality issues now that it's wired correctly?
-- The ceiling flicker in the 3rd video — was it caused by the missing end-frame, or is it a separate Kling limitation?
+- Should GPT be constrained from inventing structural elements (steps, drainage) on outdoor spaces?
+- Low-delta stages need a different mechanism than bleed audit — pre-stage impact estimation, or post-stage delta check with replan?
