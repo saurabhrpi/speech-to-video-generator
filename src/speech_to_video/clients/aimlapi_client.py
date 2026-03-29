@@ -231,7 +231,9 @@ class AIMLAPIClient:
                 "image_url": image_url,
             }
             if last_image_url:
-                body["last_image_url"] = last_image_url
+                is_kling = "kling" in resolved_model.lower()
+                key = "tail_image_url" if is_kling else "last_image_url"
+                body[key] = last_image_url
             if duration:
                 body["duration"] = int(duration)
             if resolution:

@@ -63,3 +63,5 @@ web/*.log
 #Cursor
 .cursor/
 CLAUDE.md
+
+debug/

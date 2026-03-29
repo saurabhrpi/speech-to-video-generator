@@ -456,9 +456,14 @@ class OpenAIClient:
         stages_left = total_stages - stage_num
 
         task_focus = (
-            "RENOVATION: ADD or UPGRADE one element — install new materials, new "
-            "surfaces, new fixtures. The change must be VISUALLY DRAMATIC — a full "
-            "surface or material transformation visible at room scale.\n"
+            "RENOVATION: ADD or UPGRADE elements — install new materials, new "
+            "surfaces, new fixtures. Every stage must produce a VISUALLY DRAMATIC, "
+            "unmistakable change visible at room scale.\n"
+            "VISUAL IMPACT RULE: If an element alone would produce only a subtle "
+            "change (e.g., ceiling repaint, swapping a window frame, replacing a "
+            "door), group it with other minor elements in ONE stage. Never waste "
+            "a stage on a barely-noticeable change. Major surfaces (floor, walls, "
+            "full cabinetry) deserve their own stage.\n"
             "ORDERING RULE: Renovate SURFACE changes first (floor, walls, ceiling, "
             "window, door, lighting), then ADDITIONS last (built-ins, cabinetry, "
             "shelving, accent features — anything not currently in the image).\n"
@@ -484,7 +489,8 @@ class OpenAIClient:
             element_rule = (
                 f"REMAINING: {remaining_str}. "
                 f"DONE: {renovated_str}. "
-                "Pick EXACTLY ONE element to renovate."
+                "Pick one high-impact element OR group 2-3 minor elements "
+                "that individually would create only a subtle visual change."
             )
 
         room_state_block = ""
@@ -515,23 +521,30 @@ class OpenAIClient:
                     "- Everything not targeted stays exactly as-is. The image model "
                     "preserves unchanged elements from the previous image automatically.\n"
                     "- For ADDITIONS: specify exact placement (which wall, which area).\n"
-                    f"{'- PROTECT: ' + ', '.join(user_features) + '. Enhance/highlight, never remove/cover/replace. IMAGE_PROMPT must explicitly exclude protected features when renovating nearby elements.' + chr(10) if user_features else ''}"
-                    "\nProduce FIVE things:\n"
+                    f"{'- PROTECT: ' + ', '.join(user_features) + '. Enhance/highlight, never remove/cover/replace. If the element being renovated shares space with a protected feature, state that the feature texture itself stays but ALL other surfaces of that element are fully renovated (e.g. \"renovate all painted wall surfaces; exposed brick stays as brick but wall paint around it is resurfaced\").' + chr(10) if user_features else ''}"
+                    "\nProduce SIX things:\n"
                     "1. EDIT (MAX 250 chars): What transforms. No human actions.\n"
                     "2. IMAGE_PROMPT (MAX 200 chars): Short instruction for the image "
-                    "model. Describe the target element's final pristine appearance — "
+                    "model. Describe the target element(s)' final pristine appearance — "
                     "explicitly remove every visible defect from the previous image. "
-                    "Use the element's exact canonical name — no qualifiers ('door' "
+                    "Use each element's exact canonical name — no qualifiers ('door' "
                     "not 'rear-right door'). End with 'Change nothing else.'\n"
-                    f"3. ELEMENT: From [{remaining_str}]. Write exactly as shown.\n"
+                    f"3. ELEMENT: From [{remaining_str}]. Comma-separated if grouping. Write exactly as shown.\n"
                     "4. MATERIAL (MAX 60 chars): e.g. 'floor: pale porcelain tiles'.\n"
-                    "5. PARTIAL: 'yes' if phase 1 of a 2-stage addition, else 'no'.\n\n"
+                    "5. PARTIAL: 'yes' if phase 1 of a 2-stage addition, else 'no'.\n"
+                    "6. MOTION_PROMPT (MAX 150 chars): Prompt for a video model that "
+                    "will generate a time-lapse transition from the PREVIOUS image to "
+                    "the NEXT. Describe ONLY the physical renovation process (e.g. "
+                    "'old flooring is ripped up and new material is laid down'). "
+                    "Do NOT mention final colors, materials, or styles — the video "
+                    "model already has the target image. No people, no tools.\n\n"
                     "Respond EXACTLY:\n"
                     "EDIT: [text]\n"
                     "IMAGE_PROMPT: [text]\n"
                     "ELEMENT: [element name(s)]\n"
                     "MATERIAL: [text]\n"
-                    "PARTIAL: [yes/no]"
+                    "PARTIAL: [yes/no]\n"
+                    "MOTION_PROMPT: [text]"
                 ),
             },
             {
@@ -576,7 +589,7 @@ class OpenAIClient:
                 raise
 
         def _parse_response(content: str):
-            ed, ip, el, mat, partial = "", "", "", "", ""
+            ed, ip, el, mat, partial, motion = "", "", "", "", "", ""
             for line in content.split("\n"):
                 line = line.strip()
                 upper = line.upper()
@@ -590,10 +603,12 @@ class OpenAIClient:
                     mat = line[len("MATERIAL:"):].strip()
                 elif upper.startswith("PARTIAL:"):
                     partial = line[len("PARTIAL:"):].strip()
-            return ed, ip, el, mat, partial
+                elif upper.startswith("MOTION_PROMPT:"):
+                    motion = line[len("MOTION_PROMPT:"):].strip()
+            return ed, ip, el, mat, partial, motion
 
         content = response.choices[0].message.content or ""
-        edit_delta, image_prompt, element_done, material, partial_flag = _parse_response(content)
+        edit_delta, image_prompt, element_done, material, partial_flag, motion_prompt = _parse_response(content)
 
         if not image_prompt:
             backoff = 2.0
@@ -607,7 +622,7 @@ class OpenAIClient:
                         temperature=0.7,
                     )
                     retry_content = retry_resp.choices[0].message.content or ""
-                    ed2, ip2, el2, mat2, par2 = _parse_response(retry_content)
+                    ed2, ip2, el2, mat2, par2, mot2 = _parse_response(retry_content)
                     if ip2:
                         logger.info("[GPT] IMAGE_PROMPT recovered on retry %d", attempt)
                         if not edit_delta and ed2:
@@ -619,6 +634,8 @@ class OpenAIClient:
                             material = mat2
                         if not partial_flag and par2:
                             partial_flag = par2
+                        if not motion_prompt and mot2:
+                            motion_prompt = mot2
                         break
                 except Exception as exc:
                     logger.warning("[GPT] Retry %d failed: %s", attempt, exc)
@@ -665,7 +682,333 @@ class OpenAIClient:
             "renovated_element": newly_renovated,
             "material": material_clean,
             "is_partial": is_partial,
+            "motion_prompt": motion_prompt,
         }
+
+    def check_feature_coverage(
+        self,
+        features: List[str],
+        elements: List[str],
+        addition_elements: List[str],
+    ) -> List[str]:
+        """Check which user features are NOT represented in the elements list.
+
+        A feature is 'covered' if an existing element semantically represents it
+        (e.g. 'exposed brick' is covered by 'walls'). Returns the list of
+        features that have no coverage and need to be force-injected.
+        """
+        if not features:
+            return []
+
+        elements_str = ", ".join(elements)
+        additions_str = ", ".join(addition_elements) if addition_elements else "none"
+        features_str = ", ".join(features)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are validating a renovation plan.\n\n"
+                    f"ELEMENTS planned for renovation: {elements_str}\n"
+                    f"ADDITIONS (new elements to add): {additions_str}\n"
+                    f"USER-REQUESTED FEATURES: {features_str}\n\n"
+                    "For each user feature, decide if it is COVERED by any "
+                    "element or addition — either as a direct match or because "
+                    "an element semantically represents it (e.g. 'exposed brick' "
+                    "is covered by 'walls' since brick is a wall treatment; "
+                    "'pendant lights' is covered by 'lighting').\n\n"
+                    "List ONLY the user features that are NOT covered by any "
+                    "element. Use the exact feature names as provided.\n\n"
+                    "If all features are covered, respond with exactly: NONE\n"
+                    "Otherwise respond with a comma-separated list of uncovered "
+                    "feature names."
+                ),
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            logger.info("[GPT] Feature coverage check: %s", content)
+
+            if content.upper() == "NONE":
+                return []
+
+            features_lower = {f.lower(): f for f in features}
+            missing = []
+            for token in content.split(","):
+                token_clean = token.strip().lower()
+                if token_clean in features_lower:
+                    missing.append(features_lower[token_clean])
+            return missing
+        except Exception as exc:
+            logger.warning("[GPT] Feature coverage check failed, skipping: %s", exc)
+            return []
+
+    def audit_stage_bleed(
+        self,
+        prev_image_url: str,
+        new_image_url: str,
+        targeted_elements: List[str],
+        all_elements: List[str],
+        renovated_elements: List[str],
+    ) -> List[str]:
+        """Compare two stage images and return elements that visually changed
+        beyond what was targeted (i.e. bleed from the I2I model).
+
+        Returns a list of element names from *remaining* (not yet renovated,
+        not targeted this stage) that appear to have been renovated by bleed.
+        """
+        remaining = [
+            e for e in all_elements
+            if e not in renovated_elements and e not in targeted_elements
+        ]
+        if not remaining:
+            return []
+
+        remaining_str = ", ".join(remaining)
+        targeted_str = ", ".join(targeted_elements)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a visual QA inspector for a renovation timelapse. "
+                    "You will see two images: BEFORE and AFTER a renovation stage.\n\n"
+                    f"The INTENDED change targeted ONLY: {targeted_str}.\n"
+                    f"These elements have NOT been renovated yet: {remaining_str}.\n\n"
+                    "Your job: compare the two images and identify which of the "
+                    "NOT-YET-RENOVATED elements appear to have ALSO visually changed "
+                    "(new paint, new finish, cleaned up, different material, etc.) "
+                    "even though they were NOT targeted.\n\n"
+                    "Only flag elements with CLEAR, OBVIOUS visual changes — not "
+                    "minor lighting shifts or compression artifacts.\n\n"
+                    "Respond with ONLY a comma-separated list of element names that "
+                    "bled, using the exact names provided. If nothing bled, respond "
+                    "with exactly: NONE"
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "BEFORE (previous stage):"},
+                    {"type": "image_url", "image_url": {"url": prev_image_url}},
+                    {"type": "text", "text": "AFTER (current stage):"},
+                    {"type": "image_url", "image_url": {"url": new_image_url}},
+                ],
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.3,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            logger.info("[GPT] Bleed audit result: %s", content)
+
+            if content.upper() == "NONE":
+                return []
+
+            remaining_lower = {e.lower(): e for e in remaining}
+            bled = []
+            for token in content.split(","):
+                token = token.strip().lower()
+                if token in remaining_lower:
+                    bled.append(remaining_lower[token])
+            return bled
+        except Exception as exc:
+            logger.warning("[GPT] Bleed audit failed, skipping: %s", exc)
+            return []
+
+    def check_stage_delta(
+        self,
+        prev_image_url: str,
+        new_image_url: str,
+        targeted_elements: List[str],
+    ) -> bool:
+        """Compare two consecutive stage images and return whether
+        the visual difference is significant enough to keep.
+
+        Returns True if delta is sufficient, False if the stage
+        should be rejected and replanned.
+        """
+        targeted_str = ", ".join(targeted_elements)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a visual QA inspector for a renovation timelapse video. "
+                    "You will see two consecutive frames: BEFORE and AFTER.\n\n"
+                    f"The renovation targeted: {targeted_str}.\n\n"
+                    "Your job: judge whether a casual viewer scrolling TikTok/Instagram "
+                    "would notice a CLEAR, OBVIOUS visual difference between the two "
+                    "images at a glance (within 1 second of viewing).\n\n"
+                    "Answer PASS if the change is clearly visible at room scale.\n"
+                    "Answer FAIL if the images look essentially the same — the change "
+                    "is too subtle, too localized, or too similar to the previous state "
+                    "to register as a distinct renovation step.\n\n"
+                    "Respond with EXACTLY one word: PASS or FAIL"
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "BEFORE (previous stage):"},
+                    {"type": "image_url", "image_url": {"url": prev_image_url}},
+                    {"type": "text", "text": "AFTER (current stage):"},
+                    {"type": "image_url", "image_url": {"url": new_image_url}},
+                ],
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip().upper()
+            logger.info("[GPT] Delta check result: %s (targeted: %s)", content, targeted_str)
+            return content.startswith("PASS")
+        except Exception as exc:
+            logger.warning("[GPT] Delta check failed, accepting stage: %s", exc)
+            return True  # fail-open: accept the stage if Vision call errors
+
+    def review_image_prompt(
+        self,
+        image_prompt: str,
+        targeted_elements: List[str],
+        all_elements: List[str],
+        user_features: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Strict compliance review of an image_prompt before it reaches the I2I model.
+        Returns {"approved": bool, "violations": list[str]}.
+        Fail-open: returns approved=True on error.
+        """
+        targeted_str = ", ".join(targeted_elements) if targeted_elements else "none"
+        non_targeted = [e for e in all_elements if e not in targeted_elements]
+        non_targeted_str = ", ".join(non_targeted) if non_targeted else "none"
+        features_str = ", ".join(user_features) if user_features else "none"
+
+        system_prompt = (
+            "You are a QA reviewer for image editing prompts sent to an I2I model. "
+            "Focus on catching real mistakes, not nitpicking.\n\n"
+            f"TARGET ELEMENTS (allowed to mention): {targeted_str}\n"
+            f"NON-TARGET ELEMENTS (MUST NOT appear by name): {non_targeted_str}\n\n"
+            "RULES — only reject for clear violations:\n"
+            "1. Must end with 'Change nothing else.' — nothing after it.\n"
+            "2. Must NOT name any non-target element. 'Keep X unchanged' or 'X stays as-is' "
+            "is a VIOLATION — it draws the I2I model's attention to X and causes damage.\n"
+            "3. MAX 200 characters total.\n\n"
+            "IMPORTANT — these are ALLOWED, do NOT flag them:\n"
+            "- Sub-components, materials, finishes, hardware of targeted elements "
+            "(e.g. 'shaker doors' on cabinetry, 'low-iron glass' for glazing, 'black pulls' on cabinets)\n"
+            "- Describing placement for additions ('on back wall')\n"
+            "- Descriptive words about appearance (slim, wide-plank, full-height, flush)\n\n"
+            "Respond EXACTLY:\n"
+            "VERDICT: [APPROVED or REJECTED]\n"
+            "VIOLATIONS: [comma-separated list, or 'none']"
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"IMAGE_PROMPT: {image_prompt}"},
+                ],
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip()
+
+            verdict, violations_str = "", ""
+            for line in content.split("\n"):
+                line = line.strip()
+                upper = line.upper()
+                if upper.startswith("VERDICT:"):
+                    verdict = line[len("VERDICT:"):].strip().upper()
+                elif upper.startswith("VIOLATIONS:"):
+                    violations_str = line[len("VIOLATIONS:"):].strip()
+
+            approved = verdict == "APPROVED"
+            violations = [
+                v.strip() for v in violations_str.split(",")
+                if v.strip() and v.strip().lower() != "none"
+            ]
+
+            logger.info("[GPT] Image prompt review: %s (violations: %s)", verdict, violations_str)
+            return {"approved": approved, "violations": violations}
+
+        except Exception as exc:
+            logger.warning("[GPT] Image prompt review failed, approving by default: %s", exc)
+            return {"approved": True, "violations": []}
+
+    def fix_image_prompt(
+        self,
+        image_prompt: str,
+        violations: List[str],
+        targeted_elements: List[str],
+        all_elements: List[str],
+    ) -> str:
+        """
+        Ask GPT to fix a non-compliant image_prompt given specific violations.
+        Returns the corrected prompt. On error, returns the original.
+        """
+        targeted_str = ", ".join(targeted_elements) if targeted_elements else "none"
+        non_targeted = [e for e in all_elements if e not in targeted_elements]
+        non_targeted_str = ", ".join(non_targeted) if non_targeted else "none"
+        violations_str = "; ".join(violations)
+
+        system_prompt = (
+            "Fix the image prompt below. It was rejected for these violations:\n"
+            f"{violations_str}\n\n"
+            f"TARGET ELEMENTS (allowed to mention): {targeted_str}\n"
+            f"NON-TARGET ELEMENTS (must NOT appear): {non_targeted_str}\n\n"
+            "RULES for the fixed prompt:\n"
+            "- MAX 200 characters\n"
+            "- Describe ONLY the target element(s)' final pristine appearance\n"
+            "- End with exactly 'Change nothing else.'\n"
+            "- Do NOT name any non-target element\n"
+            "- Do NOT add new elements or features\n"
+            "- Do NOT use dimensional/shape language\n"
+            "- Preserve the original renovation intent\n\n"
+            "Respond with ONLY:\n"
+            "FIXED_PROMPT: [the corrected prompt]"
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"IMAGE_PROMPT: {image_prompt}"},
+                ],
+                temperature=0.4,
+            )
+            content = (response.choices[0].message.content or "").strip()
+
+            for line in content.split("\n"):
+                line = line.strip()
+                if line.upper().startswith("FIXED_PROMPT:"):
+                    fixed = line[len("FIXED_PROMPT:"):].strip()
+                    if fixed:
+                        logger.info("[GPT] Fixed image prompt: %s", fixed)
+                        return fixed
+
+            logger.warning("[GPT] Could not parse fixed prompt, using original")
+            return image_prompt
+
+        except Exception as exc:
+            logger.warning("[GPT] Fix image prompt failed, using original: %s", exc)
+            return image_prompt
 
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
         """
