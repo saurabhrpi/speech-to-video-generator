@@ -1078,7 +1078,7 @@ export default function App() {
 
         <section className="space-y-3">
           {mode === 'timelapse' ? (
-            <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} stepByStep={stepByStep} onStepByStepChange={setStepByStep} />
+            <TimelapseForm busy={busy} onSubmit={handleTimelapseSubmit} stepByStep={stepByStep} onStepByStepChange={setStepByStep} onVideoModelChange={v => { if (formPayload) setFormPayload(prev => prev ? { ...prev, video_model: v } : prev) }} />
           ) : mode === 'video_studio' ? (
             <VideoStudio busy={busy} onBusyChange={setBusy} onJsonUpdate={setJsonOut} onVideoUrl={setVideoUrl} />
           ) : (

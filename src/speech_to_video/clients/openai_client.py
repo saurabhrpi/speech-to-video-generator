@@ -826,6 +826,190 @@ class OpenAIClient:
             logger.warning("[GPT] Bleed audit failed, skipping: %s", exc)
             return []
 
+    def check_stage_delta(
+        self,
+        prev_image_url: str,
+        new_image_url: str,
+        targeted_elements: List[str],
+    ) -> bool:
+        """Compare two consecutive stage images and return whether
+        the visual difference is significant enough to keep.
+
+        Returns True if delta is sufficient, False if the stage
+        should be rejected and replanned.
+        """
+        targeted_str = ", ".join(targeted_elements)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a visual QA inspector for a renovation timelapse video. "
+                    "You will see two consecutive frames: BEFORE and AFTER.\n\n"
+                    f"The renovation targeted: {targeted_str}.\n\n"
+                    "Your job: judge whether a casual viewer scrolling TikTok/Instagram "
+                    "would notice a CLEAR, OBVIOUS visual difference between the two "
+                    "images at a glance (within 1 second of viewing).\n\n"
+                    "Answer PASS if the change is clearly visible at room scale.\n"
+                    "Answer FAIL if the images look essentially the same — the change "
+                    "is too subtle, too localized, or too similar to the previous state "
+                    "to register as a distinct renovation step.\n\n"
+                    "Respond with EXACTLY one word: PASS or FAIL"
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "BEFORE (previous stage):"},
+                    {"type": "image_url", "image_url": {"url": prev_image_url}},
+                    {"type": "text", "text": "AFTER (current stage):"},
+                    {"type": "image_url", "image_url": {"url": new_image_url}},
+                ],
+            },
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=messages,
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip().upper()
+            logger.info("[GPT] Delta check result: %s (targeted: %s)", content, targeted_str)
+            return content.startswith("PASS")
+        except Exception as exc:
+            logger.warning("[GPT] Delta check failed, accepting stage: %s", exc)
+            return True  # fail-open: accept the stage if Vision call errors
+
+    def review_image_prompt(
+        self,
+        image_prompt: str,
+        targeted_elements: List[str],
+        all_elements: List[str],
+        user_features: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Strict compliance review of an image_prompt before it reaches the I2I model.
+        Returns {"approved": bool, "violations": list[str]}.
+        Fail-open: returns approved=True on error.
+        """
+        targeted_str = ", ".join(targeted_elements) if targeted_elements else "none"
+        non_targeted = [e for e in all_elements if e not in targeted_elements]
+        non_targeted_str = ", ".join(non_targeted) if non_targeted else "none"
+        features_str = ", ".join(user_features) if user_features else "none"
+
+        system_prompt = (
+            "You are a QA reviewer for image editing prompts sent to an I2I model. "
+            "Focus on catching real mistakes, not nitpicking.\n\n"
+            f"TARGET ELEMENTS (allowed to mention): {targeted_str}\n"
+            f"NON-TARGET ELEMENTS (MUST NOT appear by name): {non_targeted_str}\n\n"
+            "RULES — only reject for clear violations:\n"
+            "1. Must end with 'Change nothing else.' — nothing after it.\n"
+            "2. Must NOT name any non-target element. 'Keep X unchanged' or 'X stays as-is' "
+            "is a VIOLATION — it draws the I2I model's attention to X and causes damage.\n"
+            "3. MAX 200 characters total.\n\n"
+            "IMPORTANT — these are ALLOWED, do NOT flag them:\n"
+            "- Sub-components, materials, finishes, hardware of targeted elements "
+            "(e.g. 'shaker doors' on cabinetry, 'low-iron glass' for glazing, 'black pulls' on cabinets)\n"
+            "- Describing placement for additions ('on back wall')\n"
+            "- Descriptive words about appearance (slim, wide-plank, full-height, flush)\n\n"
+            "Respond EXACTLY:\n"
+            "VERDICT: [APPROVED or REJECTED]\n"
+            "VIOLATIONS: [comma-separated list, or 'none']"
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"IMAGE_PROMPT: {image_prompt}"},
+                ],
+                temperature=0.2,
+            )
+            content = (response.choices[0].message.content or "").strip()
+
+            verdict, violations_str = "", ""
+            for line in content.split("\n"):
+                line = line.strip()
+                upper = line.upper()
+                if upper.startswith("VERDICT:"):
+                    verdict = line[len("VERDICT:"):].strip().upper()
+                elif upper.startswith("VIOLATIONS:"):
+                    violations_str = line[len("VIOLATIONS:"):].strip()
+
+            approved = verdict == "APPROVED"
+            violations = [
+                v.strip() for v in violations_str.split(",")
+                if v.strip() and v.strip().lower() != "none"
+            ]
+
+            logger.info("[GPT] Image prompt review: %s (violations: %s)", verdict, violations_str)
+            return {"approved": approved, "violations": violations}
+
+        except Exception as exc:
+            logger.warning("[GPT] Image prompt review failed, approving by default: %s", exc)
+            return {"approved": True, "violations": []}
+
+    def fix_image_prompt(
+        self,
+        image_prompt: str,
+        violations: List[str],
+        targeted_elements: List[str],
+        all_elements: List[str],
+    ) -> str:
+        """
+        Ask GPT to fix a non-compliant image_prompt given specific violations.
+        Returns the corrected prompt. On error, returns the original.
+        """
+        targeted_str = ", ".join(targeted_elements) if targeted_elements else "none"
+        non_targeted = [e for e in all_elements if e not in targeted_elements]
+        non_targeted_str = ", ".join(non_targeted) if non_targeted else "none"
+        violations_str = "; ".join(violations)
+
+        system_prompt = (
+            "Fix the image prompt below. It was rejected for these violations:\n"
+            f"{violations_str}\n\n"
+            f"TARGET ELEMENTS (allowed to mention): {targeted_str}\n"
+            f"NON-TARGET ELEMENTS (must NOT appear): {non_targeted_str}\n\n"
+            "RULES for the fixed prompt:\n"
+            "- MAX 200 characters\n"
+            "- Describe ONLY the target element(s)' final pristine appearance\n"
+            "- End with exactly 'Change nothing else.'\n"
+            "- Do NOT name any non-target element\n"
+            "- Do NOT add new elements or features\n"
+            "- Do NOT use dimensional/shape language\n"
+            "- Preserve the original renovation intent\n\n"
+            "Respond with ONLY:\n"
+            "FIXED_PROMPT: [the corrected prompt]"
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"IMAGE_PROMPT: {image_prompt}"},
+                ],
+                temperature=0.4,
+            )
+            content = (response.choices[0].message.content or "").strip()
+
+            for line in content.split("\n"):
+                line = line.strip()
+                if line.upper().startswith("FIXED_PROMPT:"):
+                    fixed = line[len("FIXED_PROMPT:"):].strip()
+                    if fixed:
+                        logger.info("[GPT] Fixed image prompt: %s", fixed)
+                        return fixed
+
+            logger.warning("[GPT] Could not parse fixed prompt, using original")
+            return image_prompt
+
+        except Exception as exc:
+            logger.warning("[GPT] Fix image prompt failed, using original: %s", exc)
+            return image_prompt
+
     def split_prompt_for_two_clips(self, prompt: str) -> Dict[str, str]:
         """
         Use GPT to intelligently split a prompt into two parts for seamless 2-clip video generation.

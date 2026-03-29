@@ -20,8 +20,11 @@ Examples:
 
 Don't add routine stuff. Only expensive lessons.
 
-## 3. Update CLAUDE.md (rare)
+## 3. Sync the Memory in the project root folder (if applicable)
+In case you made any changes to the memory folder in your "hardwired memory" folder (a folder outside of the project root folder) and did NOT make the same changes to the memory folder in the root of this project, DO SO RIGHT NOW.
+
+## 4. Update CLAUDE.md (rare)
 Only if we made a major architectural decision that changes project rules.
 
-## 4. Confirm
+## 5. Confirm
 Show me the updated NOW.md so I can verify before we end.

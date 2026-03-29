@@ -39,6 +39,8 @@
 - [ALWAYS complete all 5 steps of Data Flow Verification](feedback_data_flow_verification.md) — never stop at the function return; verify the call site consumes it and the downstream code accesses it
 - [Sync Memory folders](feedback_memory_sync.md) — every memory update must be written to both locations
 - [Change summary format](feedback_summary_format.md) — ~6 word heading + body (max 800 chars) with each change as a separate paragraph
+- [Change Impact Analysis Protocol](feedback_change_impact_analysis.md) — every code change must include structured impact report: change, flow, downstream effects, costs, guardrails
+- [Use MEMORY.md one-liners as pre-change checklist](feedback_memory_checklist.md) — scan Feedback section before every code change; only read full files when one-liner isn't enough
 
 ## CLAUDE.md
 - Fully rewritten 2026-03-22 with technical analysis + product vision interview

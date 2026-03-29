@@ -223,9 +223,6 @@ class VideoService:
         resume = resume_state or {}
         seed = resume.get("seed", random.randint(1, 2**31 - 1))
 
-        if resume_state and resume_state.get("video_model"):
-            video_model = resume_state["video_model"]
-
         def _state_snapshot():
             return {
                 "scene_bible": scene_bible,
@@ -316,9 +313,14 @@ class VideoService:
                     parts.append(f"{elem} = original / not yet renovated")
             return "; ".join(parts) if parts else "all elements in original state"
 
-        for stage_idx in range(completed_stages, NUM_STAGES):
+        stage_idx = completed_stages
+        _delta_rejection_hint = ""
+        _delta_attempts = 0
+        _DELTA_MAX_RETRIES = 2
+        while stage_idx < NUM_STAGES:
             stage_num = stage_idx + 1
             phase_name = f"stage_{stage_num}"
+            _was_freshly_planned = False
 
             if stage_idx == 0:
                 stage_desc = stages[0]["description"]
@@ -334,6 +336,7 @@ class VideoService:
                 )
             else:
                 if stage_idx >= len(stages):
+                    _was_freshly_planned = True
                     prev_img = keyframe_images[-1]
                     prev_desc = stages[-1].get("description", "") or stages[-1].get("edit_delta", "")
                     room_state = _build_room_state()
@@ -375,6 +378,10 @@ class VideoService:
                         )
                         logger.info("[Timelapse] Stage %d grouping hint: %s", stage_num, grouping_hint)
 
+                    combined_hint = grouping_hint
+                    if _delta_rejection_hint:
+                        combined_hint = f"{grouping_hint}\n{_delta_rejection_hint}" if grouping_hint else _delta_rejection_hint
+
                     gpt_result = self.openai_client.generate_next_stage(
                         scene_bible=scene_bible,
                         prev_description=prev_desc,
@@ -384,7 +391,7 @@ class VideoService:
                         all_elements=all_elements,
                         renovated_elements=renovated_elements,
                         room_state=room_state,
-                        grouping_hint=grouping_hint,
+                        grouping_hint=combined_hint,
                         user_features=request.features,
                     )
                     newly_done = gpt_result.get("renovated_element", [])
@@ -414,6 +421,38 @@ class VideoService:
                 img_prompt = stages[stage_idx].get("image_prompt") or stages[stage_idx]["edit_delta"]
                 prev_image_url = keyframe_images[-1]["image_url"]
 
+                # --- Review-fix loop: ensure image_prompt compliance ---
+                MAX_REVIEW_ATTEMPTS = 5
+                targeted = stages[stage_idx].get("renovated_element", [])
+                for review_attempt in range(1, MAX_REVIEW_ATTEMPTS + 1):
+                    review = self.openai_client.review_image_prompt(
+                        image_prompt=img_prompt,
+                        targeted_elements=targeted,
+                        all_elements=all_elements,
+                        user_features=request.features,
+                    )
+                    if review["approved"]:
+                        if review_attempt > 1:
+                            logger.info("[Timelapse] Stage %d image_prompt approved after %d attempts",
+                                        stage_num, review_attempt)
+                        break
+                    logger.warning("[Timelapse] Stage %d image_prompt REJECTED (attempt %d): %s",
+                                   stage_num, review_attempt, review["violations"])
+                    logger.info("[Timelapse] Stage %d rejected prompt: %s", stage_num, img_prompt)
+                    if review_attempt < MAX_REVIEW_ATTEMPTS:
+                        img_prompt = self.openai_client.fix_image_prompt(
+                            image_prompt=img_prompt,
+                            violations=review["violations"],
+                            targeted_elements=targeted,
+                            all_elements=all_elements,
+                        )
+                        stages[stage_idx]["image_prompt"] = img_prompt
+                        logger.info("[Timelapse] Stage %d fixed prompt (attempt %d): %s",
+                                    stage_num, review_attempt, img_prompt)
+                    else:
+                        logger.warning("[Timelapse] Stage %d image_prompt still rejected after %d attempts, using last version",
+                                       stage_num, MAX_REVIEW_ATTEMPTS)
+
                 prompt = f"{img_prompt}"
                 _notify(phase_name, 1, 2, f"Stage {stage_num}: generating edited image...")
                 logger.info("[Timelapse] Stage %d: Edit via Nano Banana Pro Edit", stage_num)
@@ -441,6 +480,49 @@ class VideoService:
                 }
 
             image_url = images[0]
+
+            # --- Delta check: reject stages with insufficient visual change ---
+            if _was_freshly_planned and _delta_attempts < _DELTA_MAX_RETRIES:
+                targeted = stages[stage_idx].get("renovated_element", [])
+                other_to_group = [
+                    e for e in all_elements
+                    if e not in renovated_elements and e not in targeted
+                ]
+                if other_to_group:
+                    delta_ok = self.openai_client.check_stage_delta(
+                        prev_image_url=keyframe_images[-1]["image_url"],
+                        new_image_url=image_url,
+                        targeted_elements=targeted,
+                    )
+                    if not delta_ok:
+                        logger.info(
+                            "[Timelapse] Stage %d: delta check FAILED (attempt %d/%d), "
+                            "replanning with grouping",
+                            stage_num, _delta_attempts + 1, _DELTA_MAX_RETRIES,
+                        )
+                        _notify(phase_name, 1, 2,
+                                f"Stage {stage_num}: visual change too subtle, replanning...")
+                        # Roll back state from the failed attempt
+                        _is_partial = stages[stage_idx].get("is_partial", False)
+                        if not _is_partial:
+                            for elem in targeted:
+                                if elem in renovated_elements:
+                                    renovated_elements.remove(elem)
+                        for elem in targeted:
+                            element_material.pop(elem.lower().strip(), None)
+                        stages.pop()
+                        # Set hint for next planning attempt
+                        rejected_str = ", ".join(targeted)
+                        _delta_rejection_hint = (
+                            f"DELTA REJECTION: Renovating [{rejected_str}] alone "
+                            f"produced NO visible change. You MUST group "
+                            f"[{rejected_str}] with at least one other remaining "
+                            f"element ({', '.join(other_to_group)}) to ensure a "
+                            f"dramatic visual difference."
+                        )
+                        _delta_attempts += 1
+                        continue
+
             keyframe_images.append({
                 "stage": stage_num,
                 "image_url": image_url,
@@ -472,6 +554,10 @@ class VideoService:
                     "success": True, "phase_completed": phase_name, "pipeline": "v2",
                     **_state_snapshot(),
                 }
+
+            _delta_rejection_hint = ""
+            _delta_attempts = 0
+            stage_idx += 1
 
         # --- Video transitions via configured I2V model ---
         total_transitions = len(keyframe_images) - 1
@@ -632,10 +718,10 @@ class VideoService:
                 **_state_snapshot(),
             }
 
-        # --- Stitch with 1.5x speed ---
+        # --- Stitch with 3x speed ---
         _notify("stitch", 0, 1, "Stitching videos...")
         stitched = stitch_timelapse_clips(
-            video_sources=transition_videos, speed=1.5, dissolve=False,
+            video_sources=transition_videos, speed=3.0, dissolve=False,
             hold_first_frame=2.0,
         )
 

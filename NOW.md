@@ -1,19 +1,20 @@
 # Session Log
 
-## Current Session: 6
-**Date:** 2026-03-26
+## Current Session: 8
+**Date:** 2026-03-28
 **Branch:** interior-timelapse
-**Status:** Retry logic, bleed audit, and feature coverage validation added. Two test runs analyzed (kitchen + patio).
+**Status:** Delta check implemented, untested.
 
 ## What Happened This Session
-- **Transition video retry**: Transitions and final pan now retry up to 2 attempts on failure instead of bailing to user.
-- **Bleed audit**: GPT Vision compares before/after each stage, marks unintended element changes as renovated so GPT skips them. Worked correctly (returned NONE on patio run — no bleed detected, low delta was a different problem).
-- **Feature coverage validation**: After plan generation, GPT checks if all user features are represented in elements. Missing features are force-injected as additions. Fixes river pebbles being silently dropped.
-- **Patio test revealed**: low-delta stages (brick cleaning), GPT inventing questionable elements (steps, drainage), drain destroyed then re-added with wrong design. Known problem #4 (indoor/outdoor prompt mismatch) confirmed.
+- Diagnosed zero-delta bug: GPT treated "window" and "glass panels" as separate elements with visually identical renovations (clear glass + white frames). Stage 5→6 produced no visible change.
+- Found bonus bug: "door" marked renovated via bleed audit without ever getting its own stage.
+- Implemented post-generation delta check: GPT Vision compares consecutive stage images, rejects and replans with forced grouping if change is too subtle. While loop + rollback, max 2 retries, zero code duplication.
+- Added Change Impact Analysis Protocol to memory (structured report before every code change).
+- Added pre-change memory checklist rule (scan MEMORY.md one-liners, don't re-read full files).
 
 ## Next Step
-Test patio generation with feature injection active — verify river pebbles actually appear. Then address low-delta stages (bleed audit doesn't help when the stage is correctly executed but visually subtle).
+Test the delta check with the same inputs (Home Office, Scandinavian, glass panels + built-in cabinetry). Verify stage 6 now groups glass panels with another element instead of producing a zero-delta image.
 
 ## Open Questions
-- Should GPT be constrained from inventing structural elements (steps, drainage) on outdoor spaces?
-- Low-delta stages need a different mechanism than bleed audit — pre-stage impact estimation, or post-stage delta check with replan?
+- Should GPT be constrained from inventing structural elements on outdoor spaces? (carried from session 7)
+- Low-delta stages where the element IS different but visually subtle (e.g., ceiling repaint) — delta check catches these too, but is forced grouping always the right response?

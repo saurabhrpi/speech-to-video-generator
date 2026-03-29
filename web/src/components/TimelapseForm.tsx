@@ -18,9 +18,10 @@ interface TimelapseFormProps {
   onSubmit: (payload: Record<string, any>) => void
   stepByStep?: boolean
   onStepByStepChange?: (v: boolean) => void
+  onVideoModelChange?: (v: string) => void
 }
 
-export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStepChange }: TimelapseFormProps) {
+export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStepChange, onVideoModelChange }: TimelapseFormProps) {
   const [options, setOptions] = useState<TimelapseOptions | null>(null)
   const [roomType, setRoomType] = useState('')
   const [style, setStyle] = useState('')
@@ -177,7 +178,7 @@ export default function TimelapseForm({ busy, onSubmit, stepByStep, onStepByStep
           <label className="text-sm font-medium">Video Model</label>
           <select
             value={videoModel}
-            onChange={e => setVideoModel(e.target.value as 'cheap' | 'expensive')}
+            onChange={e => { const v = e.target.value as 'cheap' | 'expensive'; setVideoModel(v); onVideoModelChange?.(v) }}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="cheap">Cheap (Hailuo)</option>
