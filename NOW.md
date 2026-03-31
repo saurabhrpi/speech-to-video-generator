@@ -1,20 +1,18 @@
 # Session Log
 
-## Current Session: 8
-**Date:** 2026-03-28
+## Current Session: 10
+**Date:** 2026-03-29
 **Branch:** interior-timelapse
-**Status:** Delta check implemented, untested.
+**Status:** No code changes. Competitive research discussion only.
 
 ## What Happened This Session
-- Diagnosed zero-delta bug: GPT treated "window" and "glass panels" as separate elements with visually identical renovations (clear glass + white frames). Stage 5→6 produced no visible change.
-- Found bonus bug: "door" marked renovated via bleed audit without ever getting its own stage.
-- Implemented post-generation delta check: GPT Vision compares consecutive stage images, rejects and replans with forced grouping if change is too subtle. While loop + rollback, max 2 retries, zero code duplication.
-- Added Change Impact Analysis Protocol to memory (structured report before every code change).
-- Added pre-change memory checklist rule (scan MEMORY.md one-liners, don't re-read full files).
+- Discussed market research approach: user downloaded top 2 "AI Video Generator" apps from App Store, trialed #1 with same inputs as last session's clip (Home Office, Scandinavian, Glass panels, Built-in cabinetry). Outlined remaining research steps: UX comparison, speed/cost, output quality delta, feature scope, positioning, and testing app #2.
 
 ## Next Step
-Test the delta check with the same inputs (Home Office, Scandinavian, glass panels + built-in cabinetry). Verify stage 6 now groups glass panels with another element instead of producing a zero-delta image.
+Full E2E Kling run to validate transition quality with reviewer GPT, then create PR. (Carried from session 9 — still pending.)
 
 ## Open Questions
+- Where does the app have a defensible advantage vs. App Store competitors? (new — pending research completion)
 - Should GPT be constrained from inventing structural elements on outdoor spaces? (carried from session 7)
-- Low-delta stages where the element IS different but visually subtle (e.g., ceiling repaint) — delta check catches these too, but is forced grouping always the right response?
+- Low-delta stages where the element IS different but visually subtle — forced grouping always right? (carried from session 8)
+- Bleed audit marks damaged elements as "renovated" — should it flag for retry instead? (carried from session 9)
