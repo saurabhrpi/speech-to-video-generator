@@ -25,6 +25,11 @@
 3. Can't reliably handle >2 features
 4. Prompts for indoor vs outdoor spaces don't transfer well
 
+## Infrastructure
+- Backend deployed to speech-2-video.ai via Replit (code there may lag behind repo)
+- User has Mac laptop + iPhone for iOS development/testing
+- iOS strategy: Capacitor wrapping existing React SPA (decided 2026-03-30)
+
 ## Key Technical Facts
 - Config is a plain dataclass with os.environ.get(), NOT pydantic-settings
 - GPT model is gpt-5.2 (set in .env), not gpt-4 (code default)
