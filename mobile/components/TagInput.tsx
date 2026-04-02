@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 
 interface TagInputProps {
   label: string;
@@ -80,19 +80,17 @@ export default function TagInput({
 
       {showSuggestions && input.length > 0 && filtered.length > 0 && (
         <View className="rounded-md border border-input bg-background max-h-40">
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {filtered.map((item) => (
               <Pressable
+                key={item}
                 onPress={() => addTag(item)}
                 className="px-3 py-2 active:bg-accent"
               >
                 <Text className="text-sm text-foreground">{item}</Text>
               </Pressable>
-            )}
-          />
+            ))}
+          </ScrollView>
         </View>
       )}
     </View>
