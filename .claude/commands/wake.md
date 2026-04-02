@@ -4,7 +4,7 @@ Read these files to restore session context:
 
 1. Read `CLAUDE.md` — project identity and rules
 2. Read `NOW.md` — where we left off last session
-3. Read `C:\Users\meets\.claude\projects\C--Users-meets-POCs-speech-to-video\memory\MEMORY.md` — lessons learned so far
+3. Read `/Users/saurabhsmacbookair/.claude/projects/-Users-saurabhsmacbookair-POCs-resume-system/memory/MEMORY.md` — lessons learned so far
 
 Then report back:
 - What session number is this? (count from NOW.md or estimate)

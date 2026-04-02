@@ -42,6 +42,11 @@
 - [Change Impact Analysis Protocol](feedback_change_impact_analysis.md) — every code change must include structured impact report: change, flow, downstream effects, costs, guardrails
 - [Use MEMORY.md one-liners as pre-change checklist](feedback_memory_checklist.md) — scan Feedback section before every code change; only read full files when one-liner isn't enough
 
+## Project
+- [Expo Migration](project_expo_migration.md) — Migrated from Capacitor to Expo (React Native), mobile/ dir, based on friend's advice
+- [User Profile](user_profile.md) — Solo dev, $10K/month goal, friend with successful iOS app advising
+- [NOW.md Frequency](feedback_now_md.md) — Only update NOW.md at end of session, not mid-work
+
 ## CLAUDE.md
 - Fully rewritten 2026-03-22 with technical analysis + product vision interview
 - Includes: vision/mission, target users, architecture origin, known problems, dev standards, API reference
