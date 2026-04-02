@@ -1,0 +1,53 @@
+ With a Mac + iPhone available, Capacitor is the clear choice. No rewrite — your existing React app runs inside a native iOS shell. Full Xcode
+  simulator testing on your Mac.
+
+  Here's the concrete path:
+
+  Step 1: Set up Capacitor in your project
+
+  On your Mac, clone the repo, then:
+
+  cd web
+  npm install @capacitor/core @capacitor/cli
+  npx cap init "Interior Timelapse" com.yourname.interiortimelapse
+  npm run build          # build your React app to web/dist
+  npx cap add ios        # creates ios/ directory with Xcode project
+  npx cap sync           # copies web/dist into the iOS project
+
+  Step 2: Run in Xcode simulator
+
+  npx cap open ios       # opens the Xcode project
+
+  Hit Run in Xcode — your app launches in the iOS Simulator. That's your testing loop.
+
+  Step 3: Dev workflow going forward
+
+  npm run build && npx cap sync    # after any frontend change
+
+  Or for live reload during development, Capacitor supports pointing the WebView at your Vite dev server (localhost:5173) so changes reflect
+  instantly without rebuilding.
+
+  Step 4: Native features to pass App Store review
+
+  A pure WebView wrapper risks rejection. Add at minimum:
+  - Push notifications (@capacitor/push-notifications) — notify when a 20-min generation job completes. This is genuinely useful and clearly native.
+  - Splash screen (@capacitor/splash-screen) — native launch experience
+  - Status bar (@capacitor/status-bar) — proper iOS status bar styling
+  - Haptics (@capacitor/haptics) — tactile feedback on actions
+
+  Step 5: Backend connectivity
+
+  Your FastAPI backend stays where it is (your server/cloud). The iOS app just calls the same API endpoints. You'll need to:
+  - Deploy the backend to a public URL (if not already)
+  - Update API base URL in the app to point to production instead of localhost:5000
+  - Ensure CORS allows the Capacitor origin (capacitor://localhost)
+
+  Step 6: App Store submission
+
+  - Enroll in Apple Developer Program ($99/year)
+  - Configure signing in Xcode
+  - TestFlight for beta testing on your iPhone
+  - Submit for App Store review
+
+******************************************************************************************************************************************************
+Once the app is ready, it can hit speech-2-video.ai instead of localhost:5000.

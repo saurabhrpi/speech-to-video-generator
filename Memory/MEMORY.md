@@ -49,6 +49,11 @@
 - [Never edit files without explicit permission](feedback_no_edits_without_permission.md) — do not write/edit/create ANY file unless user explicitly says to; propose and wait
 - [Use gh CLI for PR history](feedback_pr_lookup.md) — squash merges break git ancestry; use gh pr list, not git merge-base
 
+## Project
+- [Expo Migration](project_expo_migration.md) — Migrated from Capacitor to Expo (React Native), mobile/ dir, based on friend's advice
+- [User Profile](user_profile.md) — Solo dev, $10K/month goal, friend with successful iOS app advising
+- [NOW.md Frequency](feedback_now_md.md) — Only update NOW.md at end of session, not mid-work
+
 ## CLAUDE.md
 - Fully rewritten 2026-03-22 with technical analysis + product vision interview
 - Includes: vision/mission, target users, architecture origin, known problems, dev standards, API reference

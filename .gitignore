@@ -64,4 +64,6 @@ web/*.log
 .cursor/
 CLAUDE.md
 
-debug/
+debug/MacSetup.txt
+env
+web/.env.production
