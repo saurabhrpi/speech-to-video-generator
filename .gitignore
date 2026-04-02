@@ -67,3 +67,4 @@ CLAUDE.md
 debug/MacSetup.txt
 env
 web/.env.production
+debug/

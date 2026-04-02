@@ -500,6 +500,18 @@ class OpenAIClient:
                 f"{room_state}\n\n"
             )
 
+        protect_rule = ""
+        if user_features:
+            protect_rule = (
+                "- PROTECT: " + ", ".join(user_features)
+                + ". Enhance/highlight, never remove/cover/replace. If the element "
+                "being renovated shares space with a protected feature, state that "
+                "the feature texture itself stays but ALL other surfaces of that "
+                "element are fully renovated (e.g. \"renovate all painted wall "
+                "surfaces; exposed brick stays as brick but wall paint around it "
+                "is resurfaced\").\n"
+            )
+
         messages = [
             {
                 "role": "system",
@@ -521,7 +533,7 @@ class OpenAIClient:
                     "- Everything not targeted stays exactly as-is. The image model "
                     "preserves unchanged elements from the previous image automatically.\n"
                     "- For ADDITIONS: specify exact placement (which wall, which area).\n"
-                    f"{'- PROTECT: ' + ', '.join(user_features) + '. Enhance/highlight, never remove/cover/replace. If the element being renovated shares space with a protected feature, state that the feature texture itself stays but ALL other surfaces of that element are fully renovated (e.g. \"renovate all painted wall surfaces; exposed brick stays as brick but wall paint around it is resurfaced\").' + chr(10) if user_features else ''}"
+                    f"{protect_rule}"
                     "\nProduce SIX things:\n"
                     "1. EDIT (MAX 250 chars): What transforms. No human actions.\n"
                     "2. IMAGE_PROMPT (MAX 200 chars): Short instruction for the image "
