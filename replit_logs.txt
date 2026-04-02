@@ -1,0 +1,118 @@
+<workflow>
+<workflow_name>Web UI</workflow_name>
+<status>RUNNING</status><run_id>iv5yMRGs6ufAQjxDonhAw</run_id><timestamp>2026-04-02T04:58:23.309279+00:00</timestamp>
+<logs>Requirement already satisfied: openai>=1.35.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 1)) (2.3.0)
+Requirement already satisfied: requests>=2.31.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 2)) (2.32.5)
+Requirement already satisfied: python-dotenv>=1.0.1 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 3)) (1.1.1)
+Requirement already satisfied: moviepy>=1.0.3 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 4)) (2.2.1)
+Requirement already satisfied: tqdm>=4.66.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 5)) (4.67.1)
+Requirement already satisfied: gradio>=4.44.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 6)) (5.49.1)
+Requirement already satisfied: imageio-ffmpeg>=0.4.9 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 9)) (0.6.0)
+Requirement already satisfied: fastapi>=0.115.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 12)) (0.118.3)
+Requirement already satisfied: uvicorn>=0.30.0 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (0.37.0)
+Requirement already satisfied: python-multipart>=0.0.9 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 14)) (0.0.20)
+Requirement already satisfied: aiofiles>=23.2.1 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 15)) (24.1.0)
+Requirement already satisfied: authlib>=1.3.1 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 18)) (1.6.9)
+Requirement already satisfied: itsdangerous>=2.2.0 in ./.pythonlibs/lib/python3.11/site-packages (from -r requirements.txt (line 19)) (2.2.0)
+Requirement already satisfied: anyio<5,>=3.5.0 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (4.11.0)
+Requirement already satisfied: distro<2,>=1.7.0 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (1.9.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (0.28.1)
+Requirement already satisfied: jiter<1,>=0.10.0 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (0.11.0)
+Requirement already satisfied: pydantic<3,>=1.9.0 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (2.11.10)
+Requirement already satisfied: sniffio in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (1.3.1)
+Requirement already satisfied: typing-extensions<5,>=4.11 in ./.pythonlibs/lib/python3.11/site-packages (from openai>=1.35.0->-r requirements.txt (line 1)) (4.15.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in ./.pythonlibs/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 2)) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in ./.pythonlibs/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 2)) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in ./.pythonlibs/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 2)) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in ./.pythonlibs/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 2)) (2025.10.5)
+Requirement already satisfied: decorator<6.0,>=4.0.2 in ./.pythonlibs/lib/python3.11/site-packages (from moviepy>=1.0.3->-r requirements.txt (line 4)) (5.2.1)
+Requirement already satisfied: imageio<3.0,>=2.5 in ./.pythonlibs/lib/python3.11/site-packages (from moviepy>=1.0.3->-r requirements.txt (line 4)) (2.37.0)
+Requirement already satisfied: numpy>=1.25.0 in ./.pythonlibs/lib/python3.11/site-packages (from moviepy>=1.0.3->-r requirements.txt (line 4)) (2.3.3)
+Requirement already satisfied: proglog<=1.0.0 in ./.pythonlibs/lib/python3.11/site-packages (from moviepy>=1.0.3->-r requirements.txt (line 4)) (0.1.12)
+Requirement already satisfied: pillow<12.0,>=9.2.0 in ./.pythonlibs/lib/python3.11/site-packages (from moviepy>=1.0.3->-r requirements.txt (line 4)) (11.3.0)
+Requirement already satisfied: brotli>=1.1.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (1.1.0)
+Requirement already satisfied: ffmpy in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.6.3)
+Requirement already satisfied: gradio-client==1.13.3 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (1.13.3)
+Requirement already satisfied: groovy~=0.1 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.1.2)
+Requirement already satisfied: huggingface-hub<2.0,>=0.33.5 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.35.3)
+Requirement already satisfied: jinja2<4.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (3.1.6)
+Requirement already satisfied: markupsafe<4.0,>=2.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (3.0.3)
+Requirement already satisfied: orjson~=3.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (3.11.3)
+Requirement already satisfied: packaging in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (25.0)
+Requirement already satisfied: pandas<3.0,>=1.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (2.3.3)
+Requirement already satisfied: pydub in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.25.1)
+Requirement already satisfied: pyyaml<7.0,>=5.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (6.0.3)
+Requirement already satisfied: ruff>=0.9.3 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.14.0)
+Requirement already satisfied: safehttpx<0.2.0,>=0.1.6 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.1.6)
+Requirement already satisfied: semantic-version~=2.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (2.10.0)
+Requirement already satisfied: starlette<1.0,>=0.40.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.48.0)
+Requirement already satisfied: tomlkit<0.14.0,>=0.12.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.13.3)
+Requirement already satisfied: typer<1.0,>=0.12 in ./.pythonlibs/lib/python3.11/site-packages (from gradio>=4.44.0->-r requirements.txt (line 6)) (0.19.2)
+Requirement already satisfied: fsspec in ./.pythonlibs/lib/python3.11/site-packages (from gradio-client==1.13.3->gradio>=4.44.0->-r requirements.txt (line 6)) (2025.9.0)
+Requirement already satisfied: websockets<16.0,>=13.0 in ./.pythonlibs/lib/python3.11/site-packages (from gradio-client==1.13.3->gradio>=4.44.0->-r requirements.txt (line 6)) (15.0.1)
+Requirement already satisfied: click>=7.0 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn>=0.30.0->uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (8.3.0)
+Requirement already satisfied: h11>=0.8 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn>=0.30.0->uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (0.16.0)
+Requirement already satisfied: cryptography in ./.pythonlibs/lib/python3.11/site-packages (from authlib>=1.3.1->-r requirements.txt (line 18)) (46.0.5)
+Requirement already satisfied: httptools>=0.6.3 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (0.7.1)
+Requirement already satisfied: uvloop>=0.15.1 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (0.22.1)
+Requirement already satisfied: watchfiles>=0.13 in ./.pythonlibs/lib/python3.11/site-packages (from uvicorn[standard]>=0.30.0->-r requirements.txt (line 13)) (1.1.1)
+Requirement already satisfied: httpcore==1.* in ./.pythonlibs/lib/python3.11/site-packages (from httpx<1,>=0.23.0->openai>=1.35.0->-r requirements.txt (line 1)) (1.0.9)
+Requirement already satisfied: filelock in ./.pythonlibs/lib/python3.11/site-packages (from huggingface-hub<2.0,>=0.33.5->gradio>=4.44.0->-r requirements.txt (line 6)) (3.20.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.1.3 in ./.pythonlibs/lib/python3.11/site-packages (from huggingface-hub<2.0,>=0.33.5->gradio>=4.44.0->-r requirements.txt (line 6)) (1.1.10)
+Requirement already satisfied: python-dateutil>=2.8.2 in ./.pythonlibs/lib/python3.11/site-packages (from pandas<3.0,>=1.0->gradio>=4.44.0->-r requirements.txt (line 6)) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in ./.pythonlibs/lib/python3.11/site-packages (from pandas<3.0,>=1.0->gradio>=4.44.0->-r requirements.txt (line 6)) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in ./.pythonlibs/lib/python3.11/site-packages (from pandas<3.0,>=1.0->gradio>=4.44.0->-r requirements.txt (line 6)) (2025.2)
+Requirement already satisfied: annotated-types>=0.6.0 in ./.pythonlibs/lib/python3.11/site-packages (from pydantic<3,>=1.9.0->openai>=1.35.0->-r requirements.txt (line 1)) (0.7.0)
+Requirement already satisfied: pydantic-core==2.33.2 in ./.pythonlibs/lib/python3.11/site-packages (from pydantic<3,>=1.9.0->openai>=1.35.0->-r requirements.txt (line 1)) (2.33.2)
+Requirement already satisfied: typing-inspection>=0.4.0 in ./.pythonlibs/lib/python3.11/site-packages (from pydantic<3,>=1.9.0->openai>=1.35.0->-r requirements.txt (line 1)) (0.4.2)
+Requirement already satisfied: shellingham>=1.3.0 in ./.pythonlibs/lib/python3.11/site-packages (from typer<1.0,>=0.12->gradio>=4.44.0->-r requirements.txt (line 6)) (1.5.4)
+Requirement already satisfied: rich>=10.11.0 in ./.pythonlibs/lib/python3.11/site-packages (from typer<1.0,>=0.12->gradio>=4.44.0->-r requirements.txt (line 6)) (14.2.0)
+Requirement already satisfied: cffi>=2.0.0 in ./.pythonlibs/lib/python3.11/site-packages (from cryptography->authlib>=1.3.1->-r requirements.txt (line 18)) (2.0.0)
+Requirement already satisfied: pycparser in ./.pythonlibs/lib/python3.11/site-packages (from cffi>=2.0.0->cryptography->authlib>=1.3.1->-r requirements.txt (line 18)) (3.0)
+Requirement already satisfied: six>=1.5 in ./.pythonlibs/lib/python3.11/site-packages (from python-dateutil>=2.8.2->pandas<3.0,>=1.0->gradio>=4.44.0->-r requirements.txt (line 6)) (1.17.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in ./.pythonlibs/lib/python3.11/site-packages (from rich>=10.11.0->typer<1.0,>=0.12->gradio>=4.44.0->-r requirements.txt (line 6)) (4.0.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in ./.pythonlibs/lib/python3.11/site-packages (from rich>=10.11.0->typer<1.0,>=0.12->gradio>=4.44.0->-r requirements.txt (line 6)) (2.19.2)
+Requirement already satisfied: mdurl~=0.1 in ./.pythonlibs/lib/python3.11/site-packages (from markdown-it-py>=2.2.0->rich>=10.11.0->typer<1.0,>=0.12->gradio>=4.44.0->-r requirements.txt (line 6)) (0.1.2)
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@capacitor/cli@8.3.0',
+npm warn EBADENGINE   required: { node: '>=22.0.0' },
+npm warn EBADENGINE   current: { node: 'v20.20.0', npm: '10.8.2' }
+npm warn EBADENGINE }
+added 80 packages, changed 1 package, and audited 260 packages in 3s
+47 packages are looking for funding
+  run `npm fund` for details
+7 vulnerabilities (3 moderate, 4 high)
+To address all issues, run:
+  npm audit fix
+Run `npm audit` for details.
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.12.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+npm notice To update run: npm install -g npm@11.12.1
+npm notice
+> speech-to-video-web@0.1.0 build
+> tsc -b && vite build
+vite v5.4.20 building for production...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+transforming (1) index.htmlBrowserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 41 modules transformed.
+dist/index.html                   0.40 kB │ gzip:  0.27 kB
+dist/assets/index-CMmnLoOK.css   18.83 kB │ gzip:  4.38 kB
+dist/assets/index-2aEu3c92.js   209.99 kB │ gzip: 65.28 kB
+✓ built in 1.42s
+new /gradio
+2026-04-02 04:17:42,151 httpx INFO HTTP Request: GET https://api.gradio.app/pkg-version "HTTP/1.1 200 OK"
+new /gradio
+INFO:     Started server process [109]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+INFO:     10.83.2.28:0 - "GET / HTTP/1.1" 200 OK
+INFO:     10.83.2.28:0 - "GET /assets/index-CMmnLoOK.css HTTP/1.1" 200 OK
+INFO:     10.83.2.28:0 - "GET /assets/index-2aEu3c92.js HTTP/1.1" 200 OK
+INFO:     10.83.2.28:0 - "GET /api/timelapse/options HTTP/1.1" 200 OK
+INFO:     10.83.6.110:0 - "GET /api/clips HTTP/1.1" 200 OK
+INFO:     10.83.7.29:0 - "GET /api/auth/session HTTP/1.1" 200 OK</logs>
+</workflow>
