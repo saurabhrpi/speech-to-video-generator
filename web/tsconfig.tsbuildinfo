@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx","./src/components/micvisualizer.tsx","./src/components/timelapseform.tsx","./src/components/videostudio.tsx","./src/components/ui/button.tsx","./src/lib/shadcn.ts","./src/pages/app.tsx"],"version":"5.9.3"}
+{"root":["./src/main.tsx","./src/components/MicVisualizer.tsx","./src/components/TimelapseForm.tsx","./src/components/VideoStudio.tsx","./src/components/ui/button.tsx","./src/lib/shadcn.ts","./src/pages/App.tsx"],"version":"5.9.3"}
