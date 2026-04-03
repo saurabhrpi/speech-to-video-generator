@@ -68,3 +68,4 @@ debug/MacSetup.txt
 env
 web/.env.production
 debug/
+app_logs.txt

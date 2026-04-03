@@ -1,5 +1,6 @@
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
 import { Image } from 'expo-image';
+import * as Clipboard from 'expo-clipboard';
 import { Button } from './Button';
 import VideoPlayer from './VideoPlayer';
 import { PHASE_ORDER, PHASE_LABELS, NUM_STAGES } from '@/lib/constants';
@@ -129,16 +130,24 @@ export default function PipelineReview({
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View className="flex-row gap-2">
               {pipelineState.keyframe_images.map((kf: any, i: number) => (
-                <View key={i} className="gap-1" style={{ width: 140 }}>
-                  <Image
-                    source={{ uri: kf.image_url }}
-                    style={{ width: 140, height: 79, borderRadius: 6 }}
-                    contentFit="cover"
-                  />
-                  <Text className="text-xs text-center text-muted-foreground">
-                    Stage {kf.stage}
-                  </Text>
-                </View>
+                <Pressable
+                  key={i}
+                  onPress={() => {
+                    Clipboard.setStringAsync(kf.image_url);
+                    Alert.alert('Copied', `Stage ${kf.stage} image URL copied to clipboard.`);
+                  }}
+                >
+                  <View className="gap-1" style={{ width: 140 }}>
+                    <Image
+                      source={{ uri: kf.image_url }}
+                      style={{ width: 140, height: 79, borderRadius: 6 }}
+                      contentFit="cover"
+                    />
+                    <Text className="text-xs text-center text-muted-foreground">
+                      Stage {kf.stage} · tap to copy
+                    </Text>
+                  </View>
+                </Pressable>
               ))}
             </View>
           </ScrollView>
@@ -179,7 +188,8 @@ export default function PipelineReview({
           />
         )}
 
-        {phaseCompleted?.startsWith('video_') && (
+        {(phaseCompleted === `stage_${NUM_STAGES}` ||
+          phaseCompleted?.startsWith('video_')) && (
           <Button
             variant="secondary"
             disabled={busy}
