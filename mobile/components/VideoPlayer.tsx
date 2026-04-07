@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ interface VideoPlayerProps {
   className?: string;
 }
 
+const LOAD_TIMEOUT_MS = 15_000;
+
 export default function VideoPlayer({ url, className }: VideoPlayerProps) {
   const videoRef = useRef<Video>(null);
   const [loading, setLoading] = useState(true);
@@ -16,8 +18,22 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resolvedUrl = resolveVideoUrl(url);
+
+  // Timeout: if video doesn't load within 15s, show error
+  useEffect(() => {
+    loadTimer.current = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError('Video timed out — could not load');
+      }
+    }, LOAD_TIMEOUT_MS);
+    return () => {
+      if (loadTimer.current) clearTimeout(loadTimer.current);
+    };
+  }, []);
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -72,9 +88,13 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
             resizeMode={ResizeMode.CONTAIN}
             isLooping={false}
             style={{ width: '100%', aspectRatio: 16 / 9 }}
-            onLoad={() => setLoading(false)}
+            onLoad={() => {
+              if (loadTimer.current) clearTimeout(loadTimer.current);
+              setLoading(false);
+            }}
             onPlaybackStatusUpdate={onPlaybackStatusUpdate}
             onError={() => {
+              if (loadTimer.current) clearTimeout(loadTimer.current);
               setLoading(false);
               setError('Video failed to load');
             }}

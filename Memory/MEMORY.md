@@ -6,3 +6,6 @@
 - [Summary Delta](feedback_summary_delta.md) -- Each /summary covers only changes since the previous summary, not since last commit
 - [Replit Log Format](reference_replit_logs.md) -- How to read exported Replit backend logs (4 lines per row)
 - [Analyze Before Concluding](feedback_analysis_depth.md) -- Don't jump to lazy conclusions; analyze evidence, think multi-directionally, make defensible arguments
+- [Interview Depth](feedback_interview_depth.md) -- Design interviews: deep multi-question carousels per topic, not shallow bundles
+- [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure, don't guess
+- [VideoPlayer Debugging Lessons](project_video_player_test.md) -- Verify URL accessibility before suspecting expo-av component
