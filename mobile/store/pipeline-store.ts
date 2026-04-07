@@ -26,6 +26,7 @@ interface PipelineStore {
     stopAfter: string | null,
     resumeState: Record<string, any> | null,
   ) => Promise<void>;
+  runFakeJob: () => Promise<void>;
   handleContinue: () => void;
   handleResume: () => void;
   handleGenerateRemainingImages: () => void;
@@ -123,12 +124,65 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const state = get().pipelineState;
-      const lastPhase = state ? detectLastCompletedPhase(state) : null;
       set({
         busy: false,
         pipelineError: err.message || 'Pipeline failed',
         phaseCompleted: null,
+        statusMsg: '',
+      });
+    }
+  },
+
+  runFakeJob: async () => {
+    const ac = new AbortController();
+    set({
+      busy: true,
+      pipelineError: null,
+      phaseCompleted: null,
+      statusMsg: 'Starting fake job...',
+      progress: 0,
+      videoUrl: null,
+      abortController: ac,
+    });
+
+    try {
+      const { job_id } = await apiPost<{ job_id: string }>('/api/debug/fake-job', {});
+
+      const result = await streamJob(
+        job_id,
+        {
+          onProgress: (phase, step, total, message) => {
+            set({
+              progress: calcProgress(phase, step, total, null),
+              statusMsg: message || `Phase: ${phase}`,
+            });
+          },
+          onPartialResult: () => {},
+        },
+        ac.signal,
+      );
+
+      const videoUrl = result?.video_url || result?.stitched_url;
+      if (videoUrl) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        set({
+          videoUrl: resolveVideoUrl(videoUrl),
+          progress: 100,
+          statusMsg: 'SSE test done!',
+          busy: false,
+        });
+      } else {
+        set({ busy: false, statusMsg: 'SSE test done (no video)' });
+      }
+    } catch (err: any) {
+      if (err.message === 'Aborted') {
+        set({ busy: false, statusMsg: 'Stopped.' });
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      set({
+        busy: false,
+        pipelineError: `SSE test failed: ${err.message}`,
         statusMsg: '',
       });
     }

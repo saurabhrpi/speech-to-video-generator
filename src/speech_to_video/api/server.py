@@ -755,6 +755,44 @@ async def stream_job_sse(request: Request, job_id: str):
     )
 
 
+@app.post("/api/debug/fake-job")
+def create_fake_job():
+    """Create a simulated job for testing SSE plumbing without AI costs.
+
+    Runs a worker thread that walks through fake phases with sleeps,
+    calling update_job() at each step. Total runtime ~25 seconds.
+    """
+    import time
+    from ..utils.job_manager import create_job, update_job, start_job
+
+    job_id = create_job()
+
+    def fake_worker():
+        phases = [
+            ("plan", 1, 1, "Generating scene bible..."),
+            ("stage_1", 1, 2, "Stage 1: generating initial image..."),
+            ("stage_1", 2, 2, "Stage 1 complete"),
+            ("stage_2", 1, 2, "Stage 2: GPT planning next edit..."),
+            ("stage_2", 2, 2, "Stage 2 complete"),
+            ("stage_3", 1, 2, "Stage 3: generating edited image..."),
+            ("stage_3", 2, 2, "Stage 3 complete"),
+            ("video_1", 1, 1, "Generating transition 1 of 2"),
+            ("video_2", 1, 1, "Generating transition 2 of 2"),
+            ("stitch", 1, 1, "Stitching videos..."),
+        ]
+        for phase, step, total, msg in phases:
+            update_job(job_id, phase=phase, step=step, total_steps=total, message=msg)
+            time.sleep(2)
+        return {
+            "success": True,
+            "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            "stitched_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        }
+
+    start_job(job_id, fake_worker)
+    return JSONResponse({"job_id": job_id})
+
+
 # --- Ads ---
 @app.post("/api/ads/superbowl")
 async def create_superbowl_ad(

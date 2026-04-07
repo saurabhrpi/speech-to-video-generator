@@ -26,7 +26,7 @@ export default function TimelapseScreen() {
 
   const {
     busy, statusMsg, progress, videoUrl, pipelineState, phaseCompleted,
-    pipelineError, stepByStep, setStepByStep, runPipeline,
+    pipelineError, stepByStep, setStepByStep, runPipeline, runFakeJob,
     handleContinue, handleResume, handleStop, handleStartOver,
     handleGenerateRemainingImages, handleGenerateRemainingVideos,
   } = usePipelineStore();
@@ -258,6 +258,15 @@ export default function TimelapseScreen() {
             onPress={handleSubmit}
             disabled={busy || !roomType || !style}
             title={busy ? 'Generating...' : 'Generate Timelapse'}
+            className="w-full"
+          />
+
+          {/* Debug: Test SSE with fake job (no AI cost) */}
+          <Button
+            variant="outline"
+            onPress={runFakeJob}
+            disabled={busy}
+            title="🐛 Test SSE (fake job)"
             className="w-full"
           />
         </View>
