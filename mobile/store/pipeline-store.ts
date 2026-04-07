@@ -27,6 +27,7 @@ interface PipelineStore {
     resumeState: Record<string, any> | null,
   ) => Promise<void>;
   runFakeJob: () => Promise<void>;
+  runMiniPipeline: (payload: Record<string, any>) => Promise<void>;
   handleContinue: () => void;
   handleResume: () => void;
   handleGenerateRemainingImages: () => void;
@@ -131,6 +132,10 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
         statusMsg: '',
       });
     }
+  },
+
+  runMiniPipeline: async (payload) => {
+    return get().runPipeline({ ...payload, num_stages: 2 }, null, null);
   },
 
   runFakeJob: async () => {

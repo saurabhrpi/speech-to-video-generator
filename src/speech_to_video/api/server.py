@@ -566,6 +566,12 @@ async def generate_timelapse(request: Request):
     if video_model not in ("cheap", "expensive"):
         video_model = "cheap"
 
+    try:
+        num_stages = int(body.get("num_stages", 7))
+    except (TypeError, ValueError):
+        num_stages = 7
+    num_stages = max(2, min(num_stages, 7))
+
     job_id = create_job()
 
     def on_progress(phase, step, total, message, partial_result=None):
@@ -582,6 +588,7 @@ async def generate_timelapse(request: Request):
         resume_state=resume_state,
         on_progress=on_progress,
         video_model=video_model,
+        num_stages=num_stages,
     )
 
     return JSONResponse({"job_id": job_id})

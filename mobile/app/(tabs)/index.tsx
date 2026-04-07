@@ -26,7 +26,7 @@ export default function TimelapseScreen() {
 
   const {
     busy, statusMsg, progress, videoUrl, pipelineState, phaseCompleted,
-    pipelineError, stepByStep, setStepByStep, runPipeline, runFakeJob,
+    pipelineError, stepByStep, setStepByStep, runPipeline, runFakeJob, runMiniPipeline,
     handleContinue, handleResume, handleStop, handleStartOver,
     handleGenerateRemainingImages, handleGenerateRemainingVideos,
   } = usePipelineStore();
@@ -51,13 +51,8 @@ export default function TimelapseScreen() {
     useAuthStore.getState().fetchSession();
   }, []);
 
-  function handleSubmit() {
-    if (!roomType || !style) return;
-    if (!canGenerate()) {
-      setLoginRequired(true);
-      return;
-    }
-    const payload = {
+  function buildPayload() {
+    return {
       room_type: roomType,
       style,
       features,
@@ -68,8 +63,25 @@ export default function TimelapseScreen() {
       video_model: videoModel,
       freeform_description: freeform,
     };
+  }
+
+  function handleSubmit() {
+    if (!roomType || !style) return;
+    if (!canGenerate()) {
+      setLoginRequired(true);
+      return;
+    }
     const stopAfter = stepByStep ? 'plan' : null;
-    runPipeline(payload, stopAfter, null);
+    runPipeline(buildPayload(), stopAfter, null);
+  }
+
+  function handleMini() {
+    if (!roomType || !style) return;
+    if (!canGenerate()) {
+      setLoginRequired(true);
+      return;
+    }
+    runMiniPipeline(buildPayload());
   }
 
   if (!options) {
@@ -267,6 +279,15 @@ export default function TimelapseScreen() {
             onPress={runFakeJob}
             disabled={busy}
             title="🐛 Test SSE (fake job)"
+            className="w-full"
+          />
+
+          {/* Debug: Mini pipeline (2 images, 1 transition) */}
+          <Button
+            variant="outline"
+            onPress={handleMini}
+            disabled={busy || !roomType || !style}
+            title="🐛 Mini Pipeline (2 images)"
             className="w-full"
           />
         </View>

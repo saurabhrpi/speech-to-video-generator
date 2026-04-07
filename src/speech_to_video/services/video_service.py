@@ -198,6 +198,7 @@ class VideoService:
         resume_state: Optional[Dict] = None,
         on_progress: Optional[Callable] = None,
         video_model: str = "cheap",
+        num_stages: int = 7,
     ) -> Dict:
         """
         Iterative timelapse pipeline: GPT plans each stage after seeing the
@@ -211,7 +212,7 @@ class VideoService:
         import time as _t
         from ..utils.video import stitch_timelapse_clips
 
-        NUM_STAGES = 7
+        NUM_STAGES = num_stages
 
         def _notify(phase: str, step: int, total: int, message: str, partial_result: Optional[Dict] = None):
             if on_progress:
