@@ -1,3 +1,4 @@
+import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE, SESSION_COOKIE_KEY } from './constants';
 import type { PollCallbacks } from './polling';

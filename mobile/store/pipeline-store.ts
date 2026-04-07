@@ -3,7 +3,6 @@ import * as Haptics from 'expo-haptics';
 import { apiPost } from '@/lib/api-client';
 import { resolveVideoUrl } from '@/lib/api-client';
 import { streamJob } from '@/lib/streaming';
-import { pollJob } from '@/lib/polling';
 import { calcProgress, nextStopAfter, detectLastCompletedPhase, extractPartial } from '@/lib/pipeline';
 import { NUM_STAGES } from '@/lib/constants';
 import type { PipelineState } from '@/lib/types';
@@ -87,19 +86,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
         },
       };
 
-      let result: Record<string, any> | null;
-      try {
-        result = await streamJob(job_id, jobCallbacks, ac.signal);
-      } catch (sseErr: any) {
-        if (sseErr.message === 'Aborted') throw sseErr;
-        // SSE failed to connect — fall back to polling
-        if (sseErr.message === 'Streaming not supported' || sseErr.message.startsWith('SSE connect failed')) {
-          console.warn('SSE unavailable, falling back to polling:', sseErr.message);
-          result = await pollJob(job_id, jobCallbacks, ac.signal);
-        } else {
-          throw sseErr;
-        }
-      }
+      const result = await streamJob(job_id, jobCallbacks, ac.signal);
 
       if (!result) {
         set({ busy: false, statusMsg: '' });
