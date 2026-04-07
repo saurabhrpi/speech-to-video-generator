@@ -27,9 +27,7 @@ env/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
+# Logs (keep logs/ tracked so we can pull them from Replit via git)
 
 # Distribution / packaging
 build/
@@ -40,6 +38,7 @@ eggs/
 .eggs/
 lib/
 !web/src/lib/
+!mobile/lib/
 lib64/
 parts/
 sdist/

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as Haptics from 'expo-haptics';
 import { apiPost } from '@/lib/api-client';
 import { resolveVideoUrl } from '@/lib/api-client';
+import { streamJob } from '@/lib/streaming';
 import { pollJob } from '@/lib/polling';
 import { calcProgress, nextStopAfter, detectLastCompletedPhase, extractPartial } from '@/lib/pipeline';
 import { NUM_STAGES } from '@/lib/constants';
@@ -71,24 +72,34 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
         body,
       );
 
-      const result = await pollJob(
-        job_id,
-        {
-          onProgress: (phase, step, total, message) => {
-            set({
-              progress: calcProgress(phase, step, total, stopAfter),
-              statusMsg: message || `Phase: ${phase}`,
-            });
-          },
-          onPartialResult: (partial) => {
-            const extracted = extractPartial(partial);
-            if (extracted) {
-              set({ pipelineState: { ...get().pipelineState, ...extracted } });
-            }
-          },
+      const jobCallbacks = {
+        onProgress: (phase: string | null, step: number, total: number, message: string) => {
+          set({
+            progress: calcProgress(phase, step, total, stopAfter),
+            statusMsg: message || `Phase: ${phase}`,
+          });
         },
-        ac.signal,
-      );
+        onPartialResult: (partial: Record<string, any>) => {
+          const extracted = extractPartial(partial);
+          if (extracted) {
+            set({ pipelineState: { ...get().pipelineState, ...extracted } });
+          }
+        },
+      };
+
+      let result: Record<string, any> | null;
+      try {
+        result = await streamJob(job_id, jobCallbacks, ac.signal);
+      } catch (sseErr: any) {
+        if (sseErr.message === 'Aborted') throw sseErr;
+        // SSE failed to connect — fall back to polling
+        if (sseErr.message === 'Streaming not supported' || sseErr.message.startsWith('SSE connect failed')) {
+          console.warn('SSE unavailable, falling back to polling:', sseErr.message);
+          result = await pollJob(job_id, jobCallbacks, ac.signal);
+        } else {
+          throw sseErr;
+        }
+      }
 
       if (!result) {
         set({ busy: false, statusMsg: '' });

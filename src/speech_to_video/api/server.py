@@ -4,7 +4,17 @@ import os
 import tempfile
 from typing import List, Optional
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+from logging.handlers import RotatingFileHandler
+import pathlib
+
+_LOG_DIR = pathlib.Path(__file__).resolve().parents[3] / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+
+_fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
+logging.basicConfig(level=logging.INFO, format=_fmt, handlers=[
+    logging.StreamHandler(),
+    RotatingFileHandler(_LOG_DIR / "app.log", maxBytes=5_000_000, backupCount=3),
+])
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -682,6 +692,67 @@ def get_job_status(request: Request, job_id: str):
     job.pop("created_at", None)
     job.pop("usage_counted", None)
     return JSONResponse(job)
+
+
+@app.get("/api/jobs/{job_id}/stream")
+async def stream_job_sse(request: Request, job_id: str):
+    """Stream job progress as Server-Sent Events."""
+    import asyncio
+    from ..utils.job_manager import get_job, update_job
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    async def event_generator():
+        last_key = None
+        while True:
+            if await request.is_disconnected():
+                break
+
+            job = get_job(job_id)
+            if not job:
+                yield f"data: {json.dumps({'status': 'failed', 'message': 'Job expired'})}\n\n"
+                break
+
+            state_key = (job["status"], job.get("phase"), job.get("step"), job.get("message"))
+            if state_key == last_key:
+                await asyncio.sleep(0.5)
+                continue
+            last_key = state_key
+
+            event = {
+                "status": job["status"],
+                "phase": job.get("phase"),
+                "step": job.get("step", 0),
+                "total_steps": job.get("total_steps", 0),
+                "message": job.get("message", ""),
+                "partial_result": job.get("partial_result"),
+            }
+
+            if job["status"] == "completed":
+                event["result"] = job.get("result")
+                if not job.get("usage_counted"):
+                    result = job.get("result") or {}
+                    if result.get("video_url"):
+                        _inc_usage(request)
+                        update_job(job_id, usage_counted=True)
+
+            if job["status"] == "failed":
+                event["error"] = (job.get("result") or {}).get("error", job.get("message", ""))
+
+            yield f"data: {json.dumps(event)}\n\n"
+
+            if job["status"] in ("completed", "failed"):
+                break
+
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # --- Ads ---

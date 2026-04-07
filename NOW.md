@@ -13,7 +13,7 @@
 
 ## Next Step
 1. Test tap-to-copy on keyframe images
-2. Implement SSE to replace polling
+2. Parallelize transition video generation — all I2V calls are independent (image pair i→i+1 has no dependency on pair j→j+1). Fire them concurrently with `asyncio.gather` or `ThreadPoolExecutor` instead of the current sequential loop in `video_service.py:562-664`. Expected to cut video phase from ~N×polling_time to ~1×polling_time.
 3. Remove leftover Capacitor files
 4. Delete `mobile/assets/Test_Video.mp4` (test artifact)
 5. Implement design system from `design/DESIGN_SYSTEM_PRD.md`
