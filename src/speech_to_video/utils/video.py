@@ -355,7 +355,11 @@ def stitch_timelapse_clips(
         result["error"] = f"moviepy/ffmpeg unavailable: {e}"
         return result
 
-    temp_dir = tempfile.mkdtemp(prefix="timelapse_stitch_")
+    # STITCH_TMPDIR override lets us point temp files at /dev/shm on Replit,
+    # where the default /tmp is backed by a network block device (NBD) and
+    # small random reads during stitching are catastrophically slow.
+    stitch_tmpdir = os.environ.get("STITCH_TMPDIR") or None
+    temp_dir = tempfile.mkdtemp(prefix="timelapse_stitch_", dir=stitch_tmpdir)
     local_paths: List[str] = []
     raw_clips: list = []
 
