@@ -9,3 +9,4 @@
 - [Interview Depth](feedback_interview_depth.md) -- Design interviews: deep multi-question carousels per topic, not shallow bundles
 - [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure, don't guess
 - [VideoPlayer Debugging Lessons](project_video_player_test.md) -- Verify URL accessibility before suspecting expo-av component
+- [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE

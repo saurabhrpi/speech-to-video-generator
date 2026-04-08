@@ -564,6 +564,11 @@ class VideoService:
         total_transitions = len(keyframe_images) - 1
         start_idx = len(transition_videos)
 
+        # I2V config — defined once so both the transition loop and final pan block see them
+        i2v_model = self.settings.kling_i2v_model if video_model == "expensive" else self.settings.i2v_model
+        i2v_resolution = self.settings.i2v_resolution
+        i2v_duration = self.settings.i2v_duration
+
         if start_idx >= total_transitions:
             _notify("videos", total_transitions, total_transitions, "All transitions already done")
         elif start_idx > 0:
@@ -580,9 +585,6 @@ class VideoService:
                 "crane_up": "Smooth crane rise upward revealing the space.",
             }
             camera_instruction = camera_cues.get(camera, camera_cues["static"])
-            i2v_model = self.settings.kling_i2v_model if video_model == "expensive" else self.settings.i2v_model
-            i2v_resolution = self.settings.i2v_resolution
-            i2v_duration = self.settings.i2v_duration
 
             for i in range(start_idx, total_transitions):
                 video_phase = f"video_{i + 1}"
