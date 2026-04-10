@@ -68,3 +68,4 @@ env
 web/.env.production
 debug/
 app_logs.txt
+Motto-and-Mantra.txt

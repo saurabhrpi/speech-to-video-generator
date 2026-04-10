@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 from typing import List, Optional, Dict, Any, Union
@@ -334,9 +335,19 @@ def stitch_timelapse_clips(
     hold_first_frame: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    Stitch timelapse transition clips with speed adjustment and optional dissolve.
+    Stitch timelapse transition clips with speed adjustment via a single ffmpeg call.
     Accepts URLs or local file paths.
     hold_first_frame: seconds to hold the first frame as a still before the transitions.
+
+    `dissolve` and `dissolve_duration` are kept for signature compatibility but are
+    currently no-ops; both production call sites pass dissolve=False.
+
+    Why ffmpeg instead of moviepy: moviepy issues many small random reads on the
+    source clip files. On filesystems backed by a network block device (e.g. Replit
+    /tmp), every cache miss pays a network round-trip, which made stitching take
+    ~25 minutes. ffmpeg's filter graph reads each input mostly sequentially, so
+    kernel readahead amortizes the round-trips and we no longer need to land temp
+    files on /dev/shm.
     """
     result: Dict[str, Any] = {
         "success": False,
@@ -350,20 +361,18 @@ def stitch_timelapse_clips(
         return result
 
     try:
-        from moviepy import VideoFileClip, concatenate_videoclips
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_bin = get_ffmpeg_exe()
     except Exception as e:
-        result["error"] = f"moviepy/ffmpeg unavailable: {e}"
+        result["error"] = f"ffmpeg unavailable: {e}"
         return result
 
-    # STITCH_TMPDIR override lets us point temp files at /dev/shm on Replit,
-    # where the default /tmp is backed by a network block device (NBD) and
-    # small random reads during stitching are catastrophically slow.
-    stitch_tmpdir = os.environ.get("STITCH_TMPDIR") or None
-    temp_dir = tempfile.mkdtemp(prefix="timelapse_stitch_", dir=stitch_tmpdir)
+    temp_dir = tempfile.mkdtemp(prefix="timelapse_stitch_")
     local_paths: List[str] = []
-    raw_clips: list = []
 
     try:
+        # Download (or copy) each source to temp_dir. Sequential writes are
+        # cheap on every filesystem including NBD-backed /tmp.
         for idx, src in enumerate(video_sources):
             local_path = os.path.join(temp_dir, f"segment_{idx}.mp4")
             if src.startswith("http"):
@@ -381,52 +390,55 @@ def stitch_timelapse_clips(
             local_paths.append(local_path)
 
         result["segments"] = list(local_paths)
-        raw_clips = [VideoFileClip(p) for p in local_paths]
 
-        if speed != 1.0:
-            clips = [c.with_speed_scaled(speed) for c in raw_clips]
-        else:
-            clips = list(raw_clips)
+        # Build filter_complex: per-input setpts (speed) + tpad on first clip
+        # (hold_first_frame), then concat all video streams. tpad runs AFTER
+        # setpts so the held duration is in output time, matching the prior
+        # moviepy behavior (a literal `hold_first_frame` seconds in the output).
+        n = len(local_paths)
+        filter_parts: List[str] = []
+        for i in range(n):
+            stages: List[str] = []
+            if speed != 1.0:
+                stages.append(f"setpts=PTS/{speed}")
+            if i == 0 and hold_first_frame > 0:
+                stages.append(
+                    f"tpad=start_duration={hold_first_frame}:start_mode=clone"
+                )
+            chain = ",".join(stages) if stages else "null"
+            filter_parts.append(f"[{i}:v]{chain}[v{i}]")
 
-        if hold_first_frame > 0 and clips:
-            from moviepy import ImageClip
-            first_frame = clips[0].get_frame(0)
-            still = ImageClip(first_frame).with_duration(hold_first_frame).with_fps(clips[0].fps or 30)
-            clips = [still] + clips
-
-        if dissolve and len(clips) >= 2:
-            mod: List = []
-            for i, c in enumerate(clips):
-                d = min(dissolve_duration, (c.duration or 1.0) * 0.2)
-                if i > 0:
-                    try:
-                        c = c.crossfadein(d)
-                    except Exception:
-                        pass
-                mod.append(c)
-            final = concatenate_videoclips(mod, method="compose", padding=-dissolve_duration)
-        else:
-            final = concatenate_videoclips(clips, method="compose")
+        concat_inputs = "".join(f"[v{i}]" for i in range(n))
+        filter_parts.append(f"{concat_inputs}concat=n={n}:v=1:a=0[outv]")
+        filter_complex = ";".join(filter_parts)
 
         output_path = os.path.join(temp_dir, "timelapse.mp4")
-        final.write_videofile(
+        cmd: List[str] = [ffmpeg_bin, "-y"]
+        for p in local_paths:
+            cmd.extend(["-i", p])
+        cmd.extend([
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-b:v", "4000k",
+            "-pix_fmt", "yuv420p",
+            "-r", "30",
+            "-an",
             output_path,
-            codec="libx264",
-            audio_codec="aac",
-            fps=30,
-            preset="ultrafast",
-            bitrate="4000k",
-        )
+        ])
 
-        try:
-            final.close()
-        except Exception:
-            pass
-        for c in raw_clips:
-            try:
-                c.close()
-            except Exception:
-                pass
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+            tail = stderr.strip().splitlines()[-20:]
+            result["error"] = "ffmpeg failed:\n" + "\n".join(tail)
+            return result
 
         destination = _unique_stitched_path()
         shutil.move(output_path, destination)
@@ -441,11 +453,6 @@ def stitch_timelapse_clips(
         return result
 
     finally:
-        for c in raw_clips:
-            try:
-                c.close()
-            except Exception:
-                pass
         for p in local_paths:
             try:
                 if os.path.exists(p):
