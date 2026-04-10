@@ -127,12 +127,12 @@ export default function TimelapseScreen() {
       )}
 
       {/* Pipeline error */}
-      {pipelineError && pipelineState && !phaseCompleted && !busy && (
+      {pipelineError && !phaseCompleted && !busy && (
         <View className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 gap-2">
           <Text className="text-sm font-semibold text-destructive">Pipeline failed</Text>
           <Text className="text-sm text-muted-foreground">{pipelineError}</Text>
           <View className="flex-row gap-2 pt-1">
-            <Button onPress={handleResume} title="Resume" />
+            {pipelineState && <Button onPress={handleResume} title="Resume" />}
             <Button variant="outline" onPress={handleStartOver} title="Start Over" />
           </View>
         </View>

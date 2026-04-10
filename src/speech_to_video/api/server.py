@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import secrets
 import tempfile
+import time
 from typing import List, Optional
 
 from logging.handlers import RotatingFileHandler
@@ -110,6 +112,10 @@ def setup_status():
 _UNAUTH_LIMIT = int(os.getenv("UNAUTH_GEN_LIMIT", "1"))
 _IP_USAGE: dict[str, int] = {}
 
+# One-time auth tokens for mobile OAuth (token -> {user, expires})
+_AUTH_TOKENS: dict[str, dict] = {}
+_AUTH_TOKEN_TTL = 60  # seconds
+
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
     if xff:
@@ -177,15 +183,35 @@ async def auth_callback(request: Request):
             userinfo = {}
     if not userinfo:
         raise HTTPException(status_code=401, detail="Failed to retrieve user info")
-    request.session["user"] = {
+    user_data = {
         "sub": userinfo.get("sub"),
         "email": userinfo.get("email"),
         "name": userinfo.get("name"),
         "picture": userinfo.get("picture"),
     }
+    request.session["user"] = user_data
     # Redirect back to app
     dest = request.session.pop("plr", None) or POST_LOGIN_REDIRECT or PUBLIC_BASE_URL or "/"
+    # For deep link redirects (mobile), attach a one-time token so the app
+    # can exchange it for a session cookie in its own fetch() cookie jar.
+    if "://" in dest and not dest.startswith("http"):
+        token = secrets.token_urlsafe(32)
+        _AUTH_TOKENS[token] = {"user": user_data, "expires": time.time() + _AUTH_TOKEN_TTL}
+        sep = "&" if "?" in dest else "?"
+        dest = f"{dest}{sep}token={token}"
     return HTMLResponse(f"<script>window.location='{dest}'</script>")
+
+@app.post("/api/auth/exchange")
+async def auth_exchange(request: Request):
+    """Exchange a one-time token (from mobile OAuth redirect) for a session."""
+    body = await request.json()
+    token = body.get("token", "")
+    entry = _AUTH_TOKENS.pop(token, None)
+    if not entry or time.time() > entry["expires"]:
+        raise HTTPException(status_code=401, detail="invalid_or_expired_token")
+    request.session["user"] = entry["user"]
+    user = entry["user"]
+    return {"authenticated": True, "user": user, "usage_count": _get_usage(request), "limit": _UNAUTH_LIMIT}
 
 @app.post("/api/auth/logout")
 def auth_logout(request: Request):

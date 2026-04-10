@@ -14,9 +14,24 @@ export async function login(): Promise<AuthState | null> {
 
   const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectUrl);
 
-  if (result.type === 'success') {
-    // After OAuth completes and we're redirected back, fetch the session
-    // to verify auth and get the cookie.
+  if (result.type === 'success' && result.url) {
+    // Extract the one-time token from the redirect URL and exchange it
+    // for a session cookie in our own fetch() cookie jar.
+    const url = new URL(result.url);
+    const token = url.searchParams.get('token');
+    if (token) {
+      try {
+        const j = await apiPost<Record<string, any>>('/api/auth/exchange', { token });
+        return {
+          authenticated: !!j?.authenticated,
+          user: j?.user,
+          usage_count: Number(j?.usage_count || 0),
+          limit: Number(j?.limit || 0),
+        };
+      } catch {
+        // Token exchange failed — fall through to fetchSession
+      }
+    }
     return fetchSession();
   }
 

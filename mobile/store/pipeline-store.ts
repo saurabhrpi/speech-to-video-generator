@@ -57,6 +57,9 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       busy: true,
       pipelineError: null,
       phaseCompleted: null,
+      videoUrl: null,
+      pipelineState: null,
+      jsonOut: '',
       statusMsg: 'Starting...',
       progress: 0,
       abortController: ac,
@@ -109,6 +112,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         set({
           videoUrl: resolveVideoUrl(videoUrl),
+          phaseCompleted: null,
           jsonOut: JSON.stringify(result, null, 2),
           progress: 100,
           statusMsg: 'Done!',
