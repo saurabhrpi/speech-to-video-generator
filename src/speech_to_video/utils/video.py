@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import subprocess
@@ -6,6 +7,8 @@ import time
 from typing import List, Optional, Dict, Any, Union
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 def _unique_stitched_path() -> str:
@@ -428,21 +431,26 @@ def stitch_timelapse_clips(
             output_path,
         ])
 
+        logger.info("Stitch: ffmpeg starting (%d clips, speed=%.1f)", n, speed)
+        t_ffmpeg = time.time()
         proc = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
         )
+        ffmpeg_elapsed = time.time() - t_ffmpeg
         if proc.returncode != 0:
             stderr = proc.stderr.decode("utf-8", errors="replace")
             tail = stderr.strip().splitlines()[-20:]
+            logger.error("Stitch: ffmpeg failed after %.1fs", ffmpeg_elapsed)
             result["error"] = "ffmpeg failed:\n" + "\n".join(tail)
             return result
 
         destination = _unique_stitched_path()
         shutil.move(output_path, destination)
 
+        logger.info("Stitch: ffmpeg completed in %.1fs -> %s", ffmpeg_elapsed, os.path.basename(destination))
         result["success"] = True
         result["output_path"] = destination
         result["filename"] = os.path.basename(destination)
