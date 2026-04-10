@@ -10,3 +10,5 @@
 - [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure, don't guess
 - [VideoPlayer Debugging Lessons](project_video_player_test.md) -- Verify URL accessibility before suspecting expo-av component
 - [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE
+- [Replit /tmp is NBD](reference_replit_tmp_nbd.md) -- /tmp is network block device; use /dev/shm (64MB tmpfs) for I/O-heavy work, ~150x faster
+- [Env diff first for cross-host slowness](feedback_environment_diff_first.md) -- Same code slow on one host, fast on another → check fs/RAM/CPU before theorizing about code
