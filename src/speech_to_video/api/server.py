@@ -739,6 +739,7 @@ async def stream_job_sse(request: Request, job_id: str):
 
     async def event_generator():
         last_key = None
+        heartbeat_counter = 0
         while True:
             if await request.is_disconnected():
                 break
@@ -750,9 +751,16 @@ async def stream_job_sse(request: Request, job_id: str):
 
             state_key = (job["status"], job.get("phase"), job.get("step"), job.get("message"))
             if state_key == last_key:
+                heartbeat_counter += 1
+                # Send SSE comment every ~15s to keep connection alive
+                # during long operations (video generation takes 60-90s)
+                if heartbeat_counter >= 30:  # 30 * 0.5s = 15s
+                    yield ": heartbeat\n\n"
+                    heartbeat_counter = 0
                 await asyncio.sleep(0.5)
                 continue
             last_key = state_key
+            heartbeat_counter = 0
 
             event = {
                 "status": job["status"],

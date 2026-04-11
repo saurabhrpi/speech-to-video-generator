@@ -12,3 +12,5 @@
 - [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE
 - [Replit /tmp is NBD](reference_replit_tmp_nbd.md) -- /tmp is network block device; use /dev/shm (64MB tmpfs) for I/O-heavy work, ~150x faster
 - [Env diff first for cross-host slowness](feedback_environment_diff_first.md) -- Same code slow on one host, fast on another → check fs/RAM/CPU before theorizing about code
+- [Mobile OAuth cookie jar](feedback_mobile_oauth_cookie_jar.md) -- ASWebAuthenticationSession has separate cookie jar from app's fetch(); use one-time token exchange
+- [Zustand clear state on new runs](feedback_zustand_clear_state.md) -- Pipeline store leaks old results into new runs without explicit clearing

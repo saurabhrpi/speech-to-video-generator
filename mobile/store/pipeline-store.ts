@@ -105,7 +105,6 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       }
 
       // Check if pipeline stopped at a phase (step-by-step) or completed
-      const lastPhase = detectLastCompletedPhase(result);
       const videoUrl = result.video_url || result.stitched_url;
 
       if (videoUrl) {
@@ -117,9 +116,24 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
           progress: 100,
           statusMsg: 'Done!',
         });
-      } else if (lastPhase) {
+      } else if (result.phase_completed) {
+        // Backend explicitly paused at a phase (step-by-step mode)
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        set({ phaseCompleted: lastPhase });
+        set({ phaseCompleted: result.phase_completed });
+      } else if (result.success === false) {
+        // Pipeline failed with partial state — show error, not reviewer
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        set({
+          pipelineError: result.error || 'Pipeline failed',
+          phaseCompleted: null,
+        });
+      } else {
+        // Stream ended without terminal result — connection likely dropped
+        const lastPhase = detectLastCompletedPhase(result);
+        if (lastPhase) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          set({ phaseCompleted: lastPhase });
+        }
       }
 
       set({ busy: false, progress: videoUrl ? 100 : 0, statusMsg: videoUrl ? 'Done!' : '' });
