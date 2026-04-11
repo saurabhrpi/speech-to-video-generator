@@ -842,8 +842,7 @@ def create_fake_job():
     return JSONResponse({"job_id": job_id})
 
 
-@app.get("/api/debug/time-image-edit")
-def debug_time_image_edit():
+def _run_image_edit_diagnostic() -> Dict[str, Any]:
     """Time Nano Banana Pro T2I and Edit calls end-to-end from inside the deployed container.
 
     Runs four probes to isolate where the slowness is:
@@ -856,6 +855,9 @@ def debug_time_image_edit():
 
     Response headers are captured on every HTTP probe so we can spot upstream
     debug headers (X-Cache, CF-Ray, X-Upstream-Time, etc.).
+
+    Pure function: logs each probe as it finishes and returns the full result dict.
+    Called by both the HTTP endpoint below and the startup hook.
     """
     import time
     import socket
@@ -1029,7 +1031,26 @@ def debug_time_image_edit():
                 cdn_probe.get("total_ms"),
                 result["t2i_probe"].get("total_ms"),
                 result["i2i_probe"].get("total_ms"))
-    return JSONResponse(result)
+    return result
+
+
+@app.get("/api/debug/time-image-edit")
+def debug_time_image_edit():
+    return JSONResponse(_run_image_edit_diagnostic())
+
+
+@app.on_event("startup")
+def _maybe_run_startup_diagnostic():
+    if os.getenv("RUN_STARTUP_DIAGNOSTIC") != "1":
+        return
+    import threading
+    def _runner():
+        try:
+            _run_image_edit_diagnostic()
+        except Exception as e:
+            logger.exception("[DEBUG time-image-edit] startup diagnostic crashed: %s", e)
+    logger.info("[DEBUG time-image-edit] RUN_STARTUP_DIAGNOSTIC=1 — spawning background diagnostic thread")
+    threading.Thread(target=_runner, daemon=True, name="startup-diagnostic").start()
 
 
 # --- Ads ---

@@ -15,12 +15,13 @@
 - Caught 2 bugs in the diagnostic endpoint before push: undefined `logger` and missing `Dict`/`Any` imports.
 
 ## Next Step (ToDo's)
-1. **Push + Republish, then hit `/api/debug/time-image-edit` on deployed URL.** Wait ~5.5 min, read the 4 probe results from Replit logs. Interpret: if `i2i_probe.time_to_headers_ms` ≈ 4 min but others fast → AIMLAPI holds the request → consider switching I2I to direct Google Gemini API.
-2. Parallelize transition I2V generation (`video_service.py:562-664`) — biggest remaining bottleneck once I2I is unblocked.
-3. Migrate `expo-av` → `expo-video` (+ `expo-audio` if used). Package says "removed in SDK 54" — verify actual removal version.
-4. Remove "Test SSE (fake job)" button from mobile UI.
-5. Frontend `NUM_STAGES = 7` hardcoded in `mobile/lib/constants.ts` — mini pipeline UX still broken.
-6. Full pipeline review screen bug (ToDo #1 from last session) — resolved by SSE auto-reconnect.
+1. **Push + set `RUN_STARTUP_DIAGNOSTIC=1` in Replit secrets + Republish.** Diagnostic runs automatically in a background thread on container boot. Wait ~5.5 min, read the 4 probe results from Replit logs (`[DEBUG time-image-edit]` lines). Interpret: if `i2i_probe.time_to_headers_ms` ≈ 4 min but others fast → AIMLAPI holds the request → consider switching I2I to direct Google Gemini API.
+2. **After step 1 results are captured, DELETE `RUN_STARTUP_DIAGNOSTIC` from Replit secrets.** Otherwise the diagnostic will re-run on every container restart/auto-scale and burn ~$0.10 + 5min AIMLAPI load each time. To delete a secret: Replit → Tools → Secrets → find `RUN_STARTUP_DIAGNOSTIC` → click the trash/delete icon next to it.
+3. Parallelize transition I2V generation (`video_service.py:562-664`) — biggest remaining bottleneck once I2I is unblocked.
+4. Migrate `expo-av` → `expo-video` (+ `expo-audio` if used). Package says "removed in SDK 54" — verify actual removal version.
+5. Remove "Test SSE (fake job)" button from mobile UI.
+6. Frontend `NUM_STAGES = 7` hardcoded in `mobile/lib/constants.ts` — mini pipeline UX still broken.
+7. Full pipeline review screen bug (ToDo #1 from last session) — resolved by SSE auto-reconnect.
 
 ## Open Questions
 - Why did Nano Banana Pro Edit go from <60s to 4:44 exactly? AIMLAPI regression, account throttling, or Replit IP block?
