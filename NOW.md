@@ -1,29 +1,28 @@
 # Session Log
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt. Do not remove ToDo's unless user says.
+> **V2 backlog:** Interior Timelapse work was archived to `INTERIOR_TIMELAPSE_V2_BACKLOG.md` during the session-24 pivot. Read that when Interior Timelapse work resumes.
 
-## Current Session: 23
-**Date:** 2026-04-10
+## Current Session: 24
+**Date:** 2026-04-11
 **Branch:** main
-**Status:** SSE auto-reconnect works. Discovered I2I edit calls are stuck at exactly ~4:44 per call (regression from <60s a few days ago). Diagnostic endpoint added, not yet run.
+**Status:** PIVOT — Speech to Video is now the MVP/V1. Interior Timelapse demoted to V2. Backend + frontend rewired to Kling T2V. Builds green. Not yet end-to-end tested against real Kling.
 
 ## What Happened This Session
-- Tested previous SSE heartbeat fix → failed. Comment heartbeats get ignored by proxies; stream dropped during long I2I. Replaced with real `data:` event heartbeat every 10s + frontend auto-reconnect (up to 20 retries) in `streamJob`.
-- Re-tested: reconnection works (UI shows "Reconnecting..." between stages) but surfaced the real bottleneck — every Nano Banana Pro Edit call takes exactly 4m 44s. Same pattern across 3+ sessions, suspiciously uniform.
-- Confirmed no recent code change touches `aimlapi_client.py` — this is external (AIMLAPI-side or Replit→AIMLAPI network). User says locally it was <60s, Replit was fast a few days ago.
-- Added `GET /api/debug/time-image-edit` — runs socket/DNS/TCP/TLS probe + CDN fetch + T2I baseline + I2I call from inside deployed container, logs every probe to Replit logs so data survives if proxy kills the 5+ min response.
-- Caught 2 bugs in the diagnostic endpoint before push: undefined `logger` and missing `Dict`/`Any` imports.
+- Killed Sora-2 / superbowl code path. New method `VideoService.generate_speech_to_video(text)` — single 10s clip via Kling T2V (`klingai/video-v3-standard-text-to-video`), `generate_audio=False`.
+- New endpoint `POST /api/generate/speech-to-video` replaces `/api/ads/superbowl`. Dropped `AD_*` env vars and `ad_seed`/`ad_prev_text` session state.
+- Deleted orphans: `generate_16s_video`, `generate_superbowl_ad`, `_superbowl_prompt`, `split_prompt_for_two_clips`. Verified zero references anywhere (Interior Timelapse pipeline untouched).
+- Added `kling_t2v_model` to config; extended `AIMLAPIClient.generate_video()` with `generate_audio` kwarg.
+- Frontend: tab order now **Speech → Interior Timelapse → Video Studio**, default `mode='speech'`. Added `<textarea>` + "Generate Video" button above the Record path. Renamed `handlePromptToAd` → `handleTextToVideo`. Both paths POST to new endpoint. `py_compile` + `npm run build` both green.
+- Kling T2V spec saved at `docs/Kling_T2V.txt`.
 
 ## Next Step (ToDo's)
-1. **Push + set `RUN_STARTUP_DIAGNOSTIC=1` in Replit secrets + Republish.** Diagnostic runs automatically in a background thread on container boot. Wait ~5.5 min, read the 4 probe results from Replit logs (`[DEBUG time-image-edit]` lines). Interpret: if `i2i_probe.time_to_headers_ms` ≈ 4 min but others fast → AIMLAPI holds the request → consider switching I2I to direct Google Gemini API.
-2. **After step 1 results are captured, DELETE `RUN_STARTUP_DIAGNOSTIC` from Replit secrets.** Otherwise the diagnostic will re-run on every container restart/auto-scale and burn ~$0.10 + 5min AIMLAPI load each time. To delete a secret: Replit → Tools → Secrets → find `RUN_STARTUP_DIAGNOSTIC` → click the trash/delete icon next to it.
-3. Parallelize transition I2V generation (`video_service.py:562-664`) — biggest remaining bottleneck once I2I is unblocked.
-4. Migrate `expo-av` → `expo-video` (+ `expo-audio` if used). Package says "removed in SDK 54" — verify actual removal version.
-5. Remove "Test SSE (fake job)" button from mobile UI.
-6. Frontend `NUM_STAGES = 7` hardcoded in `mobile/lib/constants.ts` — mini pipeline UX still broken.
-7. Full pipeline review screen bug (ToDo #1 from last session) — resolved by SSE auto-reconnect.
+1. **E2E test the pivot:** run server, hit `/api/generate/speech-to-video` from the Speech tab with (a) typed prompt (b) recorded audio. Watch Kling T2V response land. First real validation of the new code path.
+2. **Delete `RUN_STARTUP_DIAGNOSTIC` from Replit Secrets** — still pending from the pre-pivot diagnostic work. Burns ~$0.39/boot until removed.
+3. Deploy the pivot to Replit after local E2E passes.
+4. Decide: does "convert the video into a timelapse" (prompt engineering or ffmpeg speed-up) come back for V1.1, or stay deferred to V2?
+5. V2 backlog (Interior Timelapse direct-Gemini I2I, parallel I2V, etc.) lives in `INTERIOR_TIMELAPSE_V2_BACKLOG.md` — do not work on unless explicitly re-prioritized.
 
 ## Open Questions
-- Why did Nano Banana Pro Edit go from <60s to 4:44 exactly? AIMLAPI regression, account throttling, or Replit IP block?
-- If confirmed AIMLAPI-side, is the right move a direct Google Gemini API integration for I2I, or try another reseller?
-- Bleed audit marks bled elements as "renovated" causing early exit (deferred).
+- Does Kling T2V reject `seed` if passed? Not listed in docs — currently not sent. Will learn from first E2E run.
+- Does the 10s Kling generation land within the 120s frontend progress budget, or do we need to widen `expectedMs`? Unknown until tested.

@@ -43,6 +43,7 @@ class VideoService:
         endpoint_path: Optional[str] = None,
         status_path: Optional[str] = None,
         resolution: Optional[str] = None,
+        generate_audio: Optional[bool] = None,
     ) -> Dict:
         data = self.aiml_client.generate_video(
             prompt=prompt,
@@ -53,6 +54,7 @@ class VideoService:
             aspect_ratio=aspect_ratio,
             endpoint_path=endpoint_path,
             resolution=resolution,
+            generate_audio=generate_audio,
         )
         status_code = int(data.get("_status_code", 0) or 0)
         # Accept any 2xx as success/created; otherwise return error
@@ -846,168 +848,20 @@ class VideoService:
             **_state_snapshot(),
         }
 
-    def generate_16s_video(self, prompt: str, seed: Optional[int] = None) -> Dict:
+    def generate_speech_to_video(self, prompt: str) -> Dict:
         """
-        Generate a seamless 16-second video by creating two 8-second clips with continuity.
-        Uses GPT to intelligently split the prompt at a natural narrative break point.
+        MVP pipeline: generate a single 10-second video (no audio) from text using Kling T2V.
+        The text can come from either a typed prompt or a Whisper transcript.
         """
-        import os
-        import random
-        from ..utils.video import stitch_videos_seamless
-
-        # Use provided seed or generate one for consistency across both clips
-        if seed is None:
-            seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
-
-        # Use GPT to intelligently split the prompt into two parts
-        split_result = self.openai_client.split_prompt_for_two_clips(prompt)
-        clip1_prompt = split_result["clip1"]
-        clip2_prompt = split_result["clip2"]
-
-        # Build detailed prompts with strong continuity instructions
-        style_instructions = (
-            "Cinematic quality, consistent lighting, smooth camera movement. "
-            "Maintain exact same visual style, color grading, and atmosphere throughout."
-        )
-
-        p1 = (
-            f"{clip1_prompt} "
-            f"{style_instructions} "
-            "This is the FIRST half of a continuous scene."
-        )
-
-        p2 = (
-            f"{clip2_prompt} "
-            f"{style_instructions} "
-            "This is the SECOND half continuing EXACTLY from where the first clip ended. "
-            "CRITICAL: Use the EXACT same characters, environment, lighting, color palette, "
-            "and camera style as the first clip. The transition must be invisible."
-        )
-
-        # Generate two 8-second clips
-        model = os.getenv("AD_MODEL", "openai/sora-2-t2v")
-        endpoint_path = os.getenv("AD_ENDPOINT_PATH", "/video/generations")
-        status_path = os.getenv("AD_STATUS_PATH", "/video/generations")
-
-        scenes = [
-            {"prompt": p1, "duration": 8},
-            {"prompt": p2, "duration": 8},
-        ]
-
-        seg_urls: List[str] = []
-        for idx, s in enumerate(scenes):
-            r = self._single_generation(
-                s["prompt"],
-                s["duration"],
-                "high",
-                seed=seed,  # Same seed for both clips
-                model=model,
-                aspect_ratio="16:9",
-                endpoint_path=endpoint_path,
-                status_path=status_path,
-                resolution=self.settings.default_resolution_medium,
-            )
-            if not r.get("success"):
-                r["_failed_clip"] = idx + 1
-                r["_generated_clips"] = seg_urls
-                return r
-            if r.get("video_url"):
-                seg_urls.append(r["video_url"])
-
-        # Stitch seamlessly (no visual crossfade, only subtle audio transitions)
-        stitched = stitch_videos_seamless(seg_urls)
-        if stitched.get("success"):
-            filename = stitched.get("filename", "stitched_output.mp4")
-            return {
-                "success": True,
-                "video_url": f"/api/stitched/{filename}",
-                "segments": seg_urls,
-                "duration": 16,
-                "seed": seed,
-            }
-        return {"success": False, "error": stitched}
-
-    def generate_superbowl_ad(self, prompt: str) -> Dict:
-        """Generate a short ad as 2x4s scenes (Sora 2) and stitch."""
-        import os, random
-        from ..utils.video import stitch_videos_seamless
-        base = self._superbowl_prompt(prompt)
-        seed = int(os.getenv("AD_SEED", str(random.randint(1, 2**31 - 1))))
-        # Derive strict per-scene prompts from user's script if provided
-        import re
-        clip1_text, clip2_text = None, None
-        try:
-            m1 = re.search(r"(?is)\bclip\s*1\b[\s:–—-]*([^]*?)(?=\bclip\s*2\b|$)", prompt)
-            m2 = re.search(r"(?is)\bclip\s*2\b[\s:–—-]*([^]*?)$", prompt)
-            if m1 and m1.group(1):
-                clip1_text = m1.group(1).strip()
-            if m2 and m2.group(1):
-                clip2_text = m2.group(1).strip()
-            if not (clip1_text and clip2_text):
-                h1 = re.search(r"(?is)\bthe\s+hook\b[\s:–—-]*([^]*?)(?=\bthe\s+payoff\b|$)", prompt)
-                h2 = re.search(r"(?is)\bthe\s+payoff\b[\s:–—-]*([^]*?)$", prompt)
-                if h1 and h1.group(1):
-                    clip1_text = clip1_text or h1.group(1).strip()
-                if h2 and h2.group(1):
-                    clip2_text = clip2_text or h2.group(1).strip()
-        except Exception:
-            pass
-
-        if clip1_text and clip2_text:
-            p1 = (
-                f"{base} This is Scene 1 (hook). Use ONLY this scene description: {clip1_text}. "
-                f"Do NOT include any elements from other scenes. Keep the same hero across scenes."
-            )
-            p2 = (
-                f"{base} This is Scene 2 (payoff/CTA). Use ONLY this scene description: {clip2_text}. "
-                f"Do NOT include any elements from other scenes. Keep the same hero across scenes."
-            )
-        else:
-            p1 = (
-                f"{base} Scene 1 (hook). Focus solely on the hook beat. "
-                f"Do NOT include payoff/endcard elements. Keep the same hero."
-            )
-            p2 = (
-                f"{base} Scene 2 (payoff). Focus solely on payoff/logo/endcard. "
-                f"Do NOT include hook elements. Keep the same hero."
-            )
-
-        # Two 4-second scenes (lower cost) at 720p, then stitch (~8s total)
-        scenes = [
-            {"prompt": p1, "duration": 4},
-            {"prompt": p2, "duration": 4},
-        ]
-        seg_urls: List[str] = []
-        for s in scenes:
-            r = self._single_generation(
-                s["prompt"],
-                s["duration"],
-                "high",
-                seed=seed,
-                model="openai/sora-2-t2v",
-                aspect_ratio="16:9",
-                endpoint_path="/video/generations",
-                status_path="/video/generations",
-                resolution=self.settings.default_resolution_medium,  # e.g., 720p allows 4s
-            )
-            if not r.get("success"):
-                return r
-            if r.get("video_url"):
-                seg_urls.append(r["video_url"])
-        stitched = stitch_videos_seamless(seg_urls)
-        if stitched.get("success"):
-            filename = stitched.get("filename", "stitched_output.mp4")
-            return {"success": True, "video_url": f"/api/stitched/{filename}", "segments": seg_urls}
-        return {"success": False, "error": stitched}
-
-    def _superbowl_prompt(self, user_prompt: str) -> str:
-        return (
-            "Create a cinematic, high-energy 15-second Super Bowl TV ad. "
-            "Requirements: 1) Cold open hook in first 2 seconds. "
-            "2) Showcase product benefits with dynamic cuts and bold on-screen text. "
-            "3) Include diverse shots and quick pacing. 4) Add clear call-to-action near the end. "
-            "5) End on hero shot with brand logo. 6) Family-friendly tone. "
-            f"Use this brief as the creative direction: {user_prompt}"
+        return self._single_generation(
+            prompt=prompt,
+            duration=10,
+            quality="high",
+            model=self.settings.kling_t2v_model,
+            aspect_ratio="16:9",
+            endpoint_path="/video/generations",
+            status_path="/video/generations",
+            generate_audio=False,
         )
 
 

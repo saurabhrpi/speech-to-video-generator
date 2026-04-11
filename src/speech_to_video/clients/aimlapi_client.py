@@ -51,6 +51,7 @@ class AIMLAPIClient:
         aspect_ratio: Optional[str] = None,
         endpoint_path: Optional[str] = None,
         resolution: Optional[str] = None,
+        generate_audio: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Create a generation using AIMLAPI v2 endpoint:
@@ -73,6 +74,8 @@ class AIMLAPIClient:
             body["aspect_ratio"] = aspect_ratio
         if resolution:
             body["resolution"] = resolution
+        if generate_audio is not None:
+            body["generate_audio"] = bool(generate_audio)
 
         last: Dict[str, Any] = {}
         attempts = int(os.getenv("AIMLAPI_POST_ATTEMPTS", "2"))

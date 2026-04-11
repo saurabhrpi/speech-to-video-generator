@@ -28,7 +28,8 @@ export default function App() {
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const [pendingTranscript, setPendingTranscript] = useState<string>('')
   const [auth, setAuth] = useState<{ authenticated: boolean; user?: any; usage_count: number; limit: number } | null>(null)
-  const [mode, setMode] = useState<'speech' | 'timelapse' | 'video_studio'>('timelapse')
+  const [mode, setMode] = useState<'speech' | 'timelapse' | 'video_studio'>('speech')
+  const [promptText, setPromptText] = useState('')
   const [stepByStep, setStepByStep] = useState(false)
   const [pipelineState, setPipelineState] = useState<Record<string, any> | null>(null)
   const [phaseCompleted, setPhaseCompleted] = useState<string | null>(null)
@@ -155,7 +156,7 @@ export default function App() {
       body.set('audio', file)
       let resp: Response
       try {
-        resp = await fetch(`${API_BASE}/api/ads/superbowl`, { method: 'POST', body })
+        resp = await fetch(`${API_BASE}/api/generate/speech-to-video`, { method: 'POST', body })
       } catch (e) {
         // Network error or server restarted mid-request
         clearProgressTimer()
@@ -211,7 +212,7 @@ export default function App() {
     }
   }
 
-  async function handlePromptToAd(promptText: string) {
+  async function handleTextToVideo(promptText: string) {
     setBusy(true)
     try {
       // 2 minutes target for generation via text
@@ -220,7 +221,7 @@ export default function App() {
       body.set('prompt', promptText)
       let resp: Response
       try {
-        resp = await fetch(`${API_BASE}/api/ads/superbowl`, { method: 'POST', body })
+        resp = await fetch(`${API_BASE}/api/generate/speech-to-video`, { method: 'POST', body })
       } catch (e) {
         clearProgressTimer()
         setProgress(0)
@@ -412,7 +413,7 @@ export default function App() {
     setConfirmOpen(false)
     if (pendingTranscript && pendingTranscript.trim().length > 0) {
       setPendingAudio(null)
-      await handlePromptToAd(pendingTranscript.trim())
+      await handleTextToVideo(pendingTranscript.trim())
     } else if (f) {
       setPendingAudio(null)
       await handleSpeechToVideo(f)
@@ -785,6 +786,12 @@ export default function App() {
         <div className="container pb-3">
           <div className="inline-flex rounded-md border bg-muted p-0.5">
             <button
+              onClick={() => setMode('speech')}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'speech' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Speech to Video
+            </button>
+            <button
               onClick={() => setMode('timelapse')}
               className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'timelapse' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
@@ -795,12 +802,6 @@ export default function App() {
               className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'video_studio' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Video Studio
-            </button>
-            <button
-              onClick={() => setMode('speech')}
-              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'speech' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Speech to Video
             </button>
           </div>
         </div>
@@ -1083,11 +1084,33 @@ export default function App() {
             <VideoStudio busy={busy} onBusyChange={setBusy} onJsonUpdate={setJsonOut} onVideoUrl={setVideoUrl} />
           ) : (
             <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Prompt</label>
+                <textarea
+                  className="w-full rounded border bg-background p-2 text-sm leading-5 min-h-[96px] outline-none"
+                  placeholder="Type what you want to see in the video…"
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  disabled={busy || recording}
+                />
+                <Button
+                  className="w-full h-12"
+                  disabled={busy || recording || !promptText.trim()}
+                  onClick={() => handleTextToVideo(promptText.trim())}
+                >
+                  Generate Video
+                </Button>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                <span>or record your voice</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
               {canRecord && (
                 recording ? (
                   <Button className="w-full h-12" variant="destructive" onClick={stopRecording}>Stop Recording</Button>
                 ) : (
-                  <Button className="w-full h-12" onClick={startRecording} disabled={busy}>Record</Button>
+                  <Button className="w-full h-12" variant="outline" onClick={startRecording} disabled={busy}>Record</Button>
                 )
               )}
               {!recording && loginRequired && (

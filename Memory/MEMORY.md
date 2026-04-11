@@ -12,6 +12,8 @@
 - [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE
 - [Replit /tmp is NBD](reference_replit_tmp_nbd.md) -- /tmp is network block device; use /dev/shm (64MB tmpfs) for I/O-heavy work, ~150x faster
 - [Env diff first for cross-host slowness](feedback_environment_diff_first.md) -- Same code slow on one host, fast on another → check fs/RAM/CPU before theorizing about code
+- [AIMLAPI I2I ~4:45 is upstream](reference_aimlapi_i2i_latency.md) -- nano-banana-pro-edit holds chunked response open ~4min; T2I fine; fix = direct Gemini, not client tuning
 - [Replit republish grace period](reference_replit_republish.md) -- Old container runs ~5 min after republish before SIGTERM; not an instant kill
 - [Mobile OAuth cookie jar](feedback_mobile_oauth_cookie_jar.md) -- ASWebAuthenticationSession has separate cookie jar from app's fetch(); use one-time token exchange
 - [Zustand clear state on new runs](feedback_zustand_clear_state.md) -- Pipeline store leaks old results into new runs without explicit clearing
+- [Explicit handoff instructions](feedback_explicit_handoff.md) -- At handoff moments, spell out exact command/click-path, don't assume user will infer the mechanism

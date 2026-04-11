@@ -34,6 +34,7 @@ class Settings:
     dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
     dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
     kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
+    kling_t2v_model: str = os.environ.get("KLING_T2V_MODEL", "klingai/video-v3-standard-text-to-video")
     seedance_i2v_model: str = os.environ.get("SEEDANCE_I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
     hailuo_i2v_model: str = os.environ.get("HAILUO_I2V_MODEL", "minimax/hailuo-02")
     i2v_model: str = os.environ.get("I2V_MODEL", "minimax/hailuo-02")
