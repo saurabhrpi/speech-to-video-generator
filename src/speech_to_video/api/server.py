@@ -752,10 +752,17 @@ async def stream_job_sse(request: Request, job_id: str):
             state_key = (job["status"], job.get("phase"), job.get("step"), job.get("message"))
             if state_key == last_key:
                 heartbeat_counter += 1
-                # Send SSE comment every ~15s to keep connection alive
-                # during long operations (video generation takes 60-90s)
-                if heartbeat_counter >= 30:  # 30 * 0.5s = 15s
-                    yield ": heartbeat\n\n"
+                # Re-send current state as a real data event every ~10s
+                # to keep connection alive through proxies (comments get ignored)
+                if heartbeat_counter >= 20:  # 20 * 0.5s = 10s
+                    event = {
+                        "status": job["status"],
+                        "phase": job.get("phase"),
+                        "step": job.get("step", 0),
+                        "total_steps": job.get("total_steps", 0),
+                        "message": job.get("message", ""),
+                    }
+                    yield f"data: {json.dumps(event)}\n\n"
                     heartbeat_counter = 0
                 await asyncio.sleep(0.5)
                 continue

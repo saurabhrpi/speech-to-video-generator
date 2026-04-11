@@ -3,10 +3,14 @@ import * as SecureStore from 'expo-secure-store';
 import { API_BASE, SESSION_COOKIE_KEY } from './constants';
 import type { PollCallbacks } from './polling';
 
+const MAX_RECONNECTS = 20; // covers ~30+ min of video generation
+const RECONNECT_DELAY_MS = 2000;
+
 /**
  * Stream job progress via Server-Sent Events.
+ * Auto-reconnects if the connection drops mid-job (proxy/infra timeouts).
  * Returns final result on completion, throws on failure.
- * Falls back to null if the stream ends without a terminal event.
+ * Falls back to lastPartial if all reconnect attempts are exhausted.
  */
 export async function streamJob(
   jobId: string,
@@ -14,74 +18,89 @@ export async function streamJob(
   signal?: AbortSignal,
 ): Promise<Record<string, any> | null> {
   let lastPartial: Record<string, any> | null = null;
+  let reconnects = 0;
 
-  const headers: Record<string, string> = {};
-  const cookie = await SecureStore.getItemAsync(SESSION_COOKIE_KEY);
-  if (cookie) headers['Cookie'] = cookie;
+  while (reconnects <= MAX_RECONNECTS) {
+    if (signal?.aborted) throw new Error('Aborted');
 
-  const res = await fetch(`${API_BASE}/api/jobs/${jobId}/stream`, {
-    headers,
-    signal,
-  });
+    const headers: Record<string, string> = {};
+    const cookie = await SecureStore.getItemAsync(SESSION_COOKIE_KEY);
+    if (cookie) headers['Cookie'] = cookie;
 
-  // Extract cookie once from the SSE connection response
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) {
-    const v = setCookie.split(';')[0];
-    if (v) SecureStore.setItemAsync(SESSION_COOKIE_KEY, v);
-  }
+    const res = await fetch(`${API_BASE}/api/jobs/${jobId}/stream`, {
+      headers,
+      signal,
+    });
 
-  if (!res.ok) {
-    throw new Error(`SSE connect failed (${res.status})`);
-  }
+    // Extract cookie once from the SSE connection response
+    if (reconnects === 0) {
+      const setCookie = res.headers.get('set-cookie');
+      if (setCookie) {
+        const v = setCookie.split(';')[0];
+        if (v) SecureStore.setItemAsync(SESSION_COOKIE_KEY, v);
+      }
+    }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('Streaming not supported');
+    if (!res.ok) {
+      throw new Error(`SSE connect failed (${res.status})`);
+    }
 
-  const decoder = new TextDecoder();
-  let buffer = '';
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Streaming not supported');
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-      buffer += decoder.decode(value, { stream: true });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      // SSE events are separated by double newlines
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
 
-      for (const part of parts) {
-        for (const line of part.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
+        // SSE events are separated by double newlines
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
 
-          const data = JSON.parse(line.slice(6));
+        for (const part of parts) {
+          for (const line of part.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
 
-          callbacks.onProgress(
-            data.phase ?? null,
-            data.step ?? 0,
-            data.total_steps ?? 0,
-            data.message ?? '',
-          );
+            const data = JSON.parse(line.slice(6));
 
-          if (data.partial_result) {
-            lastPartial = data.partial_result;
-            callbacks.onPartialResult(data.partial_result);
-          }
+            callbacks.onProgress(
+              data.phase ?? null,
+              data.step ?? 0,
+              data.total_steps ?? 0,
+              data.message ?? '',
+            );
 
-          if (data.status === 'completed') {
-            return data.result ?? lastPartial;
-          }
+            if (data.partial_result) {
+              lastPartial = data.partial_result;
+              callbacks.onPartialResult(data.partial_result);
+            }
 
-          if (data.status === 'failed') {
-            throw new Error(data.error ?? data.message ?? 'Job failed');
+            if (data.status === 'completed') {
+              return data.result ?? lastPartial;
+            }
+
+            if (data.status === 'failed') {
+              throw new Error(data.error ?? data.message ?? 'Job failed');
+            }
           }
         }
       }
+    } finally {
+      reader.releaseLock();
     }
-  } finally {
-    reader.releaseLock();
+
+    // Stream ended without terminal event — connection dropped.
+    // Reconnect to pick up where we left off.
+    reconnects++;
+    if (reconnects > MAX_RECONNECTS) break;
+
+    callbacks.onProgress(null, 0, 0, 'Reconnecting...');
+    await new Promise<void>((r) => setTimeout(r, RECONNECT_DELAY_MS));
   }
 
   return lastPartial;
