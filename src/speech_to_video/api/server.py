@@ -841,6 +841,66 @@ def create_fake_job():
     return JSONResponse({"job_id": job_id})
 
 
+@app.get("/api/debug/time-image-edit")
+def debug_time_image_edit():
+    """Time a single Nano Banana Pro Edit call end-to-end from inside the deployed container.
+
+    Measures TCP/TLS handshake, request send, time-to-first-byte, body download,
+    and total wall clock. Used to diagnose whether slow image generation is due
+    to AIMLAPI latency, Replit->AIMLAPI network path, or our Python stack.
+    """
+    import time
+    import requests as _req
+
+    url = "https://api.aimlapi.com/v1/images/generations"
+    body = {
+        "model": "google/nano-banana-pro-edit",
+        "prompt": "Make the walls warm off-white matte. Change nothing else.",
+        "image_urls": [
+            "https://cdn.aimlapi.com/generations/openai-image-generation/1775871436710-f17de23b-4eb6-4b28-b9ed-441c937706c1.png"
+        ],
+        "aspect_ratio": "16:9",
+        "resolution": "1K",
+        "num_images": 1,
+    }
+    settings = get_settings()
+    headers = {
+        "Authorization": f"Bearer {settings.aimlapi_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    result: Dict[str, Any] = {"url": url, "model": body["model"]}
+
+    # 1) Fresh session, no pooling — measure the actual connect cost
+    session = _req.Session()
+    t0 = time.time()
+    try:
+        resp = session.post(url, json=body, headers=headers, timeout=(10, 600), stream=True)
+        t_headers = time.time()
+        _ = resp.content  # force full body download
+        t_body = time.time()
+
+        try:
+            data = resp.json()
+        except Exception:
+            data = {"error_text": resp.text[:500]}
+
+        result.update({
+            "status_code": resp.status_code,
+            "total_ms": int((t_body - t0) * 1000),
+            "time_to_headers_ms": int((t_headers - t0) * 1000),
+            "body_download_ms": int((t_body - t_headers) * 1000),
+            "response_body_bytes": len(resp.content),
+            "response_preview": str(data)[:500],
+        })
+    except _req.Timeout as e:
+        result.update({"error": f"timeout: {e}", "total_ms": int((time.time() - t0) * 1000)})
+    except _req.RequestException as e:
+        result.update({"error": f"request_error: {e}", "total_ms": int((time.time() - t0) * 1000)})
+
+    return JSONResponse(result)
+
+
 # --- Ads ---
 @app.post("/api/ads/superbowl")
 async def create_superbowl_ad(
