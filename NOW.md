@@ -2,23 +2,27 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt. Do not remove ToDo's unless user says.
 
-## Current Session: 22
+## Current Session: 23
 **Date:** 2026-04-10
 **Branch:** main
-**Status:** OAuth login fixed & verified, stale pipeline fix verified, ffmpeg stitch confirmed fast (4s), SSE heartbeat fix applied but untested.
+**Status:** SSE auto-reconnect works. Discovered I2I edit calls are stuck at exactly ~4:44 per call (regression from <60s a few days ago). Diagnostic endpoint added, not yet run.
 
 ## What Happened This Session
-- Fixed mobile OAuth: one-time token exchange pattern bridges browser cookie jar to app's fetch(). Verified working.
-- Confirmed stale pipeline state fix works after app rebuild.
-- Confirmed ffmpeg stitch blazing fast on Replit (4s). Can unset `STITCH_TMPDIR`.
-- Diagnosed SSE stream drops during video gen (60-90s silence kills connection). Added 15s heartbeat + frontend now distinguishes `phase_completed` vs `success:false`. Untested.
+- Tested previous SSE heartbeat fix → failed. Comment heartbeats get ignored by proxies; stream dropped during long I2I. Replaced with real `data:` event heartbeat every 10s + frontend auto-reconnect (up to 20 retries) in `streamJob`.
+- Re-tested: reconnection works (UI shows "Reconnecting..." between stages) but surfaced the real bottleneck — every Nano Banana Pro Edit call takes exactly 4m 44s. Same pattern across 3+ sessions, suspiciously uniform.
+- Confirmed no recent code change touches `aimlapi_client.py` — this is external (AIMLAPI-side or Replit→AIMLAPI network). User says locally it was <60s, Replit was fast a few days ago.
+- Added `GET /api/debug/time-image-edit` — runs socket/DNS/TCP/TLS probe + CDN fetch + T2I baseline + I2I call from inside deployed container, logs every probe to Replit logs so data survives if proxy kills the 5+ min response.
+- Caught 2 bugs in the diagnostic endpoint before push: undefined `logger` and missing `Dict`/`Any` imports.
 
 ## Next Step (ToDo's)
-1. **Full pipeline run shows video reviewer screen** — When running normally (without "Step by step generation" option), the app still shows a PipelineReview screen with buttons like "Generate transition 1→2", "Generate Remaining Videos", etc. This should NOT happen — full pipeline should run end-to-end without pausing for review. Root cause: SSE connection drops during long video generation (~60-90s silence). Fix applied: SSE heartbeat + frontend result handling improvements. Needs testing.
-2. Parallelize transition I2V generation (`video_service.py:562-664`) — biggest remaining bottleneck.
-3. Migrate `expo-av` → `expo-video` (+ `expo-audio` if used). Warning fires every cold start. Package says "removed in SDK 54" — verify actual removal version, may be urgent.
+1. **Push + Republish, then hit `/api/debug/time-image-edit` on deployed URL.** Wait ~5.5 min, read the 4 probe results from Replit logs. Interpret: if `i2i_probe.time_to_headers_ms` ≈ 4 min but others fast → AIMLAPI holds the request → consider switching I2I to direct Google Gemini API.
+2. Parallelize transition I2V generation (`video_service.py:562-664`) — biggest remaining bottleneck once I2I is unblocked.
+3. Migrate `expo-av` → `expo-video` (+ `expo-audio` if used). Package says "removed in SDK 54" — verify actual removal version.
 4. Remove "Test SSE (fake job)" button from mobile UI.
 5. Frontend `NUM_STAGES = 7` hardcoded in `mobile/lib/constants.ts` — mini pipeline UX still broken.
+6. Full pipeline review screen bug (ToDo #1 from last session) — resolved by SSE auto-reconnect.
 
 ## Open Questions
+- Why did Nano Banana Pro Edit go from <60s to 4:44 exactly? AIMLAPI regression, account throttling, or Replit IP block?
+- If confirmed AIMLAPI-side, is the right move a direct Google Gemini API integration for I2I, or try another reseller?
 - Bleed audit marks bled elements as "renovated" causing early exit (deferred).

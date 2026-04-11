@@ -4,7 +4,7 @@ import os
 import secrets
 import tempfile
 import time
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from logging.handlers import RotatingFileHandler
 import pathlib
@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO, format=_fmt, handlers=[
     logging.StreamHandler(),
     RotatingFileHandler(_LOG_DIR / "app.log", maxBytes=5_000_000, backupCount=3),
 ])
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -843,61 +844,191 @@ def create_fake_job():
 
 @app.get("/api/debug/time-image-edit")
 def debug_time_image_edit():
-    """Time a single Nano Banana Pro Edit call end-to-end from inside the deployed container.
+    """Time Nano Banana Pro T2I and Edit calls end-to-end from inside the deployed container.
 
-    Measures TCP/TLS handshake, request send, time-to-first-byte, body download,
-    and total wall clock. Used to diagnose whether slow image generation is due
-    to AIMLAPI latency, Replit->AIMLAPI network path, or our Python stack.
+    Runs four probes to isolate where the slowness is:
+      1) Socket-level DNS/TCP/TLS probe to api.aimlapi.com
+      2) CDN fetch of an existing image from cdn.aimlapi.com (measures their CDN speed)
+      3) T2I baseline call (nano-banana-pro, no source image)
+      4) I2I edit call (nano-banana-pro-edit) using the T2I output from probe 3 as source,
+         mirroring production where each I2I stage reads a just-generated Nano Banana image.
+         Falls back to the cached cdn.aimlapi.com URL from probe 2 only if probe 3 fails.
+
+    Response headers are captured on every HTTP probe so we can spot upstream
+    debug headers (X-Cache, CF-Ray, X-Upstream-Time, etc.).
     """
     import time
+    import socket
+    import ssl
+    import json as _json
+    from urllib.parse import urlparse
     import requests as _req
 
-    url = "https://api.aimlapi.com/v1/images/generations"
-    body = {
-        "model": "google/nano-banana-pro-edit",
-        "prompt": "Make the walls warm off-white matte. Change nothing else.",
-        "image_urls": [
-            "https://cdn.aimlapi.com/generations/openai-image-generation/1775871436710-f17de23b-4eb6-4b28-b9ed-441c937706c1.png"
-        ],
-        "aspect_ratio": "16:9",
-        "resolution": "1K",
-        "num_images": 1,
-    }
+    api_url = "https://api.aimlapi.com/v1/images/generations"
+    fallback_cdn_image_url = "https://cdn.aimlapi.com/generations/openai-image-generation/1775871436710-f17de23b-4eb6-4b28-b9ed-441c937706c1.png"
+
     settings = get_settings()
-    headers = {
+    auth_headers = {
         "Authorization": f"Bearer {settings.aimlapi_api_key}",
         "Content-Type": "application/json",
     }
 
-    result: Dict[str, Any] = {"url": url, "model": body["model"]}
+    result: Dict[str, Any] = {
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "api_url": api_url,
+    }
+    logger.info("[DEBUG time-image-edit] starting run at %s", result["started_at"])
 
-    # 1) Fresh session, no pooling — measure the actual connect cost
-    session = _req.Session()
+    def _headers_dict(resp) -> Dict[str, str]:
+        try:
+            return {k: v for k, v in resp.headers.items()}
+        except Exception:
+            return {}
+
+    def _extract_image_url(data: Any) -> Optional[str]:
+        # Mirrors AIMLAPIClient._extract_image_url so we handle every response
+        # shape the real pipeline handles (wrapped list + flat top-level).
+        if not isinstance(data, dict):
+            return None
+        items = data.get("data") or data.get("images") or data.get("results") or []
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    u = item.get("url") or item.get("image_url") or item.get("uri")
+                    if isinstance(u, str) and u.startswith("http"):
+                        return u
+                elif isinstance(item, str) and item.startswith("http"):
+                    return item
+        u = data.get("url") or data.get("image_url")
+        if isinstance(u, str) and u.startswith("http"):
+            return u
+        return None
+
+    def _post_probe(label: str, body: Dict[str, Any]):
+        probe: Dict[str, Any] = {
+            "model": body.get("model"),
+            "request_body_bytes": len(_json.dumps(body).encode("utf-8")),
+        }
+        logger.info("[DEBUG time-image-edit] %s: starting POST model=%s", label, body.get("model"))
+        session = _req.Session()
+        raw_data: Any = None
+        t0 = time.time()
+        try:
+            resp = session.post(api_url, json=body, headers=auth_headers, timeout=(10, 600), stream=True)
+            t_headers = time.time()
+            content = resp.content
+            t_body = time.time()
+            try:
+                data = resp.json()
+                raw_data = data
+            except Exception:
+                data = {"error_text": resp.text[:500]}
+            probe.update({
+                "status_code": resp.status_code,
+                "total_ms": int((t_body - t0) * 1000),
+                "time_to_headers_ms": int((t_headers - t0) * 1000),
+                "body_download_ms": int((t_body - t_headers) * 1000),
+                "response_body_bytes": len(content),
+                "response_headers": _headers_dict(resp),
+                "response_preview": str(data)[:500],
+            })
+        except _req.Timeout as e:
+            probe.update({"error": f"timeout: {e}", "total_ms": int((time.time() - t0) * 1000)})
+        except _req.RequestException as e:
+            probe.update({"error": f"request_error: {e}", "total_ms": int((time.time() - t0) * 1000)})
+        logger.info("[DEBUG time-image-edit] %s: done %s", label, _json.dumps(probe)[:1500])
+        return probe, raw_data
+
+    # --- Probe 1: socket-level DNS + TCP + TLS to api.aimlapi.com ---
+    parsed = urlparse(api_url)
+    host = parsed.hostname or "api.aimlapi.com"
+    port = parsed.port or 443
+    socket_probe: Dict[str, Any] = {"host": host, "port": port}
+    try:
+        t_dns_0 = time.time()
+        ip = socket.gethostbyname(host)
+        t_dns_1 = time.time()
+        socket_probe["dns_ms"] = int((t_dns_1 - t_dns_0) * 1000)
+        socket_probe["resolved_ip"] = ip
+
+        t_tcp_0 = time.time()
+        sock = socket.create_connection((ip, port), timeout=10)
+        t_tcp_1 = time.time()
+        socket_probe["tcp_connect_ms"] = int((t_tcp_1 - t_tcp_0) * 1000)
+
+        t_tls_0 = time.time()
+        context = ssl.create_default_context()
+        ssock = context.wrap_socket(sock, server_hostname=host)
+        t_tls_1 = time.time()
+        socket_probe["tls_handshake_ms"] = int((t_tls_1 - t_tls_0) * 1000)
+        try:
+            ssock.close()
+        except Exception:
+            pass
+    except Exception as e:
+        socket_probe["error"] = f"{type(e).__name__}: {e}"
+    result["socket_probe"] = socket_probe
+    logger.info("[DEBUG time-image-edit] socket_probe: %s", _json.dumps(socket_probe))
+
+    # --- Probe 2: fetch an existing image from cdn.aimlapi.com ---
+    cdn_probe: Dict[str, Any] = {"url": fallback_cdn_image_url}
     t0 = time.time()
     try:
-        resp = session.post(url, json=body, headers=headers, timeout=(10, 600), stream=True)
+        cdn_resp = _req.get(fallback_cdn_image_url, timeout=(10, 60), stream=True)
         t_headers = time.time()
-        _ = resp.content  # force full body download
+        cdn_bytes = cdn_resp.content
         t_body = time.time()
-
-        try:
-            data = resp.json()
-        except Exception:
-            data = {"error_text": resp.text[:500]}
-
-        result.update({
-            "status_code": resp.status_code,
+        cdn_probe.update({
+            "status_code": cdn_resp.status_code,
             "total_ms": int((t_body - t0) * 1000),
             "time_to_headers_ms": int((t_headers - t0) * 1000),
             "body_download_ms": int((t_body - t_headers) * 1000),
-            "response_body_bytes": len(resp.content),
-            "response_preview": str(data)[:500],
+            "bytes": len(cdn_bytes),
+            "response_headers": _headers_dict(cdn_resp),
         })
-    except _req.Timeout as e:
-        result.update({"error": f"timeout: {e}", "total_ms": int((time.time() - t0) * 1000)})
-    except _req.RequestException as e:
-        result.update({"error": f"request_error: {e}", "total_ms": int((time.time() - t0) * 1000)})
+    except Exception as e:
+        cdn_probe.update({"error": f"{type(e).__name__}: {e}", "total_ms": int((time.time() - t0) * 1000)})
+    result["cdn_fetch_probe"] = cdn_probe
+    logger.info("[DEBUG time-image-edit] cdn_fetch_probe: %s", _json.dumps({k: v for k, v in cdn_probe.items() if k != "response_headers"}))
 
+    # --- Probe 3: T2I baseline (no source image) ---
+    t2i_probe, t2i_raw = _post_probe("t2i", {
+        "model": "google/nano-banana-pro",
+        "prompt": "A modern luxury patio, natural daylight, photoreal, 24mm wide.",
+        "aspect_ratio": "16:9",
+        "resolution": "1K",
+        "num_images": 1,
+    })
+    result["t2i_probe"] = t2i_probe
+
+    # --- Probe 4: I2I edit using the FRESH T2I output from probe 3 as source. ---
+    # Mirrors production, where each I2I stage reads a just-generated Nano Banana image.
+    # Only falls back to the cached cdn.aimlapi.com URL if T2I failed to produce one.
+    fresh_url = _extract_image_url(t2i_raw)
+    i2i_source_url = fresh_url or fallback_cdn_image_url
+    i2i_source_is_fresh = fresh_url is not None
+    logger.info(
+        "[DEBUG time-image-edit] i2i source_url=%s (fresh_from_t2i=%s)",
+        i2i_source_url, i2i_source_is_fresh,
+    )
+
+    i2i_probe, _i2i_raw = _post_probe("i2i", {
+        "model": "google/nano-banana-pro-edit",
+        "prompt": "Make the walls warm off-white matte. Change nothing else.",
+        "image_urls": [i2i_source_url],
+        "aspect_ratio": "16:9",
+        "resolution": "1K",
+        "num_images": 1,
+    })
+    i2i_probe["source_image_url"] = i2i_source_url
+    i2i_probe["source_is_fresh_t2i_output"] = i2i_source_is_fresh
+    result["i2i_probe"] = i2i_probe
+
+    logger.info("[DEBUG time-image-edit] FINAL socket=%sms cdn=%sms t2i=%sms i2i=%sms",
+                socket_probe.get("tls_handshake_ms"),
+                cdn_probe.get("total_ms"),
+                result["t2i_probe"].get("total_ms"),
+                result["i2i_probe"].get("total_ms"))
     return JSONResponse(result)
 
 

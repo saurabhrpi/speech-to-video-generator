@@ -1,11 +1,11 @@
 ---
-name: Summary delta tracking
-description: When /summary is called multiple times in a session, each summary should only cover changes since the last summary, not since the last git commit
+name: Summary scope
+description: /summary means summarize ALL uncommitted changes since last git commit — no delta logic, no session filtering
 type: feedback
 ---
 
-When /summary is called multiple times in a conversation, each summary must only include the delta since the PREVIOUS summary — not since the last git commit. Track what was already summarized and exclude it from subsequent summaries.
+`/summary` = fetch `git diff HEAD` and summarize it. That's all. No delta tracking, no "since previous summary" logic, no filtering by which session the work happened in.
 
-**Why:** User received a duplicate summary that re-listed changes already covered earlier in the session. This wastes time and shows lack of awareness of conversation history.
+**Why:** User explicitly corrected overcomplicated delta logic. I had skipped the previous session's uncommitted server.py work from a /summary because I treated NOW.md's "What Happened This Session" block (and an earlier in-conversation summary) as prior checkpoints to clip against. The user wants it dead simple: uncommitted = summarize, regardless of when the work was done.
 
-**How to apply:** Before generating a summary, check if a prior summary was already given in the conversation. If so, only include changes made AFTER that point.
+**How to apply:** When `/summary` is invoked, run `git diff HEAD` (or equivalent), summarize everything in it, done. Don't try to be clever about what the user "already saw." If they wanted a delta, they would ask for one.
