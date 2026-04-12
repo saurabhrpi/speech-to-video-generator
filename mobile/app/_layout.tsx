@@ -1,6 +1,9 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
+import {
+  PlayfairDisplay_400Regular,
+} from '@expo-google-fonts/playfair-display';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -9,8 +12,22 @@ import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+import { Colors } from '@/lib/design-tokens';
 import NetworkBanner from '@/components/NetworkBanner';
 import '../global.css';
+
+const WarmDarkTheme: Theme = {
+  dark: true,
+  fonts: DefaultTheme.fonts,
+  colors: {
+    primary: Colors.textPrimary,
+    background: Colors.background,
+    card: Colors.background,
+    text: Colors.textPrimary,
+    border: Colors.border,
+    notification: Colors.textPrimary,
+  },
+};
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -24,26 +41,30 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    PlayfairDisplay_400Regular,
     ...FontAwesome.font,
   });
 
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+  // CTFontManagerError 104 = font already registered (still usable). Treat as success.
+  const isAlreadyRegistered = error?.message?.includes('code: 104');
 
   useEffect(() => {
-    if (loaded) {
+    if (error && !isAlreadyRegistered) throw error;
+  }, [error, isAlreadyRegistered]);
+
+  useEffect(() => {
+    if (loaded || isAlreadyRegistered) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, isAlreadyRegistered]);
 
-  if (!loaded) {
+  if (!loaded && !isAlreadyRegistered) {
     return null;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={colorScheme === 'dark' ? WarmDarkTheme : DefaultTheme}>
         <StatusBar style="auto" />
         <NetworkBanner />
         <Stack>

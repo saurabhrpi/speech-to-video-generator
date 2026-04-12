@@ -25,3 +25,4 @@
 - [Simulator paste workaround](reference_simulator_paste.md) -- `pbpaste | xcrun simctl pbcopy booted` to push Mac clipboard into simulator
 - [Simulator reload shortcut](reference_simulator_reload.md) -- Ctrl+Cmd+Z for dev menu, not Cmd+D
 - [Replit startup drains credits](reference_replit_startup_event.md) -- Container restarts are frequent; never leave expensive startup hooks enabled
+- [CTFontManagerError 104 is safe](reference_ctfont_error_104.md) -- Error 104 = already registered, font IS usable; catch and treat as success

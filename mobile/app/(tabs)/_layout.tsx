@@ -1,6 +1,7 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
-import { Pressable, useColorScheme } from 'react-native';
+import { Pressable } from 'react-native';
+import { Colors } from '@/lib/design-tokens';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -11,13 +12,14 @@ function TabBarIcon(props: { name: React.ComponentProps<typeof FontAwesome>['nam
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const tint = colorScheme === 'dark' ? '#6ea8fe' : '#3b82f6';
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: tint,
+        tabBarActiveTintColor: Colors.textPrimary,
+        tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarStyle: { backgroundColor: Colors.background, borderTopColor: Colors.border },
+        headerStyle: { backgroundColor: Colors.background },
+        headerTintColor: Colors.textPrimary,
         headerShown: true,
       }}
     >
@@ -33,7 +35,7 @@ export default function TabLayout() {
                   <FontAwesome
                     name="gear"
                     size={22}
-                    color={tint}
+                    color={Colors.textPrimary}
                     style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
                   />
                 )}
@@ -54,7 +56,7 @@ export default function TabLayout() {
                   <FontAwesome
                     name="gear"
                     size={22}
-                    color={tint}
+                    color={Colors.textPrimary}
                     style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
                   />
                 )}

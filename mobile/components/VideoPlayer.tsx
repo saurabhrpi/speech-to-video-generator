@@ -101,7 +101,7 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
     <View className={`rounded-lg overflow-hidden bg-black ${className ?? ''}`}>
       {loading && !error && (
         <View className="absolute inset-0 items-center justify-center z-10">
-          <ActivityIndicator color="#3b82f6" size="large" />
+          <ActivityIndicator color="#FAF0E6" size="large" />
         </View>
       )}
       {error ? (

@@ -1,23 +1,27 @@
-import { forwardRef } from 'react';
-import { Pressable, Text, type PressableProps } from 'react-native';
+import { forwardRef, useCallback } from 'react';
+import { Text, type PressableProps } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { cn } from '@/lib/utils';
 
-function cn(...inputs: (string | undefined | null | false)[]) {
-  return twMerge(clsx(inputs));
-}
+const AnimatedPressable = Animated.createAnimatedComponent(
+  require('react-native').Pressable,
+);
 
 const buttonVariants = cva(
-  'flex-row items-center justify-center rounded-md',
+  'flex-row items-center justify-center rounded-button',
   {
     variants: {
       variant: {
-        default: 'bg-primary',
-        secondary: 'bg-secondary',
+        default: 'bg-primary border border-white/[0.18]',
+        secondary: 'bg-secondary border border-white/[0.12]',
         destructive: 'bg-destructive',
-        outline: 'border border-input bg-background',
+        outline: 'border border-white/[0.18] bg-background',
         ghost: '',
       },
       size: {
@@ -58,6 +62,20 @@ interface ButtonProps extends PressableProps, VariantProps<typeof buttonVariants
 
 export const Button = forwardRef<any, ButtonProps>(
   ({ variant, size, title, children, className, textClassName, disabled, onPress, ...props }, ref) => {
+    const scale = useSharedValue(1);
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+      opacity: scale.value < 1 ? 0.9 : 1,
+    }));
+
+    const handlePressIn = useCallback(() => {
+      if (!disabled) scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    }, [disabled, scale]);
+
+    const handlePressOut = useCallback(() => {
+      scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    }, [scale]);
+
     const handlePress = (e: any) => {
       if (!disabled) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -66,14 +84,17 @@ export const Button = forwardRef<any, ButtonProps>(
     };
 
     return (
-      <Pressable
+      <AnimatedPressable
         ref={ref}
         className={cn(
           buttonVariants({ variant, size }),
           disabled && 'opacity-50',
           className,
         )}
+        style={animatedStyle}
         disabled={disabled}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         onPress={handlePress}
         {...props}
       >
@@ -82,7 +103,7 @@ export const Button = forwardRef<any, ButtonProps>(
             {title}
           </Text>
         )}
-      </Pressable>
+      </AnimatedPressable>
     );
   },
 );

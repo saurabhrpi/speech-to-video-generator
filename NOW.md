@@ -1,29 +1,25 @@
 # Session Log
 
-> **STICKY (do not remove):** Read Motto-and-Mantra.txt. Do not remove ToDo's unless user says.
+> **STICKY (do not remove):** Read Motto-and-Mantra.txt. Do not remove ToDo's unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 > **V2 backlog:** Interior Timelapse work was archived to `INTERIOR_TIMELAPSE_V2_BACKLOG.md` during the session-24 pivot. Read that when Interior Timelapse work resumes.
 
-## Current Session: 25
+## Current Session: 26
 **Date:** 2026-04-11
 **Branch:** main
-**Status:** Speech-to-Video pipeline working end-to-end with SSE streaming. First Hailuo generation succeeded but VideoPlayer timed out loading the video.
+**Status:** Speech-to-Video pipeline fully working on mobile (Hailuo tested, video plays). Design PRD plan written, ready to implement.
 
 ## What Happened This Session
-- Mobile app now mirrors web pivot: Speech tab is default (renamed files so speech=index.tsx), endpoint updated to `/api/generate/speech-to-video`, textarea + "Generate Video" button above record, model picker (Kling/Hailuo) + duration picker (Kling: 3/10/15s, Hailuo: 6/10s).
-- Backend accepts `model` and `duration` form params. Added `hailuo_t2v_model` to config.
-- Converted speech-to-video from synchronous POST (caused 504 timeouts) to job-based SSE streaming via existing `/api/jobs/{job_id}/stream` infrastructure.
-- Discovered `RUN_STARTUP_DIAGNOSTIC` was silently draining AIMLAPI credits on every Replit container restart (~hourly). User deleted the secret.
-- NativeWind dynamic className on Pressable caused render crashes; fixed by using inline `style` for conditional active/inactive states.
-- VideoPlayer load timeout bumped from 15s to 30s (not yet pushed/tested).
+- Fixed VideoPlayer timeout: replaced fixed 30s timer with URL verification (GET Range:bytes=0-0) + 90s safety net. Discovered AIMLAPI CDN (Alibaba OSS) rejects HEAD on signed URLs — signature is method-specific.
+- Added wake lock (expo-keep-awake) to Speech tab — screen was sleeping during generation, killing SSE.
+- Added auth to Speech tab: gear icon in header linking to Settings, `canGenerate()` gate, "Sign in required" banner. Was missing after the pivot.
+- Added `simpaste` alias to ~/.zshrc for simulator clipboard workaround.
+- Wrote Design PRD implementation plan at `design/SPEECH_TAB_DESIGN_PLAN.md`.
 
 ## Next Step (ToDo's)
-1. **Debug VideoPlayer timeout:** First generation returned "Done!" but player showed "Video timed out — could not load." Check Replit logs for the actual video_url returned. Determine if it's a bad URL, slow CDN, or timeout too short. The 30s timeout fix is local but not pushed yet.
-2. **Delete `RUN_STARTUP_DIAGNOSTIC` from Replit Secrets** — user may have done this already, confirm.
-3. Re-test with Kling model (only Hailuo tested so far).
-4. Test the recorded-audio path (only typed-prompt tested so far).
-5. **If simulator paste breaks again:** Toggle Edit > "Automatically Sync Pasteboard" off/on in Simulator menu. Fallback: add `alias simpaste='pbpaste | xcrun simctl pbcopy booted'` to `~/.zshrc`, then just run `simpaste`.
+1. **Implement Design PRD on Speech tab.** Plan is at `design/SPEECH_TAB_DESIGN_PLAN.md`. Phase 1: colors + fonts, Phase 2: shared components, Phase 3: Speech tab restyle.
+2. Re-test with Kling model (only Hailuo tested so far).
+3. Test the recorded-audio path (only typed-prompt tested so far).
+4. **Simulator paste keeps breaking.** `simpaste` alias is a workaround, not a fix. Find a permanent solution.
 
 ## Open Questions
-- What video_url did the successful Hailuo generation return? Need Replit logs to diagnose the player timeout.
-- Is 30s enough for VideoPlayer, or is the URL itself bad?
-- Is the simulator paste issue sorted permanently (after `defaults write` fix), or will it need `pbpaste | xcrun simctl pbcopy booted` every time?
+- Will NativeWind support custom `fontFamily` via className, or will Playfair Display need inline styles?

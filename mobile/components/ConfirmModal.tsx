@@ -33,8 +33,8 @@ export default function ConfirmModal({
         className="flex-1 bg-black/50 items-center justify-center p-6"
         onPress={onCancel}
       >
-        <Pressable className="w-full max-w-sm rounded-xl bg-card p-5 gap-3">
-          <Text className="text-lg font-semibold text-foreground">{title}</Text>
+        <Pressable className="w-full max-w-sm rounded-card bg-elevated p-5 gap-3">
+          <Text className="text-subheading font-heading text-foreground">{title}</Text>
           {message && (
             <Text className="text-sm text-muted-foreground">{message}</Text>
           )}

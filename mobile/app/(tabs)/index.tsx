@@ -11,6 +11,7 @@ import { useRecording } from '@/hooks/useRecording';
 import { apiPost, resolveVideoUrl } from '@/lib/api-client';
 import { streamJob } from '@/lib/streaming';
 import { useAuthStore } from '@/store/auth-store';
+import { Colors } from '@/lib/design-tokens';
 
 type ModelKey = 'kling' | 'hailuo';
 
@@ -160,32 +161,37 @@ export default function SpeechScreen() {
   const durations = DURATIONS[selectedModel];
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4 pb-20 gap-5">
-      <Text className="text-2xl font-bold text-foreground">Speech to Video</Text>
-      <Text className="text-sm text-muted-foreground">
-        Type a prompt or record audio to generate a video.
-      </Text>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-8">
+      <View className="gap-1">
+        <Text className="text-heading font-heading text-foreground">Speech to Video</Text>
+        <Text className="text-body font-body text-muted-foreground">
+          Type a prompt or record audio to generate a video.
+        </Text>
+      </View>
 
       {/* Login required */}
       {loginRequired && (
-        <View className="rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-          <Text className="text-sm text-destructive">Sign in required — tap the gear icon above.</Text>
+        <View className="rounded-card border border-destructive/50 bg-destructive/10 p-3">
+          <Text className="text-body font-body text-destructive">Sign in required — tap the gear icon above.</Text>
         </View>
       )}
 
       {/* Model selector */}
       <View className="gap-2">
-        <Text className="text-sm font-medium text-foreground">Model</Text>
-        <View className="flex-row rounded-md border border-input bg-muted p-0.5">
+        <Text className="text-caption font-body-medium text-muted-foreground uppercase tracking-wide">Model</Text>
+        <View className="flex-row rounded-input-r bg-card p-1">
           {MODELS.map((m) => {
             const active = selectedModel === m.key;
             return (
               <Pressable key={m.key} onPress={() => handleModelChange(m.key)} disabled={busy} style={{ flex: 1 }}>
                 <View
-                  className="items-center rounded py-2"
-                  style={active ? { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } } : undefined}
+                  className="items-center rounded-input-r py-2.5"
+                  style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: '500', color: active ? '#000' : '#9ca3af' }}>
+                  <Text
+                    className="font-body-medium"
+                    style={{ fontSize: 14, color: active ? '#F5F0EB' : Colors.textSecondary }}
+                  >
                     {m.label}
                   </Text>
                 </View>
@@ -197,17 +203,20 @@ export default function SpeechScreen() {
 
       {/* Duration selector */}
       <View className="gap-2">
-        <Text className="text-sm font-medium text-foreground">Duration</Text>
-        <View className="flex-row rounded-md border border-input bg-muted p-0.5">
+        <Text className="text-caption font-body-medium text-muted-foreground uppercase tracking-wide">Duration</Text>
+        <View className="flex-row rounded-input-r bg-card p-1">
           {durations.map((d) => {
             const active = selectedDuration === d;
             return (
               <Pressable key={d} onPress={() => setSelectedDuration(d)} disabled={busy} style={{ flex: 1 }}>
                 <View
-                  className="items-center rounded py-2"
-                  style={active ? { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } } : undefined}
+                  className="items-center rounded-input-r py-2.5"
+                  style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: '500', color: active ? '#000' : '#9ca3af' }}>
+                  <Text
+                    className="font-body-medium"
+                    style={{ fontSize: 14, color: active ? '#F5F0EB' : Colors.textSecondary }}
+                  >
                     {d}s
                   </Text>
                 </View>
@@ -218,17 +227,17 @@ export default function SpeechScreen() {
       </View>
 
       {/* Text prompt input */}
-      <View className="gap-2">
+      <View className="gap-3">
         <TextInput
           value={promptText}
           onChangeText={setPromptText}
           multiline
           numberOfLines={4}
           textAlignVertical="top"
-          placeholder="Type what you want to see in the video…"
-          placeholderTextColor="#9ca3af"
+          placeholder="Type what you want to see in the video..."
+          placeholderTextColor={Colors.textSecondary}
           editable={!busy && !isRecording}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground min-h-[96px]"
+          className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[96px]"
         />
         <Button
           size="lg"
@@ -242,7 +251,7 @@ export default function SpeechScreen() {
       {/* Divider */}
       <View className="flex-row items-center gap-3">
         <View className="flex-1 h-px bg-border" />
-        <Text className="text-xs text-muted-foreground">or record your voice</Text>
+        <Text className="text-caption font-body text-muted-foreground">or record your voice</Text>
         <View className="flex-1 h-px bg-border" />
       </View>
 
@@ -281,7 +290,7 @@ export default function SpeechScreen() {
         }}
       >
         <View className="gap-2">
-          <Text className="text-xs text-muted-foreground">
+          <Text className="text-caption font-body text-muted-foreground">
             Edit the transcript below, then generate your video.
           </Text>
           <TextInput
@@ -291,8 +300,8 @@ export default function SpeechScreen() {
             numberOfLines={4}
             textAlignVertical="top"
             placeholder={pendingTranscript ? undefined : 'Transcribing...'}
-            placeholderTextColor="#9ca3af"
-            className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground min-h-[80px]"
+            placeholderTextColor={Colors.textSecondary}
+            className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[80px]"
           />
         </View>
       </ConfirmModal>
