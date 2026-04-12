@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
+import { useRouter } from 'expo-router';
 import { Button } from '@/components/Button';
-import ProgressBar from '@/components/ProgressBar';
-import VideoPlayer from '@/components/VideoPlayer';
 import MicVisualizer from '@/components/MicVisualizer';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useRecording } from '@/hooks/useRecording';
-import { apiPost, resolveVideoUrl } from '@/lib/api-client';
-import { streamJob } from '@/lib/streaming';
+import { apiPost } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
+import { useGalleryStore } from '@/store/gallery-store';
 import { Colors } from '@/lib/design-tokens';
 
 type ModelKey = 'kling' | 'hailuo';
@@ -26,22 +24,14 @@ const DURATIONS: Record<ModelKey, number[]> = {
 };
 
 export default function SpeechScreen() {
+  const router = useRouter();
   const { isRecording, metering, startRecording, stopRecording } = useRecording();
-  const [busy, setBusy] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [promptText, setPromptText] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelKey>('kling');
   const [selectedDuration, setSelectedDuration] = useState(10);
 
   const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
-
-  // Keep screen awake during generation
-  useEffect(() => {
-    if (busy) activateKeepAwake('speech');
-    else deactivateKeepAwake('speech');
-  }, [busy]);
+  const startGeneration = useGalleryStore((s) => s.startGeneration);
 
   // Check auth on mount
   useEffect(() => {
@@ -61,10 +51,35 @@ export default function SpeechScreen() {
     }
   }
 
-  function appendModelFields(formData: FormData) {
+  function buildFormData(prompt?: string, audioUri?: string): FormData {
+    const formData = new FormData();
+    if (prompt) {
+      formData.append('prompt', prompt);
+    } else if (audioUri) {
+      formData.append('audio', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
+    }
     const model = MODELS.find((m) => m.key === selectedModel)!;
     formData.append('model', model.id);
     formData.append('duration', String(selectedDuration));
+    return formData;
+  }
+
+  function dispatchGeneration(formData: FormData, promptLabel: string) {
+    if (!canGenerate()) {
+      setLoginRequired(true);
+      return;
+    }
+    const model = MODELS.find((m) => m.key === selectedModel)!;
+    startGeneration(formData, {
+      prompt: promptLabel,
+      model: model.label,
+      duration: selectedDuration,
+    });
+    router.navigate('/(tabs)/gallery');
   }
 
   async function handleStop() {
@@ -93,69 +108,22 @@ export default function SpeechScreen() {
     }
   }
 
-  async function generateVideo(formData: FormData) {
-    if (!canGenerate()) {
-      setLoginRequired(true);
-      return;
-    }
-    setBusy(true);
-    setStatusMsg('Submitting...');
-    setProgress(0);
-    try {
-      appendModelFields(formData);
-      const { job_id } = await apiPost<{ job_id: string }>(
-        '/api/generate/speech-to-video',
-        formData,
-        true,
-      );
-
-      const result = await streamJob(job_id, {
-        onProgress: (_phase, _step, _total, message) => {
-          setStatusMsg(message || 'Generating video...');
-        },
-        onPartialResult: () => {},
-      });
-
-      if (result?.video_url) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setVideoUrl(resolveVideoUrl(result.video_url));
-        setStatusMsg('Done!');
-        setProgress(100);
-      } else {
-        const err = result?.error;
-        const errMsg = typeof err === 'string' ? err : JSON.stringify(err);
-        setStatusMsg(`Error: ${errMsg || 'Generation failed'}`);
-      }
-    } catch (err: any) {
-      setStatusMsg(err.message || 'Network error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleTextToVideo() {
+  function handleTextToVideo() {
     if (!promptText.trim()) return;
-    const formData = new FormData();
-    formData.append('prompt', promptText.trim());
-    await generateVideo(formData);
+    const formData = buildFormData(promptText.trim());
+    dispatchGeneration(formData, promptText.trim());
   }
 
-  async function handleConfirmProceed() {
+  function handleConfirmProceed() {
     setConfirmOpen(false);
     if (!pendingUri) return;
 
-    const formData = new FormData();
-    if (pendingTranscript.trim()) {
-      formData.append('prompt', pendingTranscript.trim());
-    } else {
-      formData.append('audio', {
-        uri: pendingUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
-      } as any);
-    }
+    const prompt = pendingTranscript.trim();
+    const formData = prompt
+      ? buildFormData(prompt)
+      : buildFormData(undefined, pendingUri);
+    dispatchGeneration(formData, prompt || '(voice recording)');
     setPendingUri(null);
-    await generateVideo(formData);
   }
 
   const durations = DURATIONS[selectedModel];
@@ -183,7 +151,7 @@ export default function SpeechScreen() {
           {MODELS.map((m) => {
             const active = selectedModel === m.key;
             return (
-              <Pressable key={m.key} onPress={() => handleModelChange(m.key)} disabled={busy} style={{ flex: 1 }}>
+              <Pressable key={m.key} onPress={() => handleModelChange(m.key)} style={{ flex: 1 }}>
                 <View
                   className="items-center rounded-input-r py-2.5"
                   style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
@@ -208,7 +176,7 @@ export default function SpeechScreen() {
           {durations.map((d) => {
             const active = selectedDuration === d;
             return (
-              <Pressable key={d} onPress={() => setSelectedDuration(d)} disabled={busy} style={{ flex: 1 }}>
+              <Pressable key={d} onPress={() => setSelectedDuration(d)} style={{ flex: 1 }}>
                 <View
                   className="items-center rounded-input-r py-2.5"
                   style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
@@ -236,13 +204,13 @@ export default function SpeechScreen() {
           textAlignVertical="top"
           placeholder="Type what you want to see in the video..."
           placeholderTextColor={Colors.textSecondary}
-          editable={!busy && !isRecording}
+          editable={!isRecording}
           className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[96px]"
         />
         <Button
           size="lg"
           onPress={handleTextToVideo}
-          disabled={busy || isRecording || !promptText.trim()}
+          disabled={isRecording || !promptText.trim()}
           title="Generate Video"
           className="w-full"
         />
@@ -263,19 +231,10 @@ export default function SpeechScreen() {
           size="lg"
           variant={isRecording ? 'destructive' : 'outline'}
           onPress={isRecording ? handleStop : startRecording}
-          disabled={busy}
           title={isRecording ? 'Stop Recording' : 'Start Recording'}
           className="w-full"
         />
       </View>
-
-      {/* Progress */}
-      {(busy || statusMsg) ? (
-        <ProgressBar progress={progress} message={statusMsg} indeterminate={busy && progress === 0} />
-      ) : null}
-
-      {/* Video result */}
-      {videoUrl && !busy && <VideoPlayer url={videoUrl} />}
 
       {/* Confirmation modal */}
       <ConfirmModal

@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.saurabh.interiortimelapse",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech"
+        "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
+        "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll"
       }
     },
     "android": {
@@ -40,6 +41,13 @@
         "expo-av",
         {
           "microphonePermission": "Allow Interior Timelapse to access your microphone for voice recording."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Save generated videos to your Camera Roll.",
+          "savePhotosPermission": "Save generated videos to your Camera Roll."
         }
       ]
     ],

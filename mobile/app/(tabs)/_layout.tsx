@@ -66,10 +66,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="video-studio"
+        name="gallery"
         options={{
-          title: 'Video Studio',
-          tabBarIcon: ({ color }) => <TabBarIcon name="film" color={color} />,
+          title: 'Gallery',
+          tabBarIcon: ({ color }) => <TabBarIcon name="th-large" color={color} />,
         }}
       />
     </Tabs>

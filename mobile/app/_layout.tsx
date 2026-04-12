@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Colors } from '@/lib/design-tokens';
+import { useGalleryStore } from '@/store/gallery-store';
 import NetworkBanner from '@/components/NetworkBanner';
 import '../global.css';
 
@@ -55,6 +56,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded || isAlreadyRegistered) {
       SplashScreen.hideAsync();
+      useGalleryStore.getState().hydrate();
     }
   }, [loaded, isAlreadyRegistered]);
 
