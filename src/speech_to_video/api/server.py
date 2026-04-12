@@ -1091,11 +1091,23 @@ async def create_speech_to_video(
     if not text:
         raise HTTPException(status_code=400, detail="prompt_or_audio_required")
 
-    result = service.generate_speech_to_video(text, model=model, duration=duration)
+    from ..utils.job_manager import create_job, update_job, start_job
 
-    if result.get("success") or result.get("video_url"):
-        _inc_usage(request)
-    return JSONResponse(result)
+    job_id = create_job()
+
+    def on_progress(phase, step, total, message, partial_result=None):
+        updates = {"phase": phase, "step": step, "total_steps": total, "message": message}
+        if partial_result is not None:
+            updates["partial_result"] = partial_result
+        update_job(job_id, **updates)
+
+    def run():
+        update_job(job_id, phase="generating", step=1, total_steps=1, message="Generating video...")
+        return service.generate_speech_to_video(text, model=model, duration=duration)
+
+    start_job(job_id, run)
+
+    return JSONResponse({"job_id": job_id})
 
 _mount_static(app)
 

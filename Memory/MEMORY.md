@@ -10,6 +10,7 @@
 - [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure, don't guess
 - [VideoPlayer Debugging Lessons](project_video_player_test.md) -- Verify URL accessibility before suspecting expo-av component
 - [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE
+- [SSE heartbeats must be data events](reference_sse_heartbeat_data.md) -- Heartbeats every ~10s are mandatory, and must be real data: events (comments get dropped by proxies)
 - [Replit /tmp is NBD](reference_replit_tmp_nbd.md) -- /tmp is network block device; use /dev/shm (64MB tmpfs) for I/O-heavy work, ~150x faster
 - [Env diff first for cross-host slowness](feedback_environment_diff_first.md) -- Same code slow on one host, fast on another → check fs/RAM/CPU before theorizing about code
 - [AIMLAPI I2I ~4:45 is upstream](reference_aimlapi_i2i_latency.md) -- nano-banana-pro-edit holds chunked response open ~4min; T2I fine; fix = direct Gemini, not client tuning
@@ -21,3 +22,4 @@
 - [NativeWind dynamic styles](feedback_nativewind_dynamic_styles.md) -- Use inline style for conditional active/inactive states, not dynamic className
 - [Simulator paste workaround](reference_simulator_paste.md) -- `pbpaste | xcrun simctl pbcopy booted` to push Mac clipboard into simulator
 - [Simulator reload shortcut](reference_simulator_reload.md) -- Ctrl+Cmd+Z for dev menu, not Cmd+D
+- [Replit startup drains credits](reference_replit_startup_event.md) -- Container restarts are frequent; never leave expensive startup hooks enabled

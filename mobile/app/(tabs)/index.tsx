@@ -7,8 +7,8 @@ import VideoPlayer from '@/components/VideoPlayer';
 import MicVisualizer from '@/components/MicVisualizer';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useRecording } from '@/hooks/useRecording';
-import { apiPost } from '@/lib/api-client';
-import { resolveVideoUrl } from '@/lib/api-client';
+import { apiPost, resolveVideoUrl } from '@/lib/api-client';
+import { streamJob } from '@/lib/streaming';
 
 type ModelKey = 'kling' | 'hailuo';
 
@@ -77,26 +77,34 @@ export default function SpeechScreen() {
     }
   }
 
-  async function handleTextToVideo() {
-    if (!promptText.trim()) return;
+  async function generateVideo(formData: FormData) {
     setBusy(true);
-    setStatusMsg('Generating video...');
+    setStatusMsg('Submitting...');
     setProgress(0);
     try {
-      const formData = new FormData();
-      formData.append('prompt', promptText.trim());
       appendModelFields(formData);
-      const data = await apiPost<{ success: boolean; video_url?: string; error?: string }>(
+      const { job_id } = await apiPost<{ job_id: string }>(
         '/api/generate/speech-to-video',
         formData,
         true,
       );
-      if (data.success && data.video_url) {
-        setVideoUrl(resolveVideoUrl(data.video_url));
+
+      const result = await streamJob(job_id, {
+        onProgress: (_phase, _step, _total, message) => {
+          setStatusMsg(message || 'Generating video...');
+        },
+        onPartialResult: () => {},
+      });
+
+      if (result?.video_url) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setVideoUrl(resolveVideoUrl(result.video_url));
         setStatusMsg('Done!');
         setProgress(100);
       } else {
-        setStatusMsg(`Error: ${data.error || 'Generation failed'}`);
+        const err = result?.error;
+        const errMsg = typeof err === 'string' ? err : JSON.stringify(err);
+        setStatusMsg(`Error: ${errMsg || 'Generation failed'}`);
       }
     } catch (err: any) {
       setStatusMsg(err.message || 'Network error');
@@ -105,46 +113,29 @@ export default function SpeechScreen() {
     }
   }
 
+  async function handleTextToVideo() {
+    if (!promptText.trim()) return;
+    const formData = new FormData();
+    formData.append('prompt', promptText.trim());
+    await generateVideo(formData);
+  }
+
   async function handleConfirmProceed() {
     setConfirmOpen(false);
     if (!pendingUri) return;
 
-    setBusy(true);
-    setStatusMsg('Generating video...');
-    setProgress(0);
-
-    try {
-      const formData = new FormData();
-      if (pendingTranscript.trim()) {
-        formData.append('prompt', pendingTranscript.trim());
-      } else {
-        formData.append('audio', {
-          uri: pendingUri,
-          type: 'audio/m4a',
-          name: 'recording.m4a',
-        } as any);
-      }
-      appendModelFields(formData);
-
-      const data = await apiPost<{ success: boolean; video_url?: string; error?: string }>(
-        '/api/generate/speech-to-video',
-        formData,
-        true,
-      );
-
-      if (data.success && data.video_url) {
-        setVideoUrl(resolveVideoUrl(data.video_url));
-        setStatusMsg('Done!');
-        setProgress(100);
-      } else {
-        setStatusMsg(`Error: ${data.error || 'Generation failed'}`);
-      }
-    } catch (err: any) {
-      setStatusMsg(err.message || 'Network error');
-    } finally {
-      setBusy(false);
-      setPendingUri(null);
+    const formData = new FormData();
+    if (pendingTranscript.trim()) {
+      formData.append('prompt', pendingTranscript.trim());
+    } else {
+      formData.append('audio', {
+        uri: pendingUri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
     }
+    setPendingUri(null);
+    await generateVideo(formData);
   }
 
   const durations = DURATIONS[selectedModel];
