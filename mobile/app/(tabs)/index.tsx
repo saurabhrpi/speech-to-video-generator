@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { Button } from '@/components/Button';
 import ProgressBar from '@/components/ProgressBar';
 import VideoPlayer from '@/components/VideoPlayer';
@@ -34,6 +35,12 @@ export default function SpeechScreen() {
   const [selectedDuration, setSelectedDuration] = useState(10);
 
   const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
+
+  // Keep screen awake during generation
+  useEffect(() => {
+    if (busy) activateKeepAwake('speech');
+    else deactivateKeepAwake('speech');
+  }, [busy]);
 
   // Check auth on mount
   useEffect(() => {

@@ -13,6 +13,8 @@
 - [SSE heartbeats must be data events](reference_sse_heartbeat_data.md) -- Heartbeats every ~10s are mandatory, and must be real data: events (comments get dropped by proxies)
 - [Replit /tmp is NBD](reference_replit_tmp_nbd.md) -- /tmp is network block device; use /dev/shm (64MB tmpfs) for I/O-heavy work, ~150x faster
 - [Env diff first for cross-host slowness](feedback_environment_diff_first.md) -- Same code slow on one host, fast on another → check fs/RAM/CPU before theorizing about code
+- [Signed URLs reject HEAD](reference_signed_url_head.md) -- AIMLAPI CDN (Alibaba OSS) signed URLs are GET-only; HEAD → 403, use GET+Range instead
+- [VideoPlayer timeout strategy](feedback_video_timeout_strategy.md) -- Verify URL first (GET+Range), then generous 90s safety net; don't use short fixed timeouts
 - [AIMLAPI I2I ~4:45 is upstream](reference_aimlapi_i2i_latency.md) -- nano-banana-pro-edit holds chunked response open ~4min; T2I fine; fix = direct Gemini, not client tuning
 - [Replit republish grace period](reference_replit_republish.md) -- Old container runs ~5 min after republish before SIGTERM; not an instant kill
 - [Mobile OAuth cookie jar](feedback_mobile_oauth_cookie_jar.md) -- ASWebAuthenticationSession has separate cookie jar from app's fetch(); use one-time token exchange

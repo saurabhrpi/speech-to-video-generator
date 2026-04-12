@@ -23,15 +23,21 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
 
   const resolvedUrl = resolveVideoUrl(url);
 
-  // HEAD-check the URL first: fast-fail on bad URLs, patient wait on slow CDNs
+  // Verify URL with a 1-byte GET (some CDNs reject HEAD on signed URLs), then let expo-av load
   useEffect(() => {
     let cancelled = false;
+    const abort = new AbortController();
     console.log('[VideoPlayer] verifying:', resolvedUrl);
 
-    fetch(resolvedUrl, { method: 'HEAD' })
+    fetch(resolvedUrl, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' },
+      signal: abort.signal,
+    })
       .then((res) => {
         if (cancelled) return;
-        if (!res.ok) {
+        // 200 or 206 (partial content) both mean reachable
+        if (!res.ok && res.status !== 206) {
           setLoading(false);
           setError(`Video unavailable (${res.status})`);
           return;
@@ -44,14 +50,15 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
           }
         }, PLAYBACK_TIMEOUT_MS);
       })
-      .catch(() => {
-        if (cancelled) return;
+      .catch((err) => {
+        if (cancelled || err.name === 'AbortError') return;
         setLoading(false);
         setError('Video unreachable — network error');
       });
 
     return () => {
       cancelled = true;
+      abort.abort();
       if (loadTimer.current) clearTimeout(loadTimer.current);
     };
   }, [resolvedUrl]);
