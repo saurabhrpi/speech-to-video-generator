@@ -4,6 +4,7 @@ import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiPost, resolveVideoUrl } from '@/lib/api-client';
 import { streamJob } from '@/lib/streaming';
+import { useAuthStore } from '@/store/auth-store';
 
 const STORAGE_KEY = 'gallery_jobs';
 const KEEP_AWAKE_TAG = 'gallery';
@@ -140,6 +141,8 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       } finally {
         abortControllers.delete(jobId);
         abortControllers.delete(tempId);
+        // Refresh auth so canGenerate() reflects updated usage count
+        useAuthStore.getState().fetchSession();
         // Deactivate keep-awake if no more generating jobs
         if (!hasGenerating(get().jobs)) {
           deactivateKeepAwake(KEEP_AWAKE_TAG);

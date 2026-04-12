@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { File, Paths } from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import VideoPlayer from '@/components/VideoPlayer';
 import { useGalleryStore, type GalleryJob } from '@/store/gallery-store';
@@ -38,15 +38,10 @@ export default function GalleryScreen() {
         return;
       }
 
-      const filename = `video_${Date.now()}.mp4`;
-      const file = new File(Paths.cache, filename);
+      const dest = new Directory(Paths.cache, 'saved_videos');
+      if (!dest.exists) dest.create();
 
-      // Download video to local cache
-      const res = await fetch(videoUrl);
-      const blob = await res.blob();
-      const buffer = await blob.arrayBuffer();
-      file.write(new Uint8Array(buffer));
-
+      const file = await File.downloadFileAsync(videoUrl, dest);
       await MediaLibrary.saveToLibraryAsync(file.uri);
       file.delete();
 
@@ -92,25 +87,26 @@ export default function GalleryScreen() {
 
     if (item.status === 'failed') {
       return (
-        <View
-          style={{
-            width: cardWidth,
-            height: cardWidth * 1.2,
-            backgroundColor: Colors.card,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: 'rgba(217,64,64,0.3)',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 12,
-          }}
-        >
-          <Ionicons name="alert-circle" size={28} color={Colors.destructive} />
-          <Text
-            style={{ color: Colors.destructive, fontSize: 12, marginTop: 6, textAlign: 'center' }}
-            numberOfLines={2}
+        <Pressable onPress={() => Alert.alert('Error', item.error || 'Generation failed')}>
+          <View
+            style={{
+              width: cardWidth,
+              height: cardWidth * 1.2,
+              backgroundColor: Colors.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: 'rgba(217,64,64,0.3)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 12,
+            }}
           >
-            {item.error || 'Failed'}
+            <Ionicons name="alert-circle" size={28} color={Colors.destructive} />
+            <Text
+              style={{ color: Colors.destructive, fontSize: 12, marginTop: 6, textAlign: 'center' }}
+              numberOfLines={2}
+            >
+              {item.error || 'Failed'}
           </Text>
           <Pressable
             onPress={() => removeJob(item.id)}
@@ -119,6 +115,7 @@ export default function GalleryScreen() {
             <Text style={{ color: Colors.destructive, fontSize: 12 }}>Remove</Text>
           </Pressable>
         </View>
+        </Pressable>
       );
     }
 

@@ -26,3 +26,4 @@
 - [Simulator reload shortcut](reference_simulator_reload.md) -- Ctrl+Cmd+Z for dev menu, not Cmd+D
 - [Replit startup drains credits](reference_replit_startup_event.md) -- Container restarts are frequent; never leave expensive startup hooks enabled
 - [CTFontManagerError 104 is safe](reference_ctfont_error_104.md) -- Error 104 = already registered, font IS usable; catch and treat as success
+- [RN Blob has no arrayBuffer()](reference_rn_blob_arraybuffer.md) -- Use File.downloadFileAsync instead of fetch→blob→arrayBuffer for saving files
