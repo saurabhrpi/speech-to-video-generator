@@ -26,6 +26,20 @@ export default function TabLayout() {
         options={{
           title: 'Speech',
           tabBarIcon: ({ color }) => <TabBarIcon name="microphone" color={color} />,
+          headerRight: () => (
+            <Link href="/settings" asChild>
+              <Pressable>
+                {({ pressed }) => (
+                  <FontAwesome
+                    name="gear"
+                    size={22}
+                    color={tint}
+                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
+                  />
+                )}
+              </Pressable>
+            </Link>
+          ),
         }}
       />
       <Tabs.Screen

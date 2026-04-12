@@ -9,7 +9,8 @@ interface VideoPlayerProps {
   className?: string;
 }
 
-const LOAD_TIMEOUT_MS = 15_000;
+// Safety net for expo-av hangs (after HEAD confirms URL is reachable)
+const PLAYBACK_TIMEOUT_MS = 90_000;
 
 export default function VideoPlayer({ url, className }: VideoPlayerProps) {
   const videoRef = useRef<Video>(null);
@@ -22,18 +23,38 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
 
   const resolvedUrl = resolveVideoUrl(url);
 
-  // Timeout: if video doesn't load within 15s, show error
+  // HEAD-check the URL first: fast-fail on bad URLs, patient wait on slow CDNs
   useEffect(() => {
-    loadTimer.current = setTimeout(() => {
-      if (loading) {
+    let cancelled = false;
+    console.log('[VideoPlayer] verifying:', resolvedUrl);
+
+    fetch(resolvedUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setLoading(false);
+          setError(`Video unavailable (${res.status})`);
+          return;
+        }
+        // URL is reachable — start safety-net timer for expo-av hang
+        loadTimer.current = setTimeout(() => {
+          if (!cancelled) {
+            setLoading(false);
+            setError('Video timed out — CDN too slow');
+          }
+        }, PLAYBACK_TIMEOUT_MS);
+      })
+      .catch(() => {
+        if (cancelled) return;
         setLoading(false);
-        setError('Video timed out — could not load');
-      }
-    }, LOAD_TIMEOUT_MS);
+        setError('Video unreachable — network error');
+      });
+
     return () => {
+      cancelled = true;
       if (loadTimer.current) clearTimeout(loadTimer.current);
     };
-  }, []);
+  }, [resolvedUrl]);
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);

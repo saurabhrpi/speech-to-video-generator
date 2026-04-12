@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Button } from '@/components/Button';
@@ -9,6 +9,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import { useRecording } from '@/hooks/useRecording';
 import { apiPost, resolveVideoUrl } from '@/lib/api-client';
 import { streamJob } from '@/lib/streaming';
+import { useAuthStore } from '@/store/auth-store';
 
 type ModelKey = 'kling' | 'hailuo';
 
@@ -31,6 +32,13 @@ export default function SpeechScreen() {
   const [promptText, setPromptText] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelKey>('kling');
   const [selectedDuration, setSelectedDuration] = useState(10);
+
+  const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
+
+  // Check auth on mount
+  useEffect(() => {
+    useAuthStore.getState().fetchSession();
+  }, []);
 
   // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -78,6 +86,10 @@ export default function SpeechScreen() {
   }
 
   async function generateVideo(formData: FormData) {
+    if (!canGenerate()) {
+      setLoginRequired(true);
+      return;
+    }
     setBusy(true);
     setStatusMsg('Submitting...');
     setProgress(0);
@@ -146,6 +158,13 @@ export default function SpeechScreen() {
       <Text className="text-sm text-muted-foreground">
         Type a prompt or record audio to generate a video.
       </Text>
+
+      {/* Login required */}
+      {loginRequired && (
+        <View className="rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+          <Text className="text-sm text-destructive">Sign in required — tap the gear icon above.</Text>
+        </View>
+      )}
 
       {/* Model selector */}
       <View className="gap-2">
