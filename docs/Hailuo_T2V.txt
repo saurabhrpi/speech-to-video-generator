@@ -1,0 +1,154 @@
+POST https://api.aimlapi.com/v2/video/generations
+
+******************************************************************************************************************************
+
+BODY
+
+model (required)
+string · enum
+Possible values: minimax/hailuo-02
+
+prompt (required)
+string · max: 2000
+The text description of the scene, subject, or action to generate in the video.
+
+image_url  (optional)
+string · uri 
+A direct link to an online image or a Base64-encoded local image that will serve as the first frame for the video. Image specifications:
+format must be JPG, JPEG, or PNG;
+aspect ratio should be greater than 2:5 and less than 5:2;
+the shorter side must exceed 300 pixels;
+file size must not exceed 20MB.
+
+last_image_url (optional)
+string · uri
+A direct link to an online image or a Base64-encoded local image to be used as the last frame of the video.
+
+resolution (optional)
+string · enum
+The dimensions of the video display. 1080p corresponds to 1920 x 1080 pixels, 768p corresponds to 1366 x 768 pixels.
+Default: 768P
+Possible values: 768P, 1080P
+
+duration (optional)
+integer · enum
+The length of the output video in seconds.
+Possible values: 6,10
+
+enhance_prompt (optional)
+boolean
+If True, the incoming prompt will be automatically optimized to improve generation quality when needed. For more precise control, set it to False — the model will then follow the instructions more strictly.
+Default: true
+
+******************************************************************************************************************************
+
+RESPONSES:
+
+id (required)
+string
+The ID of the generated video.
+Example: 60ac7c34-3224-4b14-8e7d-0aa0db708325
+
+status (required)
+string · enum
+The current status of the generation task.
+Example: completed
+Possible values: queued, generating, completed, error
+
+video (optional)
+object · nullable
+
+error (optional)
+object · nullable
+Description of the error, if any.
+
+
+meta (optional)
+object · nullable
+Additional details about the generation.
+
+******************************************************************************************************************************
+
+#Example usage
+
+import requests
+import time
+
+# Insert your AIML API Key instead of <YOUR_AIMLAPI_KEY>:
+base_url = "https://api.aimlapi.com/v2"
+api_key = "<YOUR_AIMLAPI_KEY>"
+
+# Creating and sending a video generation task to the server
+def generate_video():
+    url = f"{base_url}/generate/video/minimax/generation"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "minimax/hailuo-02",
+        "prompt": "Mona Lisa puts on glasses with her hands.",
+        "first_frame_image": "https://s2-111386.kwimgs.com/bs2/mmu-aiplatform-temp/kling/20240620/1.jpeg"      
+    }
+ 
+    response = requests.post(url, json=data, headers=headers)
+    
+    if response.status_code >= 400:
+        print(f"Error: {response.status_code} - {response.text}")
+    else:
+        response_data = response.json()
+        return response_data
+    
+
+# Requesting the result of the task from the server using the generation_id
+def get_video(gen_id):
+    url = f"{base_url}/generate/video/minimax/generation"
+    params = {
+        "generation_id": gen_id,
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}", 
+        "Content-Type": "application/json"
+        }
+
+    response = requests.get(url, params=params, headers=headers)
+    return response.json()
+
+
+def main():
+     # Running video generation and getting a task id
+    gen_response = generate_video()
+    print(gen_response)
+    gen_id = gen_response.get("generation_id")
+    print("Generation ID:  ", gen_id)
+
+    # Trying to retrieve the video from the server every 10 sec
+    if gen_id:
+        start_time = time.time()
+
+        timeout = 1000
+        while time.time() - start_time < timeout:
+            response_data = get_video(gen_id)
+
+            if response_data is None:
+                print("Error: No response from API")
+                break
+        
+            status = response_data.get("status")
+            print("Status:", status)
+
+            if status == "waiting" or status == "active" or  status == "queued" or status == "generating":
+                print("Still waiting... Checking again in 10 seconds.")
+                time.sleep(10)
+            else:
+                print("Processing complete:\n", response_data)
+                return response_data
+   
+        print("Timeout reached. Stopping.")
+        return None     
+
+
+if __name__ == "__main__":
+    main()

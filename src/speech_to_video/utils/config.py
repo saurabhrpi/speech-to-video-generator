@@ -36,6 +36,7 @@ class Settings:
     kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
     kling_t2v_model: str = os.environ.get("KLING_T2V_MODEL", "klingai/video-v3-standard-text-to-video")
     seedance_i2v_model: str = os.environ.get("SEEDANCE_I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
+    hailuo_t2v_model: str = os.environ.get("HAILUO_T2V_MODEL", "minimax/hailuo-02")
     hailuo_i2v_model: str = os.environ.get("HAILUO_I2V_MODEL", "minimax/hailuo-02")
     i2v_model: str = os.environ.get("I2V_MODEL", "minimax/hailuo-02")
     i2v_resolution: str = os.environ.get("I2V_RESOLUTION", "768P")

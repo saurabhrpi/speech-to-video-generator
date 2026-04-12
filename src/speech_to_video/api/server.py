@@ -1059,6 +1059,8 @@ async def create_speech_to_video(
     request: Request,
     prompt: Optional[str] = Form(None),
     audio: Optional[UploadFile] = File(None),
+    model: Optional[str] = Form(None),
+    duration: Optional[int] = Form(None),
 ):
     if not request.session.get("user") and _get_usage(request) >= _UNAUTH_LIMIT:
         raise HTTPException(status_code=401, detail="login_required")
@@ -1089,7 +1091,7 @@ async def create_speech_to_video(
     if not text:
         raise HTTPException(status_code=400, detail="prompt_or_audio_required")
 
-    result = service.generate_speech_to_video(text)
+    result = service.generate_speech_to_video(text, model=model, duration=duration)
 
     if result.get("success") or result.get("video_url"):
         _inc_usage(request)

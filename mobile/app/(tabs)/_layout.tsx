@@ -2,6 +2,10 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
 import { Pressable, useColorScheme } from 'react-native';
 
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
+
 function TabBarIcon(props: { name: React.ComponentProps<typeof FontAwesome>['name']; color: string }) {
   return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
 }
@@ -19,6 +23,13 @@ export default function TabLayout() {
     >
       <Tabs.Screen
         name="index"
+        options={{
+          title: 'Speech',
+          tabBarIcon: ({ color }) => <TabBarIcon name="microphone" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="timelapse"
         options={{
           title: 'Timelapse',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
@@ -43,13 +54,6 @@ export default function TabLayout() {
         options={{
           title: 'Video Studio',
           tabBarIcon: ({ color }) => <TabBarIcon name="film" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="speech"
-        options={{
-          title: 'Speech',
-          tabBarIcon: ({ color }) => <TabBarIcon name="microphone" color={color} />,
         }}
       />
     </Tabs>

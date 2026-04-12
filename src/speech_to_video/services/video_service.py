@@ -848,16 +848,25 @@ class VideoService:
             **_state_snapshot(),
         }
 
-    def generate_speech_to_video(self, prompt: str) -> Dict:
+    def generate_speech_to_video(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        duration: Optional[int] = None,
+    ) -> Dict:
         """
-        MVP pipeline: generate a single 10-second video (no audio) from text using Kling T2V.
-        The text can come from either a typed prompt or a Whisper transcript.
+        Generate a single T2V clip from text (typed prompt or Whisper transcript).
+        Supports Kling and Hailuo models with model-specific duration defaults.
         """
+        resolved_model = model or self.settings.kling_t2v_model
+        if duration is None:
+            duration = 10
+
         return self._single_generation(
             prompt=prompt,
-            duration=10,
+            duration=duration,
             quality="high",
-            model=self.settings.kling_t2v_model,
+            model=resolved_model,
             aspect_ratio="16:9",
             endpoint_path="/video/generations",
             status_path="/video/generations",

@@ -17,3 +17,7 @@
 - [Mobile OAuth cookie jar](feedback_mobile_oauth_cookie_jar.md) -- ASWebAuthenticationSession has separate cookie jar from app's fetch(); use one-time token exchange
 - [Zustand clear state on new runs](feedback_zustand_clear_state.md) -- Pipeline store leaks old results into new runs without explicit clearing
 - [Explicit handoff instructions](feedback_explicit_handoff.md) -- At handoff moments, spell out exact command/click-path, don't assume user will infer the mechanism
+- [Frontend means mobile](feedback_frontend_means_mobile.md) -- "Frontend" always means the Expo/React Native mobile app, not the web app
+- [NativeWind dynamic styles](feedback_nativewind_dynamic_styles.md) -- Use inline style for conditional active/inactive states, not dynamic className
+- [Simulator paste workaround](reference_simulator_paste.md) -- `pbpaste | xcrun simctl pbcopy booted` to push Mac clipboard into simulator
+- [Simulator reload shortcut](reference_simulator_reload.md) -- Ctrl+Cmd+Z for dev menu, not Cmd+D

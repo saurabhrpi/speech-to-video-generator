@@ -1,298 +1,284 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TextInput, ScrollView, Switch, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
-import Picker from '@/components/Picker';
-import TagInput from '@/components/TagInput';
+import { useState } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Button } from '@/components/Button';
 import ProgressBar from '@/components/ProgressBar';
 import VideoPlayer from '@/components/VideoPlayer';
-import PipelineReview from '@/components/PipelineReview';
-import { usePipelineStore } from '@/store/pipeline-store';
-import { useAuthStore } from '@/store/auth-store';
-import { apiGet } from '@/lib/api-client';
-import type { TimelapseOptions } from '@/lib/types';
+import MicVisualizer from '@/components/MicVisualizer';
+import ConfirmModal from '@/components/ConfirmModal';
+import { useRecording } from '@/hooks/useRecording';
+import { apiPost } from '@/lib/api-client';
+import { resolveVideoUrl } from '@/lib/api-client';
 
-export default function TimelapseScreen() {
-  const [options, setOptions] = useState<TimelapseOptions | null>(null);
-  const [roomType, setRoomType] = useState('');
-  const [style, setStyle] = useState('');
-  const [features, setFeatures] = useState<string[]>([]);
-  const [materials, setMaterials] = useState<string[]>([]);
-  const [lighting, setLighting] = useState('natural');
-  const [cameraMotion, setCameraMotion] = useState('slow_pan');
-  const [progression, setProgression] = useState('construction');
-  const [videoModel, setVideoModel] = useState<'cheap' | 'expensive'>('cheap');
-  const [freeform, setFreeform] = useState('');
+type ModelKey = 'kling' | 'hailuo';
 
-  const {
-    busy, statusMsg, progress, videoUrl, pipelineState, phaseCompleted,
-    pipelineError, stepByStep, setStepByStep, runPipeline, runFakeJob, runMiniPipeline,
-    handleContinue, handleResume, handleStop, handleStartOver,
-    handleGenerateRemainingImages, handleGenerateRemainingVideos,
-  } = usePipelineStore();
+const MODELS: { key: ModelKey; label: string; id: string }[] = [
+  { key: 'kling', label: 'Kling', id: 'klingai/video-v3-standard-text-to-video' },
+  { key: 'hailuo', label: 'Hailuo', id: 'minimax/hailuo-02' },
+];
 
-  const { auth, canGenerate, setLoginRequired, loginRequired } = useAuthStore();
+const DURATIONS: Record<ModelKey, number[]> = {
+  kling: [3, 10, 15],
+  hailuo: [6, 10],
+};
 
-  // Keep screen awake during generation
-  useEffect(() => {
-    if (busy) activateKeepAwake('pipeline');
-    else deactivateKeepAwake('pipeline');
-  }, [busy]);
+export default function SpeechScreen() {
+  const { isRecording, metering, startRecording, stopRecording } = useRecording();
+  const [busy, setBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [promptText, setPromptText] = useState('');
+  const [selectedModel, setSelectedModel] = useState<ModelKey>('kling');
+  const [selectedDuration, setSelectedDuration] = useState(10);
 
-  // Load options on mount
-  useEffect(() => {
-    apiGet<TimelapseOptions>('/api/timelapse/options')
-      .then(setOptions)
-      .catch(() => {});
-  }, []);
+  // Confirmation modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [pendingTranscript, setPendingTranscript] = useState('');
 
-  // Check auth on mount
-  useEffect(() => {
-    useAuthStore.getState().fetchSession();
-  }, []);
-
-  function buildPayload() {
-    return {
-      room_type: roomType,
-      style,
-      features,
-      materials,
-      lighting,
-      camera_motion: cameraMotion,
-      progression,
-      video_model: videoModel,
-      freeform_description: freeform,
-    };
-  }
-
-  function handleSubmit() {
-    if (!roomType || !style) return;
-    if (!canGenerate()) {
-      setLoginRequired(true);
-      return;
+  function handleModelChange(key: ModelKey) {
+    setSelectedModel(key);
+    const durations = DURATIONS[key];
+    if (!durations.includes(selectedDuration)) {
+      setSelectedDuration(durations[durations.length - 1]);
     }
-    const stopAfter = stepByStep ? 'plan' : null;
-    runPipeline(buildPayload(), stopAfter, null);
   }
 
-  function handleMini() {
-    if (!roomType || !style) return;
-    if (!canGenerate()) {
-      setLoginRequired(true);
-      return;
+  function appendModelFields(formData: FormData) {
+    const model = MODELS.find((m) => m.key === selectedModel)!;
+    formData.append('model', model.id);
+    formData.append('duration', String(selectedDuration));
+  }
+
+  async function handleStop() {
+    const result = await stopRecording();
+    if (!result) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setPendingUri(result.uri);
+    setPendingTranscript('');
+    setConfirmOpen(true);
+
+    // Transcribe in background
+    try {
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: result.uri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
+      const data = await apiPost<{ success: boolean; text?: string }>('/api/transcribe', formData, true);
+      if (data.success && data.text) {
+        setPendingTranscript(data.text);
+      }
+    } catch {
+      // Transcription failure is non-fatal — user can type prompt manually
     }
-    runMiniPipeline(buildPayload());
   }
 
-  if (!options) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className="mt-2 text-sm text-muted-foreground">Loading options...</Text>
-      </View>
-    );
+  async function handleTextToVideo() {
+    if (!promptText.trim()) return;
+    setBusy(true);
+    setStatusMsg('Generating video...');
+    setProgress(0);
+    try {
+      const formData = new FormData();
+      formData.append('prompt', promptText.trim());
+      appendModelFields(formData);
+      const data = await apiPost<{ success: boolean; video_url?: string; error?: string }>(
+        '/api/generate/speech-to-video',
+        formData,
+        true,
+      );
+      if (data.success && data.video_url) {
+        setVideoUrl(resolveVideoUrl(data.video_url));
+        setStatusMsg('Done!');
+        setProgress(100);
+      } else {
+        setStatusMsg(`Error: ${data.error || 'Generation failed'}`);
+      }
+    } catch (err: any) {
+      setStatusMsg(err.message || 'Network error');
+    } finally {
+      setBusy(false);
+    }
   }
+
+  async function handleConfirmProceed() {
+    setConfirmOpen(false);
+    if (!pendingUri) return;
+
+    setBusy(true);
+    setStatusMsg('Generating video...');
+    setProgress(0);
+
+    try {
+      const formData = new FormData();
+      if (pendingTranscript.trim()) {
+        formData.append('prompt', pendingTranscript.trim());
+      } else {
+        formData.append('audio', {
+          uri: pendingUri,
+          type: 'audio/m4a',
+          name: 'recording.m4a',
+        } as any);
+      }
+      appendModelFields(formData);
+
+      const data = await apiPost<{ success: boolean; video_url?: string; error?: string }>(
+        '/api/generate/speech-to-video',
+        formData,
+        true,
+      );
+
+      if (data.success && data.video_url) {
+        setVideoUrl(resolveVideoUrl(data.video_url));
+        setStatusMsg('Done!');
+        setProgress(100);
+      } else {
+        setStatusMsg(`Error: ${data.error || 'Generation failed'}`);
+      }
+    } catch (err: any) {
+      setStatusMsg(err.message || 'Network error');
+    } finally {
+      setBusy(false);
+      setPendingUri(null);
+    }
+  }
+
+  const durations = DURATIONS[selectedModel];
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={100}
-    >
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4 pb-20 gap-5">
-      {/* Progress bar */}
-      {(busy || statusMsg) && (
-        <ProgressBar progress={progress} message={statusMsg} indeterminate={busy && progress === 0} />
-      )}
+      <Text className="text-2xl font-bold text-foreground">Speech to Video</Text>
+      <Text className="text-sm text-muted-foreground">
+        Type a prompt or record audio to generate a video.
+      </Text>
 
-      {/* Login required */}
-      {loginRequired && (
-        <View className="rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-          <Text className="text-sm text-destructive">Sign in required to generate videos.</Text>
+      {/* Model selector */}
+      <View className="gap-2">
+        <Text className="text-sm font-medium text-foreground">Model</Text>
+        <View className="flex-row rounded-md border border-input bg-muted p-0.5">
+          {MODELS.map((m) => {
+            const active = selectedModel === m.key;
+            return (
+              <Pressable key={m.key} onPress={() => handleModelChange(m.key)} disabled={busy} style={{ flex: 1 }}>
+                <View
+                  className="items-center rounded py-2"
+                  style={active ? { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } } : undefined}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: active ? '#000' : '#9ca3af' }}>
+                    {m.label}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
-      )}
+      </View>
 
-      {/* Pipeline review (step-by-step) */}
-      {phaseCompleted && pipelineState && !busy && (
-        <PipelineReview
-          phaseCompleted={phaseCompleted}
-          pipelineState={pipelineState}
-          busy={busy}
-          onContinue={handleContinue}
-          onGenerateRemainingImages={handleGenerateRemainingImages}
-          onGenerateRemainingVideos={handleGenerateRemainingVideos}
-          onStop={handleStop}
-          onStartOver={handleStartOver}
+      {/* Duration selector */}
+      <View className="gap-2">
+        <Text className="text-sm font-medium text-foreground">Duration</Text>
+        <View className="flex-row rounded-md border border-input bg-muted p-0.5">
+          {durations.map((d) => {
+            const active = selectedDuration === d;
+            return (
+              <Pressable key={d} onPress={() => setSelectedDuration(d)} disabled={busy} style={{ flex: 1 }}>
+                <View
+                  className="items-center rounded py-2"
+                  style={active ? { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } } : undefined}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: active ? '#000' : '#9ca3af' }}>
+                    {d}s
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Text prompt input */}
+      <View className="gap-2">
+        <TextInput
+          value={promptText}
+          onChangeText={setPromptText}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          placeholder="Type what you want to see in the video…"
+          placeholderTextColor="#9ca3af"
+          editable={!busy && !isRecording}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground min-h-[96px]"
         />
-      )}
+        <Button
+          size="lg"
+          onPress={handleTextToVideo}
+          disabled={busy || isRecording || !promptText.trim()}
+          title="Generate Video"
+          className="w-full"
+        />
+      </View>
 
-      {/* Pipeline error */}
-      {pipelineError && !phaseCompleted && !busy && (
-        <View className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 gap-2">
-          <Text className="text-sm font-semibold text-destructive">Pipeline failed</Text>
-          <Text className="text-sm text-muted-foreground">{pipelineError}</Text>
-          <View className="flex-row gap-2 pt-1">
-            {pipelineState && <Button onPress={handleResume} title="Resume" />}
-            <Button variant="outline" onPress={handleStartOver} title="Start Over" />
-          </View>
-        </View>
-      )}
+      {/* Divider */}
+      <View className="flex-row items-center gap-3">
+        <View className="flex-1 h-px bg-border" />
+        <Text className="text-xs text-muted-foreground">or record your voice</Text>
+        <View className="flex-1 h-px bg-border" />
+      </View>
+
+      {/* Record button + visualizer */}
+      <View className="gap-3">
+        {isRecording && <MicVisualizer metering={metering} isActive={isRecording} />}
+
+        <Button
+          size="lg"
+          variant={isRecording ? 'destructive' : 'outline'}
+          onPress={isRecording ? handleStop : startRecording}
+          disabled={busy}
+          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          className="w-full"
+        />
+      </View>
+
+      {/* Progress */}
+      {(busy || statusMsg) ? (
+        <ProgressBar progress={progress} message={statusMsg} indeterminate={busy && progress === 0} />
+      ) : null}
 
       {/* Video result */}
-      {videoUrl && !busy && (
-        <VideoPlayer url={videoUrl} />
-      )}
+      {videoUrl && !busy && <VideoPlayer url={videoUrl} />}
 
-      {/* Form */}
-      {!phaseCompleted && !busy && (
-        <View className="gap-5">
-          {/* Pickers grid — 2 columns */}
-          <View className="gap-4">
-            <View className="flex-row gap-4">
-              <View className="flex-1">
-                <Picker
-                  label="Room Type"
-                  required
-                  value={roomType}
-                  onValueChange={setRoomType}
-                  options={options.room_types}
-                  placeholder="Select room..."
-                />
-              </View>
-              <View className="flex-1">
-                <Picker
-                  label="Style"
-                  required
-                  value={style}
-                  onValueChange={setStyle}
-                  options={options.styles}
-                  placeholder="Select style..."
-                />
-              </View>
-            </View>
-
-            <View className="flex-row gap-4">
-              <View className="flex-1">
-                <Picker
-                  label="Lighting"
-                  value={lighting}
-                  onValueChange={setLighting}
-                  options={options.lighting_options}
-                />
-              </View>
-              <View className="flex-1">
-                <Picker
-                  label="Camera Motion"
-                  value={cameraMotion}
-                  onValueChange={setCameraMotion}
-                  options={options.camera_options}
-                />
-              </View>
-            </View>
-
-            <View className="flex-row gap-4">
-              <View className="flex-1">
-                <Picker
-                  label="Progression"
-                  value={progression}
-                  onValueChange={setProgression}
-                  options={options.progression_types}
-                />
-              </View>
-              <View className="flex-1">
-                <Picker
-                  label="Video Model"
-                  value={videoModel}
-                  onValueChange={(v) => setVideoModel(v as 'cheap' | 'expensive')}
-                  options={[
-                    { value: 'cheap', label: 'Cheap (Hailuo)' },
-                    { value: 'expensive', label: 'Expensive (Kling Pro)' },
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Tag inputs */}
-          <TagInput
-            label="Features"
-            tags={features}
-            onAddTag={(f) => setFeatures((prev) => [...prev, f])}
-            onRemoveTag={(f) => setFeatures((prev) => prev.filter((x) => x !== f))}
-            suggestions={options.suggested_features}
-            placeholder="Type a feature and press return..."
-          />
-
-          <TagInput
-            label="Materials"
-            optional
-            tags={materials}
-            onAddTag={(m) => setMaterials((prev) => [...prev, m])}
-            onRemoveTag={(m) => setMaterials((prev) => prev.filter((x) => x !== m))}
-            suggestions={options.suggested_materials}
-            placeholder="Type a material and press return..."
-          />
-
-          {/* Freeform */}
-          <View className="gap-1.5">
-            <Text className="text-sm font-medium text-foreground">
-              Additional Description <Text className="text-muted-foreground font-normal">(optional)</Text>
-            </Text>
-            <TextInput
-              value={freeform}
-              onChangeText={setFreeform}
-              placeholder="Any extra creative direction..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={2}
-              textAlignVertical="top"
-              className="rounded-md border border-input bg-background px-3 py-2.5 text-sm text-foreground min-h-[60px]"
-            />
-          </View>
-
-          {/* Step-by-step toggle */}
-          <View className="flex-row items-center gap-3">
-            <Switch
-              value={stepByStep}
-              onValueChange={setStepByStep}
-              trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-              thumbColor={stepByStep ? '#3b82f6' : '#f4f3f4'}
-            />
-            <View>
-              <Text className="text-sm font-medium text-foreground">Step-by-step mode</Text>
-              <Text className="text-xs text-muted-foreground">Review each phase before proceeding</Text>
-            </View>
-          </View>
-
-          {/* Submit */}
-          <Button
-            size="lg"
-            onPress={handleSubmit}
-            disabled={busy || !roomType || !style}
-            title={busy ? 'Generating...' : 'Generate Timelapse'}
-            className="w-full"
-          />
-
-          {/* Debug: Test SSE with fake job (no AI cost) */}
-          <Button
-            variant="outline"
-            onPress={runFakeJob}
-            disabled={busy}
-            title="🐛 Test SSE (fake job)"
-            className="w-full"
-          />
-
-          {/* Debug: Mini pipeline (2 images, 1 transition) */}
-          <Button
-            variant="outline"
-            onPress={handleMini}
-            disabled={busy || !roomType || !style}
-            title="🐛 Mini Pipeline (2 images)"
-            className="w-full"
+      {/* Confirmation modal */}
+      <ConfirmModal
+        visible={confirmOpen}
+        title="Review Transcript"
+        confirmText="Generate Video"
+        cancelText="Cancel"
+        onConfirm={handleConfirmProceed}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setPendingUri(null);
+        }}
+      >
+        <View className="gap-2">
+          <Text className="text-xs text-muted-foreground">
+            Edit the transcript below, then generate your video.
+          </Text>
+          <TextInput
+            value={pendingTranscript}
+            onChangeText={setPendingTranscript}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            placeholder={pendingTranscript ? undefined : 'Transcribing...'}
+            placeholderTextColor="#9ca3af"
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground min-h-[80px]"
           />
         </View>
-      )}
+      </ConfirmModal>
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
