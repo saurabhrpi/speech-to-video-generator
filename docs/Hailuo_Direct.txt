@@ -1,0 +1,142 @@
+POST https://api.minimax.io/v1/video_generation
+
+****************************************************************************************************************************************
+
+Authorization string header required
+HTTP: Bearer Auth
+
+Security Scheme Type: http
+HTTP Authorization Scheme: Bearer API_key, can be found in Account Management>API Keys.
+
+********************************************************************************************************************************************************
+
+Headers
+
+Content-Type enum<string>
+default:application/json
+required
+
+The media type of the request body. Must be set to application/json to ensure the data is sent in JSON format.
+Available options: application/json 
+
+********************************************************************************************************************************************************
+
+BODY
+
+model 
+enum<string>
+(required)
+Model name. Supported values:
+MiniMax-Hailuo-2.3, MiniMax-Hailuo-02, T2V-01-Director, T2V-01.
+Available options: MiniMax-Hailuo-2.3, MiniMax-Hailuo-02, T2V-01-Director, T2V-01 
+
+prompt
+string
+(required)
+Text description of the video, up to 2000 characters.
+For MiniMax-Hailuo-2.3, MiniMax-Hailuo-02 and T2V-01-Director models, camera movement can be controlled using [command] syntax.
+Supported 15 camera commands:
+Truck: [Truck left], [Truck right]
+Pan: [Pan left], [Pan right]
+Push: [Push in], [Pull out]
+Pedestal: [Pedestal up], [Pedestal down]
+Tilt: [Tilt up], [Tilt down]
+Zoom: [Zoom in], [Zoom out]
+Shake: [Shake]
+Follow: [Tracking shot]
+Static: [Static shot]
+Usage rules:
+Combined movements: Multiple commands inside one [] take effect simultaneously (e.g., [Pan left,Pedestal up]). Recommended max: 3.
+Sequential movements: Commands appear in order, e.g., "...[Push in], then...[Push out]".
+Natural language: Free-form descriptions also work, but explicit commands yield more accurate results.
+
+
+prompt_optimizer
+boolean
+Whether to automatically optimize the prompt. Defaults to true. Set to false for more precise control.
+
+
+fast_pretreatment
+boolean
+Reduces optimization time when prompt_optimizer is enabled. Defaults to false. Applies only to MiniMax-Hailuo-2.3 and MiniMax-Hailuo-02.
+
+
+duration
+integer
+Video length (seconds). Default is 6. Available values depend on model and resolution:
+
+Model				720P	768P	1080P
+MiniMax-Hailuo-2.3	-		6 or 10	 6
+MiniMax-Hailuo-02	-		6 or 10	 6
+Other models		6		-		 6
+
+resolution
+enum<string>
+Video resolution. Options depend on model and duration:
+Model				6s						10s
+MiniMax-Hailuo-2.3	768P (default), 1080P	768P (default)
+MiniMax-Hailuo-02	768P (default), 1080P	768P (default)
+Other models		720P (default)			Not supported
+Available options: 720P, 768P, 1080P 
+
+callback_url
+string
+A callback URL to receive asynchronous task status updates.
+Validation: Once configured, MiniMax sends a POST request with a challenge field. Your server must echo this value within 3s to validate.
+Updates: After validation, MiniMax pushes status updates when the task changes. Response structure matches the Query Video Generation Task API.
+
+Callback status values:
+"processing" – Task in progress
+"success" – Task completed successfully
+"failed" – Task failed
+
+*********************************************************************************************************************************
+200 Response:
+{
+  "task_id": "106916112212032",
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  }
+}
+
+*********************************************************************************************************************************
+#Example Usage
+
+from fastapi import FastAPI, HTTPException, Request
+import json
+
+app = FastAPI()
+
+@app.post("/get_callback")
+async def get_callback(request: Request):
+    try:
+        json_data = await request.json()
+        challenge = json_data.get("challenge")
+        if challenge is not None:
+            # Validation request, echo back challenge
+            return {"challenge": challenge}
+        else:
+            # Status update request, handle accordingly
+            # {
+            #     "task_id": "115334141465231360",
+            #     "status": "success",
+            #     "file_id": "205258526306433",
+            #     "base_resp": {
+            #         "status_code": 0,
+            #         "status_msg": "success"
+            #     }
+            # }
+            return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,  # Required
+        host="0.0.0.0",  # Required
+        port=8000,  # Required, port can be customized
+        # ssl_keyfile="yourname.yourDomainName.com.key",  # Optional, enable if using SSL
+        # ssl_certfile="yourname.yourDomainName.com.key",  # Optional, enable if using SSL
+    )

@@ -15,7 +15,7 @@ type ModelKey = 'kling' | 'hailuo';
 
 const MODELS: { key: ModelKey; label: string; id: string }[] = [
   { key: 'kling', label: 'Kling', id: 'klingai/video-v3-standard-text-to-video' },
-  { key: 'hailuo', label: 'Hailuo', id: 'minimax/hailuo-02' },
+  { key: 'hailuo', label: 'Hailuo', id: 'minimax/hailuo-2.3' },
 ];
 
 const DURATIONS: Record<ModelKey, number[]> = {

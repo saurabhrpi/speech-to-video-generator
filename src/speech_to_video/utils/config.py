@@ -37,12 +37,15 @@ class Settings:
     kling_t2v_model: str = os.environ.get("KLING_T2V_MODEL", "klingai/video-v3-standard-text-to-video")
     seedance_i2v_model: str = os.environ.get("SEEDANCE_I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
     hailuo_t2v_model: str = os.environ.get("HAILUO_T2V_MODEL", "minimax/hailuo-02")
+    hailuo_23_t2v_model: str = os.environ.get("HAILUO_23_T2V_MODEL", "minimax/hailuo-2.3")
+    hailuo_23_fast_i2v_model: str = os.environ.get("HAILUO_23_FAST_I2V_MODEL", "minimax/hailuo-2.3-fast")
     hailuo_i2v_model: str = os.environ.get("HAILUO_I2V_MODEL", "minimax/hailuo-02")
     i2v_model: str = os.environ.get("I2V_MODEL", "minimax/hailuo-02")
     i2v_resolution: str = os.environ.get("I2V_RESOLUTION", "768P")
     i2v_duration: int = int(os.environ.get("I2V_DURATION", "6"))
     nano_banana_t2i_model: str = os.environ.get("NANO_BANANA_T2I_MODEL", "google/nano-banana-pro")
     nano_banana_edit_model: str = os.environ.get("NANO_BANANA_EDIT_MODEL", "google/nano-banana-pro-edit")
+    minimax_api_key: str = os.environ.get("MINIMAX_API_KEY", "")
 
 
 def get_settings() -> Settings:

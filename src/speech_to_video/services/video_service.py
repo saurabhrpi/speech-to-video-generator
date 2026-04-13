@@ -3,6 +3,7 @@ from typing import Callable, Dict, List, Optional
 
 from ..clients.openai_client import OpenAIClient
 from ..clients.aimlapi_client import AIMLAPIClient
+from ..clients.minimax_client import MiniMaxClient
 from ..models.timelapse import TimelapseRequest, compose_timelapse_prompt
 from ..utils.config import Settings, get_settings
 from ..utils.video import stitch_videos
@@ -16,6 +17,7 @@ class VideoService:
         self.settings = settings or get_settings()
         self.openai_client = OpenAIClient(self.settings)
         self.aiml_client = AIMLAPIClient(self.settings)
+        self.minimax_client = MiniMaxClient(self.settings) if self.settings.minimax_api_key else None
 
     def speech_to_video_with_audio(self, audio_path: str, duration: int = 60, quality: str = "high") -> Dict:
         transcript = self.openai_client.transcribe(audio_path)
@@ -857,10 +859,21 @@ class VideoService:
         """
         Generate a single T2V clip from text (typed prompt or Whisper transcript).
         Supports Kling and Hailuo models with model-specific duration defaults.
+        Routes Hailuo models through direct MiniMax API when MINIMAX_API_KEY is set.
         """
         resolved_model = model or self.settings.kling_t2v_model
         if duration is None:
             duration = 10
+
+        is_hailuo = "hailuo" in resolved_model.lower() or "minimax" in resolved_model.lower()
+        if is_hailuo and self.minimax_client:
+            logger.info("[VideoService] Routing %s through direct MiniMax API", resolved_model)
+            return self.minimax_client.generate_and_poll(
+                prompt=prompt,
+                model=resolved_model,
+                duration=duration,
+                resolution=self.settings.i2v_resolution or "768P",
+            )
 
         return self._single_generation(
             prompt=prompt,
