@@ -14,8 +14,8 @@ import { Colors } from '@/lib/design-tokens';
 type ModelKey = 'kling' | 'hailuo';
 
 const MODELS: { key: ModelKey; label: string; id: string }[] = [
-  { key: 'kling', label: 'Kling', id: 'klingai/video-v3-standard-text-to-video' },
   { key: 'hailuo', label: 'Hailuo', id: 'minimax/hailuo-2.3' },
+  { key: 'kling', label: 'Kling', id: 'klingai/video-v3-standard-text-to-video' },
 ];
 
 const DURATIONS: Record<ModelKey, number[]> = {
@@ -27,8 +27,8 @@ export default function SpeechScreen() {
   const router = useRouter();
   const { isRecording, metering, startRecording, stopRecording } = useRecording();
   const [promptText, setPromptText] = useState('');
-  const [selectedModel, setSelectedModel] = useState<ModelKey>('kling');
-  const [selectedDuration, setSelectedDuration] = useState(10);
+  const [selectedModel, setSelectedModel] = useState<ModelKey>('hailuo');
+  const [selectedDuration, setSelectedDuration] = useState(6);
 
   const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
   const startGeneration = useGalleryStore((s) => s.startGeneration);
@@ -131,7 +131,7 @@ export default function SpeechScreen() {
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-8">
       <View className="gap-1">
-        <Text className="text-heading font-heading text-foreground">Speech to Video</Text>
+        <Text className="text-heading font-body text-foreground">Speech to Video</Text>
         <Text className="text-body font-body text-muted-foreground">
           Type a prompt or record audio to generate a video.
         </Text>

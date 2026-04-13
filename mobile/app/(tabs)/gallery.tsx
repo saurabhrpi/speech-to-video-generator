@@ -27,10 +27,11 @@ export default function GalleryScreen() {
   const selectedJobId = useGalleryStore((s) => s.selectedJobId);
   const selectJob = useGalleryStore((s) => s.selectJob);
   const removeJob = useGalleryStore((s) => s.removeJob);
+  const markSaved = useGalleryStore((s) => s.markSaved);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId && j.status === 'completed');
 
-  const handleSave = useCallback(async (videoUrl: string) => {
+  const handleSave = useCallback(async (videoUrl: string, jobId?: string) => {
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -45,12 +46,13 @@ export default function GalleryScreen() {
       await MediaLibrary.saveToLibraryAsync(file.uri);
       file.delete();
 
+      if (jobId) markSaved(jobId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Saved', 'Video saved to Camera Roll.');
     } catch (err: any) {
       Alert.alert('Save failed', err.message || 'Could not save video.');
     }
-  }, []);
+  }, [markSaved]);
 
   const renderItem = useCallback(({ item }: { item: GalleryJob }) => {
     if (item.status === 'generating') {
@@ -85,39 +87,7 @@ export default function GalleryScreen() {
       );
     }
 
-    if (item.status === 'failed') {
-      return (
-        <Pressable onPress={() => Alert.alert('Error', item.error || 'Generation failed')}>
-          <View
-            style={{
-              width: cardWidth,
-              height: cardWidth * 1.2,
-              backgroundColor: Colors.card,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: 'rgba(217,64,64,0.3)',
-              justifyContent: 'center',
-              alignItems: 'center',
-              padding: 12,
-            }}
-          >
-            <Ionicons name="alert-circle" size={28} color={Colors.destructive} />
-            <Text
-              style={{ color: Colors.destructive, fontSize: 12, marginTop: 6, textAlign: 'center' }}
-              numberOfLines={2}
-            >
-              {item.error || 'Failed'}
-          </Text>
-          <Pressable
-            onPress={() => removeJob(item.id)}
-            style={{ marginTop: 10, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(217,64,64,0.15)' }}
-          >
-            <Text style={{ color: Colors.destructive, fontSize: 12 }}>Remove</Text>
-          </Pressable>
-        </View>
-        </Pressable>
-      );
-    }
+    if (item.status === 'failed') return null;
 
     // Completed
     const isSelected = selectedJobId === item.id;
@@ -137,6 +107,29 @@ export default function GalleryScreen() {
             overflow: 'hidden',
           }}
         >
+          {/* Remove button — only visible when selected */}
+          {isSelected && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                removeJob(item.id);
+              }}
+              style={{
+                position: 'absolute',
+                top: 6,
+                left: 6,
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: 'rgba(0,0,0,0.4)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 10,
+              }}
+            >
+              <Ionicons name="close" size={14} color="#fff" />
+            </Pressable>
+          )}
           <Ionicons name="play-circle" size={40} color={Colors.textPrimary} style={{ opacity: 0.8 }} />
           <Text
             style={{ color: Colors.textPrimary, fontSize: 12, marginTop: 8, textAlign: 'center' }}
@@ -150,33 +143,40 @@ export default function GalleryScreen() {
           >
             {item.model} · {item.duration}s
           </Text>
-          {/* Download button */}
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation?.();
-              if (item.videoUrl) handleSave(item.videoUrl);
-            }}
-            style={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: 'rgba(255,255,255,0.12)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <Ionicons name="download-outline" size={18} color={Colors.textPrimary} />
-          </Pressable>
+          {/* Download button — hidden after save */}
+          {!item.saved && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                if (item.videoUrl) handleSave(item.videoUrl, item.id);
+              }}
+              style={{
+                position: 'absolute',
+                bottom: 8,
+                right: 8,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name="download-outline" size={18} color={Colors.textPrimary} />
+            </Pressable>
+          )}
+          {item.saved && (
+            <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
+              <Ionicons name="checkmark-circle" size={22} color={Colors.textSecondary} />
+            </View>
+          )}
         </View>
       </Pressable>
     );
-  }, [cardWidth, selectedJobId, selectJob, removeJob, handleSave]);
+  }, [cardWidth, selectedJobId, selectJob, removeJob, handleSave, markSaved]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+    <Pressable style={{ flex: 1, backgroundColor: Colors.background }} onPress={() => selectJob(null)}>
       {/* Selected video player */}
       {selectedJob?.videoUrl && (
         <View style={{ paddingHorizontal: PADDING, paddingTop: 12, paddingBottom: 4 }}>
@@ -185,23 +185,30 @@ export default function GalleryScreen() {
             <Text style={{ color: Colors.textSecondary, fontSize: 12, flex: 1 }} numberOfLines={1}>
               {selectedJob.prompt}
             </Text>
-            <Pressable
-              onPress={() => handleSave(selectedJob.videoUrl!)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor: Colors.accent,
-                borderWidth: 1,
-                borderColor: Colors.glassyBorder,
-              }}
-            >
-              <Ionicons name="download-outline" size={16} color={Colors.textPrimary} />
-              <Text style={{ color: Colors.textPrimary, fontSize: 13 }}>Save</Text>
-            </Pressable>
+            {selectedJob.saved ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.textSecondary} />
+                <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>Saved</Text>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => handleSave(selectedJob.videoUrl!, selectedJob.id)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: Colors.accent,
+                  borderWidth: 1,
+                  borderColor: Colors.glassyBorder,
+                }}
+              >
+                <Ionicons name="download-outline" size={16} color={Colors.textPrimary} />
+                <Text style={{ color: Colors.textPrimary, fontSize: 13 }}>Save</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       )}
@@ -226,6 +233,6 @@ export default function GalleryScreen() {
           </View>
         }
       />
-    </View>
+    </Pressable>
   );
 }

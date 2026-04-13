@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as Haptics from 'expo-haptics';
+import { Alert } from 'react-native';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiPost, resolveVideoUrl } from '@/lib/api-client';
@@ -19,6 +20,7 @@ export interface GalleryJob {
   videoUrl: string | null;
   error: string | null;
   createdAt: number;
+  saved: boolean;
 }
 
 /** Module-level AbortControllers — not serialized */
@@ -29,6 +31,7 @@ interface GalleryStore {
   selectedJobId: string | null;
 
   startGeneration: (formData: FormData, meta: { prompt: string; model: string; duration: number }) => string;
+  markSaved: (id: string) => void;
   removeJob: (id: string) => void;
   selectJob: (id: string | null) => void;
   hydrate: () => Promise<void>;
@@ -39,8 +42,10 @@ function hasGenerating(jobs: GalleryJob[]): boolean {
 }
 
 function persist(jobs: GalleryJob[]) {
-  // Only persist completed/failed — generating jobs can't survive a restart
-  const toSave = jobs.filter((j) => j.status !== 'generating');
+  // Persist completed + generating (with real job_id, not temp). Skip failed.
+  const toSave = jobs.filter((j) =>
+    j.status === 'completed' || (j.status === 'generating' && !j.id.startsWith('temp_'))
+  );
   AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
 }
 
@@ -60,6 +65,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       videoUrl: null,
       error: null,
       createdAt: Date.now(),
+      saved: false,
     };
 
     set((s) => ({ jobs: [job, ...s.jobs] }));
@@ -79,13 +85,17 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
         );
         jobId = job_id;
 
-        // Update the job ID from temp to real
+        // Update the job ID from temp to real, and persist so it survives app close
         abortControllers.set(jobId, ac);
         abortControllers.delete(tempId);
-        set((s) => ({
-          jobs: s.jobs.map((j) => (j.id === tempId ? { ...j, id: jobId } : j)),
-          selectedJobId: s.selectedJobId === tempId ? jobId : s.selectedJobId,
-        }));
+        set((s) => {
+          const jobs = s.jobs.map((j) => (j.id === tempId ? { ...j, id: jobId } : j));
+          persist(jobs);
+          return {
+            jobs,
+            selectedJobId: s.selectedJobId === tempId ? jobId : s.selectedJobId,
+          };
+        });
 
         const result = await streamJob(
           jobId,
@@ -117,27 +127,21 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
           const err = result?.error;
           const errMsg = typeof err === 'string' ? err : JSON.stringify(err);
           set((s) => {
-            const jobs = s.jobs.map((j) =>
-              j.id === jobId
-                ? { ...j, status: 'failed' as const, statusMsg: '', error: errMsg || 'Generation failed' }
-                : j,
-            );
+            const jobs = s.jobs.filter((j) => j.id !== jobId);
             persist(jobs);
-            return { jobs };
+            return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
           });
+          Alert.alert('Generation failed', errMsg || 'Unknown error');
         }
       } catch (err: any) {
         if (err.message === 'Aborted') return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         set((s) => {
-          const jobs = s.jobs.map((j) =>
-            j.id === jobId || j.id === tempId
-              ? { ...j, status: 'failed' as const, statusMsg: '', error: err.message || 'Network error' }
-              : j,
-          );
+          const jobs = s.jobs.filter((j) => j.id !== jobId && j.id !== tempId);
           persist(jobs);
-          return { jobs };
+          return { jobs, selectedJobId: (s.selectedJobId === jobId || s.selectedJobId === tempId) ? null : s.selectedJobId };
         });
+        Alert.alert('Generation failed', err.message || 'Network error');
       } finally {
         abortControllers.delete(jobId);
         abortControllers.delete(tempId);
@@ -151,6 +155,14 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
     })();
 
     return tempId;
+  },
+
+  markSaved: (id) => {
+    set((s) => {
+      const jobs = s.jobs.map((j) => (j.id === id ? { ...j, saved: true } : j));
+      persist(jobs);
+      return { jobs };
+    });
   },
 
   removeJob: (id) => {
@@ -173,11 +185,67 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   hydrate: async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved: GalleryJob[] = JSON.parse(raw);
-        // Only load completed/failed — generating jobs are lost on restart
-        const valid = saved.filter((j) => j.status !== 'generating');
-        set({ jobs: valid });
+      if (!raw) return;
+      const saved: GalleryJob[] = JSON.parse(raw);
+      const valid = saved.filter((j) => j.status === 'completed' || j.status === 'generating');
+      set({ jobs: valid });
+
+      // Reconnect any generating jobs
+      const generating = valid.filter((j) => j.status === 'generating');
+      for (const job of generating) {
+        const ac = new AbortController();
+        abortControllers.set(job.id, ac);
+        activateKeepAwake(KEEP_AWAKE_TAG);
+
+        (async () => {
+          const jobId = job.id;
+          try {
+            const result = await streamJob(
+              jobId,
+              {
+                onProgress: (_phase, _step, _total, message) => {
+                  set((s) => ({
+                    jobs: s.jobs.map((j) =>
+                      j.id === jobId ? { ...j, statusMsg: message || 'Generating video...' } : j,
+                    ),
+                  }));
+                },
+                onPartialResult: () => {},
+              },
+              ac.signal,
+            );
+
+            if (result?.video_url) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              set((s) => {
+                const jobs = s.jobs.map((j) =>
+                  j.id === jobId
+                    ? { ...j, status: 'completed' as const, statusMsg: 'Done!', videoUrl: resolveVideoUrl(result.video_url) }
+                    : j,
+                );
+                persist(jobs);
+                return { jobs };
+              });
+            } else {
+              set((s) => {
+                const jobs = s.jobs.filter((j) => j.id !== jobId);
+                persist(jobs);
+                return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
+              });
+              Alert.alert('Generation lost', `"${job.prompt}" could not be recovered — the server may have restarted.`);
+            }
+          } catch {
+            set((s) => {
+              const jobs = s.jobs.filter((j) => j.id !== jobId);
+              persist(jobs);
+              return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
+            });
+            Alert.alert('Generation lost', `"${job.prompt}" could not be recovered — the server may have restarted.`);
+          } finally {
+            abortControllers.delete(jobId);
+            if (!hasGenerating(get().jobs)) deactivateKeepAwake(KEEP_AWAKE_TAG);
+          }
+        })();
       }
     } catch {
       // Corrupted storage — start fresh
