@@ -7,7 +7,7 @@
 - [Replit Log Format](reference_replit_logs.md) -- How to read exported Replit backend logs (4 lines per row)
 - [Analyze Before Concluding](feedback_analysis_depth.md) -- Don't jump to lazy conclusions; analyze evidence, think multi-directionally, make defensible arguments
 - [Interview Depth](feedback_interview_depth.md) -- Design interviews: deep multi-question carousels per topic, not shallow bundles
-- [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure, don't guess
+- [Google Search When Uncertain](feedback_google_search.md) -- Use web search proactively when unsure; provide web evidence before root cause fixes
 - [VideoPlayer Debugging Lessons](project_video_player_test.md) -- Verify URL accessibility before suspecting expo-av component
 - [RN SSE needs expo/fetch](reference_expo_fetch_sse.md) -- Built-in RN fetch has no streaming body; use expo/fetch for SSE
 - [SSE heartbeats must be data events](reference_sse_heartbeat_data.md) -- Heartbeats every ~10s are mandatory, and must be real data: events (comments get dropped by proxies)
@@ -27,3 +27,5 @@
 - [Replit startup drains credits](reference_replit_startup_event.md) -- Container restarts are frequent; never leave expensive startup hooks enabled
 - [CTFontManagerError 104 is safe](reference_ctfont_error_104.md) -- Error 104 = already registered, font IS usable; catch and treat as success
 - [RN Blob has no arrayBuffer()](reference_rn_blob_arraybuffer.md) -- Use File.downloadFileAsync instead of fetch→blob→arrayBuffer for saving files
+- [Gallery Crash Resilience](project_gallery_crash_resilience.md) -- Two crash root causes, persistence fixes, and how to find iOS crash reports
+- [iOS Crash Reports](reference_ios_crash_reports.md) -- Find and parse .ips crash reports from ~/Library/Logs/DiagnosticReports

@@ -8,6 +8,7 @@ import { streamJob } from '@/lib/streaming';
 import { useAuthStore } from '@/store/auth-store';
 
 const STORAGE_KEY = 'gallery_jobs';
+const BACKUP_KEY = 'gallery_jobs_backup';
 const KEEP_AWAKE_TAG = 'gallery';
 
 export interface GalleryJob {
@@ -46,7 +47,17 @@ function persist(jobs: GalleryJob[]) {
   const toSave = jobs.filter((j) =>
     j.status === 'completed' || (j.status === 'generating' && !j.id.startsWith('temp_'))
   );
-  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  const json = JSON.stringify(toSave);
+  // Rotate: copy current primary → backup, then overwrite both atomically.
+  // multiSet is a single SQLite transaction — either both writes commit or neither does.
+  // If app crashes mid-transaction, both keys retain their previous values.
+  AsyncStorage.getItem(STORAGE_KEY)
+    .then((prev) => {
+      const writes: [string, string][] = [[STORAGE_KEY, json]];
+      if (prev) writes.push([BACKUP_KEY, prev]);
+      return AsyncStorage.multiSet(writes);
+    })
+    .catch((err) => console.error('[Gallery] persist failed:', err));
 }
 
 export const useGalleryStore = create<GalleryStore>((set, get) => ({
@@ -183,72 +194,111 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   selectJob: (id) => set({ selectedJobId: id }),
 
   hydrate: async () => {
+    let valid: GalleryJob[] = [];
+    let source = 'primary';
+
+    // Try primary key, fall back to backup
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const saved: GalleryJob[] = JSON.parse(raw);
-      const valid = saved.filter((j) => j.status === 'completed' || j.status === 'generating');
-      set({ jobs: valid });
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          valid = parsed.filter(
+            (j: any) => j && (j.status === 'completed' || j.status === 'generating'),
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[Gallery] primary storage corrupted:', err);
+    }
 
-      // Reconnect any generating jobs
-      const generating = valid.filter((j) => j.status === 'generating');
-      for (const job of generating) {
-        const ac = new AbortController();
-        abortControllers.set(job.id, ac);
-        activateKeepAwake(KEEP_AWAKE_TAG);
-
-        (async () => {
-          const jobId = job.id;
-          try {
-            const result = await streamJob(
-              jobId,
-              {
-                onProgress: (_phase, _step, _total, message) => {
-                  set((s) => ({
-                    jobs: s.jobs.map((j) =>
-                      j.id === jobId ? { ...j, statusMsg: message || 'Generating video...' } : j,
-                    ),
-                  }));
-                },
-                onPartialResult: () => {},
-              },
-              ac.signal,
+    if (valid.length === 0) {
+      try {
+        const backup = await AsyncStorage.getItem(BACKUP_KEY);
+        if (backup) {
+          const parsed = JSON.parse(backup);
+          if (Array.isArray(parsed)) {
+            valid = parsed.filter(
+              (j: any) => j && (j.status === 'completed' || j.status === 'generating'),
             );
+            source = 'backup';
+            console.warn('[Gallery] recovered', valid.length, 'jobs from backup');
+          }
+        }
+      } catch (err) {
+        console.error('[Gallery] backup also corrupted:', err);
+      }
+    }
 
-            if (result?.video_url) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              set((s) => {
-                const jobs = s.jobs.map((j) =>
-                  j.id === jobId
-                    ? { ...j, status: 'completed' as const, statusMsg: 'Done!', videoUrl: resolveVideoUrl(result.video_url) }
-                    : j,
-                );
-                persist(jobs);
-                return { jobs };
-              });
-            } else {
-              set((s) => {
-                const jobs = s.jobs.filter((j) => j.id !== jobId);
-                persist(jobs);
-                return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
-              });
-              Alert.alert('Generation lost', `"${job.prompt}" could not be recovered — the server may have restarted.`);
-            }
-          } catch {
+    if (valid.length === 0) return;
+    set({ jobs: valid });
+
+    // Successful load — save backup so next crash has a fallback
+    try {
+      const json = JSON.stringify(valid);
+      const writes: [string, string][] = [[BACKUP_KEY, json]];
+      if (source === 'backup') writes.push([STORAGE_KEY, json]);
+      await AsyncStorage.multiSet(writes);
+    } catch (err) {
+      console.error('[Gallery] backup write failed:', err);
+    }
+
+    // Reconnect any generating jobs
+    const generating = valid.filter((j) => j.status === 'generating');
+    for (const job of generating) {
+      const ac = new AbortController();
+      abortControllers.set(job.id, ac);
+      activateKeepAwake(KEEP_AWAKE_TAG);
+
+      (async () => {
+        const jobId = job.id;
+        try {
+          const result = await streamJob(
+            jobId,
+            {
+              onProgress: (_phase, _step, _total, message) => {
+                set((s) => ({
+                  jobs: s.jobs.map((j) =>
+                    j.id === jobId ? { ...j, statusMsg: message || 'Generating video...' } : j,
+                  ),
+                }));
+              },
+              onPartialResult: () => {},
+            },
+            ac.signal,
+          );
+
+          if (result?.video_url) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            set((s) => {
+              const jobs = s.jobs.map((j) =>
+                j.id === jobId
+                  ? { ...j, status: 'completed' as const, statusMsg: 'Done!', videoUrl: resolveVideoUrl(result.video_url) }
+                  : j,
+              );
+              persist(jobs);
+              return { jobs };
+            });
+          } else {
             set((s) => {
               const jobs = s.jobs.filter((j) => j.id !== jobId);
               persist(jobs);
               return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
             });
             Alert.alert('Generation lost', `"${job.prompt}" could not be recovered — the server may have restarted.`);
-          } finally {
-            abortControllers.delete(jobId);
-            if (!hasGenerating(get().jobs)) deactivateKeepAwake(KEEP_AWAKE_TAG);
           }
-        })();
-      }
-    } catch {
-      // Corrupted storage — start fresh
+        } catch {
+          set((s) => {
+            const jobs = s.jobs.filter((j) => j.id !== jobId);
+            persist(jobs);
+            return { jobs, selectedJobId: s.selectedJobId === jobId ? null : s.selectedJobId };
+          });
+          Alert.alert('Generation lost', `"${job.prompt}" could not be recovered — the server may have restarted.`);
+        } finally {
+          abortControllers.delete(jobId);
+          if (!hasGenerating(get().jobs)) deactivateKeepAwake(KEEP_AWAKE_TAG);
+        }
+      })();
     }
   },
 }));

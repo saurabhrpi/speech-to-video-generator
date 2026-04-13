@@ -18,6 +18,7 @@
       "bundleIdentifier": "com.saurabh.interiortimelapse",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
+        "NSPhotoLibraryUsageDescription": "Save generated videos to your Camera Roll",
         "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll"
       }
     },
