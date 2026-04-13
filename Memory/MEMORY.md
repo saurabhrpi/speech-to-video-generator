@@ -28,4 +28,7 @@
 - [CTFontManagerError 104 is safe](reference_ctfont_error_104.md) -- Error 104 = already registered, font IS usable; catch and treat as success
 - [RN Blob has no arrayBuffer()](reference_rn_blob_arraybuffer.md) -- Use File.downloadFileAsync instead of fetch→blob→arrayBuffer for saving files
 - [Gallery Crash Resilience](project_gallery_crash_resilience.md) -- Two crash root causes, persistence fixes, and how to find iOS crash reports
+- [Always expo run:ios](feedback_expo_run_ios.md) -- Never use expo start; dev client keeps data safe from Expo Go resets
+- [Prebuild after app.json](feedback_app_json_needs_prebuild.md) -- Run expo prebuild after app.json changes; expo run:ios skips it when ios/ exists
+- [Expo Go Data Loss](project_expo_go_data_loss.md) -- Session 31: Gallery wiped by Expo Go container reset
 - [iOS Crash Reports](reference_ios_crash_reports.md) -- Find and parse .ips crash reports from ~/Library/Logs/DiagnosticReports

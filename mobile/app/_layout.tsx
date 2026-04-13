@@ -8,7 +8,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -39,7 +39,6 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     PlayfairDisplay_400Regular,
@@ -66,8 +65,8 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? WarmDarkTheme : DefaultTheme}>
-        <StatusBar style="auto" />
+      <ThemeProvider value={WarmDarkTheme}>
+        <StatusBar style="light" />
         <NetworkBanner />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
