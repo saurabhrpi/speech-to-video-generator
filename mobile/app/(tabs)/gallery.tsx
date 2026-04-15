@@ -55,7 +55,8 @@ export default function GalleryScreen() {
   }, [markSaved]);
 
   const renderItem = useCallback(({ item }: { item: GalleryJob }) => {
-    if (item.status === 'generating') {
+    if (item.status === 'generating' || item.status === 'paused') {
+      const paused = item.status === 'paused';
       return (
         <View
           style={{
@@ -70,12 +71,16 @@ export default function GalleryScreen() {
             padding: 12,
           }}
         >
-          <ActivityIndicator color={Colors.textPrimary} size="small" />
+          {paused ? (
+            <Ionicons name="cloud-offline-outline" size={28} color={Colors.textSecondary} />
+          ) : (
+            <ActivityIndicator color={Colors.textPrimary} size="small" />
+          )}
           <Text
             style={{ color: Colors.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'center' }}
             numberOfLines={2}
           >
-            {item.statusMsg || 'Generating...'}
+            {item.statusMsg || (paused ? 'Paused' : 'Generating...')}
           </Text>
           <Text
             style={{ color: Colors.textSecondary, fontSize: 11, marginTop: 6, textAlign: 'center' }}

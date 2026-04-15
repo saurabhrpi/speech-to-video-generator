@@ -1,6 +1,18 @@
-import { apiGet } from './api-client';
+import { apiGet, HttpError } from './api-client';
 import { POLL_INTERVALS, DEFAULT_POLL_INTERVAL, MAX_NETWORK_FAILS } from './constants';
 import type { JobStatus } from './types';
+
+export const ERR_JOB_NOT_FOUND = 'JOB_NOT_FOUND';
+export const ERR_CONNECTION_LOST = 'CONNECTION_LOST';
+
+export class PollError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'PollError';
+    this.code = code;
+  }
+}
 
 export interface PollCallbacks {
   onProgress: (phase: string | null, step: number, total: number, message: string) => void;
@@ -47,11 +59,14 @@ export async function pollJob(
       networkFailCount = 0;
     } catch (err: any) {
       if (signal?.aborted) break;
+      if (err instanceof HttpError && err.status === 404) {
+        throw new PollError(ERR_JOB_NOT_FOUND, 'Job not found on server (likely evicted or server restarted)');
+      }
       networkFailCount++;
       if (networkFailCount >= MAX_NETWORK_FAILS) {
-        throw new Error(
-          `Lost connection after ${MAX_NETWORK_FAILS} attempts. ` +
-          (lastPartial ? 'Partial progress was saved \u2014 you can resume.' : ''),
+        throw new PollError(
+          ERR_CONNECTION_LOST,
+          `Lost connection after ${MAX_NETWORK_FAILS} attempts`,
         );
       }
       continue;

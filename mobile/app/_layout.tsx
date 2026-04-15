@@ -8,6 +8,8 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -58,6 +60,27 @@ export default function RootLayout() {
       useGalleryStore.getState().hydrate();
     }
   }, [loaded, isAlreadyRegistered]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        useGalleryStore.getState().resumePausedJobs();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    let wasOffline = false;
+    const unsub = NetInfo.addEventListener((state) => {
+      const online = !!state.isConnected && state.isInternetReachable !== false;
+      if (online && wasOffline) {
+        useGalleryStore.getState().resumePausedJobs();
+      }
+      wasOffline = !online;
+    });
+    return unsub;
+  }, []);
 
   if (!loaded && !isAlreadyRegistered) {
     return null;

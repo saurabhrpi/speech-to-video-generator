@@ -30,5 +30,9 @@
 - [Gallery Crash Resilience](project_gallery_crash_resilience.md) -- Two crash root causes, persistence fixes, and how to find iOS crash reports
 - [Always expo run:ios](feedback_expo_run_ios.md) -- Never use expo start; dev client keeps data safe from Expo Go resets
 - [Prebuild after app.json](feedback_app_json_needs_prebuild.md) -- Run expo prebuild after app.json changes; expo run:ios skips it when ios/ exists
+- [New Apple Dev acct needs device](reference_xcode_signing_archive_block.md) -- Brand-new paid Apple Dev accounts can't archive until a device is registered (even for TestFlight)
+- [Keychain reset recovery](reference_keychain_reset_recovery.md) -- Three-layer fix after macOS keychain reset; GUI ≠ partition list; orphan keys can dead-end the CLI — escape to EAS
+- [EAS Build TestFlight flow](reference_eas_build_testflight.md) -- Tested end-to-end Expo EAS build + submit flow; the escape hatch when local signing is broken
 - [Expo Go Data Loss](project_expo_go_data_loss.md) -- Session 31: Gallery wiped by Expo Go container reset
 - [iOS Crash Reports](reference_ios_crash_reports.md) -- Find and parse .ips crash reports from ~/Library/Logs/DiagnosticReports
+- [Don't trust Explore agents](feedback_explore_agent_trust.md) -- Explore subagents confidently misreport code behavior; verify load-bearing claims with direct Grep before acting

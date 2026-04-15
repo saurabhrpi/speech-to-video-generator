@@ -1,6 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE, SESSION_COOKIE_KEY } from './constants';
 
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 async function getHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
   const headers: Record<string, string> = { ...extra };
   const cookie = await SecureStore.getItemAsync(SESSION_COOKIE_KEY);
@@ -28,7 +37,7 @@ export async function apiGet<T = any>(path: string): Promise<T> {
   extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`GET ${path} failed (${res.status}): ${text}`);
+    throw new HttpError(res.status, `GET ${path} failed (${res.status}): ${text}`);
   }
   return res.json();
 }
@@ -52,7 +61,7 @@ export async function apiPost<T = any>(
   extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`POST ${path} failed (${res.status}): ${text}`);
+    throw new HttpError(res.status, `POST ${path} failed (${res.status}): ${text}`);
   }
   return res.json();
 }
@@ -63,7 +72,7 @@ export async function apiDelete<T = any>(path: string): Promise<T> {
   extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`DELETE ${path} failed (${res.status}): ${text}`);
+    throw new HttpError(res.status, `DELETE ${path} failed (${res.status}): ${text}`);
   }
   return res.json();
 }

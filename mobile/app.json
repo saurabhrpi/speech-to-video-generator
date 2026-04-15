@@ -19,7 +19,8 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
         "NSPhotoLibraryUsageDescription": "Save generated videos to your Camera Roll",
-        "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll"
+        "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,7 +29,17 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.saurabh.interiortimelapse"
+      "package": "com.saurabh.interiortimelapse",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -54,6 +65,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "201c304f-0f16-4a53-a314-5b9b560e9035"
+      }
+    },
+    "owner": "saurabhsvits"
   }
 }
