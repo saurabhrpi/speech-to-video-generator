@@ -51,27 +51,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="th-large" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="timelapse"
-        options={{
-          title: 'Timelapse',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-          headerRight: () => (
-            <Link href="/settings" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="gear"
-                    size={22}
-                    color={Colors.textPrimary}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
     </Tabs>
   );
 }

@@ -36,3 +36,4 @@
 - [Expo Go Data Loss](project_expo_go_data_loss.md) -- Session 31: Gallery wiped by Expo Go container reset
 - [iOS Crash Reports](reference_ios_crash_reports.md) -- Find and parse .ips crash reports from ~/Library/Logs/DiagnosticReports
 - [Don't trust Explore agents](feedback_explore_agent_trust.md) -- Explore subagents confidently misreport code behavior; verify load-bearing claims with direct Grep before acting
+- [Read CLAUDE.md before diagnosing](feedback_read_claude_md_first.md) -- Check CLAUDE.md for documented design before hypothesizing bugs; many "bugs" are intentional behavior

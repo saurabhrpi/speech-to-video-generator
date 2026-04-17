@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="roundedSquare">
+      <rect width="1024" height="1024" rx="224" ry="224"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#roundedSquare)">
+    <!-- Background -->
+    <rect width="1024" height="1024" fill="#000000"/>
+
+    <!-- Central play button circle -->
+    <circle cx="512" cy="430" r="200" fill="none" stroke="#ffffff" stroke-width="24"/>
+
+    <!-- Play triangle inside -->
+    <polygon points="462,340 462,520 632,430" fill="#ffffff"/>
+
+    <!-- Sound waves emanating from left of circle -->
+    <path d="M260 370 Q230 430 260 490" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" opacity="0.4"/>
+    <path d="M210 330 Q160 430 210 530" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" opacity="0.25"/>
+
+    <!-- Sound waves right side (mirror, representing output) -->
+    <path d="M764 370 Q794 430 764 490" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" opacity="0.4"/>
+    <path d="M814 330 Q864 430 814 530" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" opacity="0.25"/>
+
+    <!-- Label -->
+    <text x="512" y="730" text-anchor="middle" fill="#ffffff" font-family="SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="72" font-weight="600" letter-spacing="6">SPEECH</text>
+    <text x="512" y="810" text-anchor="middle" fill="#ffffff" font-family="SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="48" font-weight="300" letter-spacing="4" opacity="0.6">TO VIDEO</text>
+  </g>
+</svg>

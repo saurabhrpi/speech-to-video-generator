@@ -9,7 +9,7 @@ import type { AuthState } from './types';
  * The backend redirects back to our app scheme after auth completes.
  */
 export async function login(): Promise<AuthState | null> {
-  const redirectUrl = 'interiortimelapse://auth-callback';
+  const redirectUrl = 'speechtovideo://auth-callback';
   const loginUrl = `${API_BASE}/api/auth/login?next=${encodeURIComponent(redirectUrl)}`;
 
   const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectUrl);

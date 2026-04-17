@@ -38,9 +38,9 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-2">
         <Text className="text-sm font-semibold text-foreground">About</Text>
-        <Text className="text-xs text-muted-foreground">Interior Timelapse v1.0.0</Text>
+        <Text className="text-xs text-muted-foreground">Speech to Video v1.0.0</Text>
         <Text className="text-xs text-muted-foreground">
-          Generate hyper-realistic renovation timelapse videos with AI.
+          Generate AI videos from text or voice prompts.
         </Text>
       </View>
     </View>

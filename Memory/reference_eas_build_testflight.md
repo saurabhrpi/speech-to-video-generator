@@ -41,3 +41,15 @@ When local Xcode signing is blocked (post-keychain-reset, missing dev device, WW
 **How to apply:** Recommend EAS Build any time local codesigning fails twice in a row, or when the user is on a fresh Apple Dev account without a registered device, or when they just want to ship to TestFlight without learning macOS keychain internals.
 
 **Session 31 artifacts (for reference):** EAS projectId `201c304f-0f16-4a53-a314-5b9b560e9035`, Expo owner `saurabhsvits`, App Store Connect app id `6762175047`, bundle id `com.saurabh.interiortimelapse`, Apple Team id `AP2Q6H2AYH`.
+
+**Gotcha: `eas submit --non-interactive` requires `ascAppId` in `eas.json`.** In interactive mode EAS prompts for the App Store Connect app id on first run. In non-interactive mode it can't, so it fails immediately with "Set ascAppId in the submit profile (eas.json) or re-run this command in interactive mode." Fix: add the id under the submit profile:
+
+```json
+"submit": {
+  "production": {
+    "ios": { "ascAppId": "6762175047" }
+  }
+}
+```
+
+Session 32 hit this the first time we ran a submit from Claude in `--non-interactive` — the initial Session-31 submit was interactive and cached nothing useful for re-runs.

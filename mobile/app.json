@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Interior Timelapse",
-    "slug": "interior-timelapse",
+    "name": "Speech to Video",
+    "slug": "speech-to-video",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "interiortimelapse",
+    "scheme": "speechtovideo",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.saurabh.interiortimelapse",
+      "bundleIdentifier": "com.saurabh.speechtovideo",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
         "NSPhotoLibraryUsageDescription": "Save generated videos to your Camera Roll",
@@ -29,7 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.saurabh.interiortimelapse",
+      "package": "com.saurabh.speechtovideo",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
@@ -52,7 +52,7 @@
       [
         "expo-av",
         {
-          "microphonePermission": "Allow Interior Timelapse to access your microphone for voice recording."
+          "microphonePermission": "Allow Speech to Video to access your microphone for voice recording."
         }
       ],
       [
@@ -69,7 +69,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "201c304f-0f16-4a53-a314-5b9b560e9035"
+        "projectId": "b4dd721c-1f26-4cf9-b28d-58f783b7b357"
       }
     },
     "owner": "saurabhsvits"
