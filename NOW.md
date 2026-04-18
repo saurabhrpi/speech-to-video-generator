@@ -2,27 +2,22 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt. ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 33
-**Date:** 2026-04-15
+## Current Session: 36
+**Date:** 2026-04-18
 **Branch:** main
-**Status:** EAS version bump fixed. Session-loss-after-a-day investigation UNRESOLVED — many hypotheses eliminated, two suspects still open.
+**Status:** Backend Firebase migration DONE (Task 8 ✓). Local smoke tests pass. Next: Replit deploy + EAS build.
 
 ## What Happened This Session
-- Fixed EAS versioning: switched `mobile/eas.json` to `appVersionSource: "local"` + `autoIncrement: "version"`. Next build will be 1.0.1, then 1.0.2, etc. (no more `1.0.0(2)` build numbers).
-- Investigated "sign in required after a day" issue. Confirmed via curl + local server + simulator debug logs:
-  - Server sets `session` cookie with `Max-Age=2592000` (30d) ✓
-  - Google Frontend does NOT strip it ✓
-  - RN fetch CAN read `Set-Cookie` (my earlier hypothesis was wrong) ✓
-  - Cookie IS stored in SecureStore, sent, and refreshed in simulator ✓
-- Got course-corrected: user reminded me the "one free trial" flow is baked in via `UNAUTH_GEN_LIMIT=1` (documented in CLAUDE.md). Symptom = server treating returning user as brand-new unauth visitor.
-- Debug logs added to `mobile/lib/api-client.ts` then reverted.
+- Rewrote `src/speech_to_video/api/server.py`: removed authlib/SessionMiddleware/OAuth routes, every protected endpoint now takes `Depends(verify_firebase_token)`, usage gating switched to per-UID dict (anon-only), clip namespace keyed on Firebase UID, jobs track `uid`/`is_anonymous` so usage counts only on anon completion.
+- New `src/speech_to_video/api/firebase_auth.py` — lazy-inits firebase-admin from `FIREBASE_SERVICE_ACCOUNT_PATH` (expands `~`), maps expired/revoked/invalid to 401.
+- `requirements.txt`: `firebase-admin>=6.5.0` in; `authlib`/`itsdangerous` out. `.env` cleaned of Google/session vars; `FIREBASE_SERVICE_ACCOUNT_PATH=~/secrets/speech-to-video-97e43-firebase-adminsdk-fbsvc-50e5f7a650.json`.
+- Smoke test live: `/api/health` 200; `/api/auth/session` 401 no-token and 401 bad-token (proves firebase-admin initialized).
+- [AUTH_MIGRATION.md](AUTH_MIGRATION.md) Task 9/10 rewritten — Task 9 now three phases (local smoke → Replit deploy → EAS). Task 10 adds pre-submission gate + 5.1.1(v) account-deletion risk.
 
 ## Next Step
-Continue cookie-loss investigation. Two suspects left:
-1. `extractAndStoreCookie` uses `split(';')[0]` — if GAESA ever appears first in concatenated Set-Cookie, we overwrite the real session cookie with GAESA. Test: hit production endpoints, inspect order of Set-Cookie headers, see if GAESA can ever come first.
-2. `SESSION_SECRET` mismatch: user's Replit secret is named `Session_Secret` (mixed case); code reads `os.getenv("SESSION_SECRET")` (uppercase). On Linux env vars are case-sensitive, so code falls back to `"change-me"`. Stable default shouldn't cause day-1 invalidation, but worth verifying what the server actually uses.
+Task #9 Phase B — deploy backend to Replit. Decision point: how to deliver the service account JSON to Replit (file-secret vs. `FIREBASE_SERVICE_ACCOUNT_JSON` string env var with small code change). Then strip dead Google/session secrets from Replit, push main, verify `/api/health` + `/api/setup` shows `firebase_service_account_present: true`.
 
 ## Open Questions
-- Why does the server see the user as unauthenticated after ~1 day, when the cookie appears to work correctly in simulator tests?
-- Was my curl-to-production attempt rejected because of an active generation, or for another reason?
-- Session-31 red-line-at-top observation when FaceTime ended — still unresolved, still low-priority.
+- Replit service-account file delivery mechanism (file-secret feature availability on current tier)
+- Account deletion UI (Apple 5.1.1(v)) — deferred, ship without and see if reviewer flags
+- 4.3a carryover risk still outstanding for Task 10

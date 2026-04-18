@@ -1,15 +1,3 @@
-export interface AuthState {
-  authenticated: boolean;
-  user?: {
-    sub: string;
-    email: string;
-    name: string;
-    picture?: string;
-  };
-  usage_count: number;
-  limit: number;
-}
-
 export interface JobStatus {
   status: 'running' | 'completed' | 'failed';
   phase: string | null;

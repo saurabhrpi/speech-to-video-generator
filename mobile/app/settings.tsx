@@ -1,37 +1,67 @@
-import { View, Text } from 'react-native';
+import { View, Text, Alert } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Button } from '@/components/Button';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function SettingsScreen() {
-  const { auth, login, logout, loading } = useAuthStore();
+  const {
+    isAnonymous,
+    displayName,
+    email,
+    usage,
+    loading,
+    signInWithApple,
+    signOut,
+  } = useAuthStore();
+
+  async function handleAppleSignIn() {
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') return; // user dismissed
+      Alert.alert('Sign-in failed', e?.message ?? 'Please try again.');
+    }
+  }
 
   return (
     <View className="flex-1 bg-background p-4 gap-6">
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Account</Text>
 
-        {auth?.authenticated ? (
+        {!isAnonymous ? (
           <>
             <View className="gap-1">
-              <Text className="text-sm text-foreground">{auth.user?.name}</Text>
-              <Text className="text-xs text-muted-foreground">{auth.user?.email}</Text>
+              {displayName ? (
+                <Text className="text-sm text-foreground">{displayName}</Text>
+              ) : null}
+              {email ? (
+                <Text className="text-xs text-muted-foreground">{email}</Text>
+              ) : null}
             </View>
-            <Text className="text-xs text-muted-foreground">
-              Generations: {auth.usage_count}
-            </Text>
-            <Button variant="outline" onPress={logout} title="Sign Out" />
+            {usage ? (
+              <Text className="text-xs text-muted-foreground">
+                Generations: {usage.usage_count}
+              </Text>
+            ) : null}
+            <Button variant="outline" onPress={signOut} title="Sign Out" />
           </>
         ) : (
           <>
             <Text className="text-sm text-muted-foreground">
-              Sign in with Google to unlock unlimited generations.
+              Sign in with Apple to unlock unlimited generations.
             </Text>
-            {auth && (
+            {usage ? (
               <Text className="text-xs text-muted-foreground">
-                Free generations used: {auth.usage_count} / {auth.limit}
+                Free generations used: {usage.usage_count} / {usage.limit}
               </Text>
-            )}
-            <Button onPress={login} disabled={loading} title="Sign in with Google" />
+            ) : null}
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={8}
+              style={{ width: '100%', height: 48 }}
+              onPress={handleAppleSignIn}
+            />
           </>
         )}
       </View>

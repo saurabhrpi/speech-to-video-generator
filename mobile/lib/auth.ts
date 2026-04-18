@@ -1,68 +1,76 @@
-import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
-import { API_BASE, SESSION_COOKIE_KEY } from './constants';
-import { apiGet, apiPost } from './api-client';
-import type { AuthState } from './types';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 
-/**
- * Open the Google OAuth login flow in the system browser.
- * The backend redirects back to our app scheme after auth completes.
- */
-export async function login(): Promise<AuthState | null> {
-  const redirectUrl = 'speechtovideo://auth-callback';
-  const loginUrl = `${API_BASE}/api/auth/login?next=${encodeURIComponent(redirectUrl)}`;
+export type FirebaseUser = FirebaseAuthTypes.User;
 
-  const result = await WebBrowser.openAuthSessionAsync(loginUrl, redirectUrl);
+export async function ensureSignedIn(): Promise<void> {
+  if (!auth().currentUser) {
+    await auth().signInAnonymously();
+  }
+}
 
-  if (result.type === 'success' && result.url) {
-    // Extract the one-time token from the redirect URL and exchange it
-    // for a session cookie in our own fetch() cookie jar.
-    const url = new URL(result.url);
-    const token = url.searchParams.get('token');
-    if (token) {
-      try {
-        const j = await apiPost<Record<string, any>>('/api/auth/exchange', { token });
-        return {
-          authenticated: !!j?.authenticated,
-          user: j?.user,
-          usage_count: Number(j?.usage_count || 0),
-          limit: Number(j?.limit || 0),
-        };
-      } catch {
-        // Token exchange failed — fall through to fetchSession
+export async function signInWithApple(): Promise<void> {
+  const rawNonce = await generateRawNonce();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce,
+  );
+
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+    nonce: hashedNonce,
+  });
+
+  if (!credential.identityToken) {
+    throw new Error('Apple Sign In did not return an identity token');
+  }
+
+  const appleCred = auth.AppleAuthProvider.credential(
+    credential.identityToken,
+    rawNonce,
+  );
+
+  const current = auth().currentUser;
+  if (current?.isAnonymous) {
+    try {
+      await current.linkWithCredential(appleCred);
+      return;
+    } catch (e: any) {
+      // Apple account already linked to another Firebase user — fall back
+      // to plain sign-in (orphans the anonymous user's data).
+      if (e?.code !== 'auth/credential-already-in-use') {
+        throw e;
       }
     }
-    return fetchSession();
   }
 
-  return null;
+  await auth().signInWithCredential(appleCred);
 }
 
-/**
- * Log out: call the backend then clear stored cookie.
- */
-export async function logout(): Promise<void> {
-  try {
-    await apiPost('/api/auth/logout');
-  } catch {
-    // Best-effort — clear local state even if the request fails
-  }
-  await SecureStore.deleteItemAsync(SESSION_COOKIE_KEY);
+export async function signOut(): Promise<void> {
+  await auth().signOut();
 }
 
-/**
- * Check current session state with the backend.
- */
-export async function fetchSession(): Promise<AuthState | null> {
-  try {
-    const j = await apiGet<Record<string, any>>('/api/auth/session');
-    return {
-      authenticated: !!j?.authenticated,
-      user: j?.user,
-      usage_count: Number(j?.usage_count || 0),
-      limit: Number(j?.limit || 0),
-    };
-  } catch {
-    return null;
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
+  if (!auth().currentUser) {
+    await ensureSignedIn().catch(() => {});
   }
+  const user = auth().currentUser;
+  if (!user) return null;
+  return user.getIdToken(forceRefresh);
+}
+
+export function onAuthChange(cb: (user: FirebaseUser | null) => void): () => void {
+  return auth().onAuthStateChanged(cb);
+}
+
+async function generateRawNonce(length: number = 32): Promise<string> {
+  const bytes = await Crypto.getRandomBytesAsync(length);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }

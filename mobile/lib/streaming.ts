@@ -1,6 +1,6 @@
 import { fetch } from 'expo/fetch';
-import * as SecureStore from 'expo-secure-store';
-import { API_BASE, SESSION_COOKIE_KEY } from './constants';
+import { API_BASE } from './constants';
+import { getIdToken } from './auth';
 import type { PollCallbacks } from './polling';
 
 const MAX_RECONNECTS = 20; // covers ~30+ min of video generation
@@ -24,22 +24,13 @@ export async function streamJob(
     if (signal?.aborted) throw new Error('Aborted');
 
     const headers: Record<string, string> = {};
-    const cookie = await SecureStore.getItemAsync(SESSION_COOKIE_KEY);
-    if (cookie) headers['Cookie'] = cookie;
+    const token = await getIdToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${API_BASE}/api/jobs/${jobId}/stream`, {
       headers,
       signal,
     });
-
-    // Extract cookie once from the SSE connection response
-    if (reconnects === 0) {
-      const setCookie = res.headers.get('set-cookie');
-      if (setCookie) {
-        const v = setCookie.split(';')[0];
-        if (v) SecureStore.setItemAsync(SESSION_COOKIE_KEY, v);
-      }
-    }
 
     if (!res.ok) {
       throw new Error(`SSE connect failed (${res.status})`);

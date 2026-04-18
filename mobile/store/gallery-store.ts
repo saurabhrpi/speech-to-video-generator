@@ -162,7 +162,7 @@ function runPoll(
       abortControllers.delete(jobId);
       if (opts.tempId) abortControllers.delete(opts.tempId);
       if (opts.refreshAuth) {
-        useAuthStore.getState().fetchSession();
+        useAuthStore.getState().refreshUsage();
       }
       if (!hasGenerating(useGalleryStore.getState().jobs)) {
         deactivateKeepAwake(KEEP_AWAKE_TAG);

@@ -70,3 +70,5 @@ debug/
 app_logs.txt
 Motto-and-Mantra.txt
 logs/
+AUTH_MIGRATION.md
+mobile/GoogleService-Info.plist

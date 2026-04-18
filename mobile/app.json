@@ -16,6 +16,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.saurabh.speechtovideo",
+      "usesAppleSignIn": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
         "NSPhotoLibraryUsageDescription": "Save generated videos to your Camera Roll",
@@ -60,6 +62,17 @@
         {
           "photosPermission": "Save generated videos to your Camera Roll.",
           "savePhotosPermission": "Save generated videos to your Camera Roll."
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "expo-apple-authentication",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
       ]
     ],

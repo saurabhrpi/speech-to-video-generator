@@ -23,5 +23,3 @@ export const POLL_INTERVALS: Record<string, number> = {
 
 export const DEFAULT_POLL_INTERVAL = 3000;
 export const MAX_NETWORK_FAILS = 10;
-
-export const SESSION_COOKIE_KEY = 'session_cookie';

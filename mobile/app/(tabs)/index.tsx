@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -32,11 +32,6 @@ export default function SpeechScreen() {
 
   const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
   const startGeneration = useGalleryStore((s) => s.startGeneration);
-
-  // Check auth on mount
-  useEffect(() => {
-    useAuthStore.getState().fetchSession();
-  }, []);
 
   // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);

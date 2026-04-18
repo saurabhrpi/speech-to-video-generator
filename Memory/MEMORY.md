@@ -37,3 +37,5 @@
 - [iOS Crash Reports](reference_ios_crash_reports.md) -- Find and parse .ips crash reports from ~/Library/Logs/DiagnosticReports
 - [Don't trust Explore agents](feedback_explore_agent_trust.md) -- Explore subagents confidently misreport code behavior; verify load-bearing claims with direct Grep before acting
 - [Read CLAUDE.md before diagnosing](feedback_read_claude_md_first.md) -- Check CLAUDE.md for documented design before hypothesizing bugs; many "bugs" are intentional behavior
+- [Apple 4.8 Sign in with Apple rule](reference_apple_48_rule.md) -- Apple Sign In required ONLY if app offers other social logins; Apple-only is compliant; no-auth is compliant
+- [Firebase RN native Apple Sign In](reference_firebase_rn_apple_signin.md) -- Services ID unused (use bundle ID), useFrameworks static required, nonce pattern, anon→Apple linking preserves UID

@@ -1,5 +1,5 @@
-import * as SecureStore from 'expo-secure-store';
-import { API_BASE, SESSION_COOKIE_KEY } from './constants';
+import { API_BASE } from './constants';
+import { getIdToken } from './auth';
 
 export class HttpError extends Error {
   status: number;
@@ -12,29 +12,16 @@ export class HttpError extends Error {
 
 async function getHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
   const headers: Record<string, string> = { ...extra };
-  const cookie = await SecureStore.getItemAsync(SESSION_COOKIE_KEY);
-  if (cookie) {
-    headers['Cookie'] = cookie;
+  const token = await getIdToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
-}
-
-function extractAndStoreCookie(response: Response): void {
-  const setCookie = response.headers.get('set-cookie');
-  if (setCookie) {
-    // Store the raw set-cookie value for future requests.
-    // On native, we just need the cookie key=value pair.
-    const cookieValue = setCookie.split(';')[0];
-    if (cookieValue) {
-      SecureStore.setItemAsync(SESSION_COOKIE_KEY, cookieValue);
-    }
-  }
 }
 
 export async function apiGet<T = any>(path: string): Promise<T> {
   const headers = await getHeaders();
   const res = await fetch(`${API_BASE}${path}`, { headers });
-  extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new HttpError(res.status, `GET ${path} failed (${res.status}): ${text}`);
@@ -58,7 +45,6 @@ export async function apiPost<T = any>(
     headers,
     body: isFormData ? (body as FormData) : JSON.stringify(body),
   });
-  extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new HttpError(res.status, `POST ${path} failed (${res.status}): ${text}`);
@@ -69,7 +55,6 @@ export async function apiPost<T = any>(
 export async function apiDelete<T = any>(path: string): Promise<T> {
   const headers = await getHeaders();
   const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers });
-  extractAndStoreCookie(res);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new HttpError(res.status, `DELETE ${path} failed (${res.status}): ${text}`);

@@ -16,6 +16,7 @@ import 'react-native-reanimated';
 
 import { Colors } from '@/lib/design-tokens';
 import { useGalleryStore } from '@/store/gallery-store';
+import { useAuthStore } from '@/store/auth-store';
 import NetworkBanner from '@/components/NetworkBanner';
 import '../global.css';
 
@@ -60,6 +61,11 @@ export default function RootLayout() {
       useGalleryStore.getState().hydrate();
     }
   }, [loaded, isAlreadyRegistered]);
+
+  useEffect(() => {
+    const unsub = useAuthStore.getState().initialize();
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
