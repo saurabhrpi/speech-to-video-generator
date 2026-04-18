@@ -82,7 +82,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signInWithApple: async () => {
-    await fbSignInWithApple();
+    const user = await fbSignInWithApple();
+    set({ ...applyUser(user), loginRequired: false });
+    try {
+      await get().refreshUsage();
+    } catch {
+      // ignore
+    }
   },
 
   signOut: async () => {

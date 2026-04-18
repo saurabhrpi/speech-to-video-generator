@@ -10,7 +10,7 @@ export async function ensureSignedIn(): Promise<void> {
   }
 }
 
-export async function signInWithApple(): Promise<void> {
+export async function signInWithApple(): Promise<FirebaseUser> {
   const rawNonce = await generateRawNonce();
   const hashedNonce = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
@@ -37,8 +37,8 @@ export async function signInWithApple(): Promise<void> {
   const current = auth().currentUser;
   if (current?.isAnonymous) {
     try {
-      await current.linkWithCredential(appleCred);
-      return;
+      const result = await current.linkWithCredential(appleCred);
+      return result.user;
     } catch (e: any) {
       // Apple account already linked to another Firebase user — fall back
       // to plain sign-in (orphans the anonymous user's data).
@@ -48,7 +48,8 @@ export async function signInWithApple(): Promise<void> {
     }
   }
 
-  await auth().signInWithCredential(appleCred);
+  const result = await auth().signInWithCredential(appleCred);
+  return result.user;
 }
 
 export async function signOut(): Promise<void> {
