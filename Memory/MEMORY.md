@@ -39,3 +39,4 @@
 - [Read CLAUDE.md before diagnosing](feedback_read_claude_md_first.md) -- Check CLAUDE.md for documented design before hypothesizing bugs; many "bugs" are intentional behavior
 - [Apple 4.8 Sign in with Apple rule](reference_apple_48_rule.md) -- Apple Sign In required ONLY if app offers other social logins; Apple-only is compliant; no-auth is compliant
 - [Firebase RN native Apple Sign In](reference_firebase_rn_apple_signin.md) -- Services ID unused (use bundle ID), useFrameworks static required, nonce pattern, anon→Apple linking preserves UID
+- [Monetization Model](project_monetization_model.md) -- Anon free tier → paywall → paid; sign-in bundled with Apple IAP, never a standalone gate

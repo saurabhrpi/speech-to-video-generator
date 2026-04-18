@@ -47,6 +47,7 @@ class Settings:
     nano_banana_edit_model: str = os.environ.get("NANO_BANANA_EDIT_MODEL", "google/nano-banana-pro-edit")
     minimax_api_key: str = os.environ.get("MINIMAX_API_KEY", "")
     firebase_service_account_path: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "")
+    firebase_service_account_json: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 
 
 def get_settings() -> Settings:

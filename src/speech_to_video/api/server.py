@@ -73,7 +73,14 @@ def setup_status():
         "aimlapi_status_path": settings.aimlapi_status_path,
         "openai_chat_model": settings.openai_chat_model,
         "openai_transcribe_model": settings.openai_transcribe_model,
-        "firebase_service_account_present": bool(getattr(settings, "firebase_service_account_path", "")),
+        "firebase_service_account_present": bool(
+            getattr(settings, "firebase_service_account_json", "")
+            or getattr(settings, "firebase_service_account_path", "")
+        ),
+        "firebase_credentials_source": (
+            "json_env" if getattr(settings, "firebase_service_account_json", "")
+            else ("path" if getattr(settings, "firebase_service_account_path", "") else "missing")
+        ),
     }
     return {"env": info}
 

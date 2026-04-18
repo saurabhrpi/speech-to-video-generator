@@ -4,11 +4,16 @@ Mobile clients attach `Authorization: Bearer <firebase_id_token>` on every
 request. `verify_firebase_token` is a FastAPI dependency that validates the
 token with firebase-admin and returns `{uid, is_anonymous, email, name}`.
 
-firebase-admin is initialized lazily on first call using the service-account
-JSON at `FIREBASE_SERVICE_ACCOUNT_PATH`.
+firebase-admin is initialized lazily on first call from one of two sources
+(in priority order):
+  1. `FIREBASE_SERVICE_ACCOUNT_JSON` — the full service-account JSON as a
+     single-line string. Used on Replit / any cloud host.
+  2. `FIREBASE_SERVICE_ACCOUNT_PATH` — a filesystem path to the JSON file.
+     Used for local development.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Dict, Optional
@@ -31,17 +36,35 @@ def _init_firebase_admin() -> None:
         _initialized = True
         return
 
+    sa_json_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    if sa_json_raw:
+        try:
+            sa_dict = json.loads(sa_json_raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"FIREBASE_SERVICE_ACCOUNT_JSON is set but is not valid JSON: {exc}"
+            ) from exc
+        cred = credentials.Certificate(sa_dict)
+        firebase_admin.initialize_app(cred)
+        _initialized = True
+        logger.info(
+            "firebase-admin initialized from FIREBASE_SERVICE_ACCOUNT_JSON (project_id=%s)",
+            sa_dict.get("project_id", "?"),
+        )
+        return
+
     sa_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
     sa_path = os.path.expanduser(sa_path) if sa_path else ""
     if not sa_path or not os.path.isfile(sa_path):
         raise RuntimeError(
-            "FIREBASE_SERVICE_ACCOUNT_PATH is not set or does not point to a readable file. "
-            f"Got: {sa_path!r}"
+            "Firebase credentials not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON "
+            "(preferred, full JSON string) or FIREBASE_SERVICE_ACCOUNT_PATH (path to "
+            f"JSON file). Path got: {sa_path!r}"
         )
     cred = credentials.Certificate(sa_path)
     firebase_admin.initialize_app(cred)
     _initialized = True
-    logger.info("firebase-admin initialized from %s", sa_path)
+    logger.info("firebase-admin initialized from FIREBASE_SERVICE_ACCOUNT_PATH=%s", sa_path)
 
 
 def _decode_token(id_token: str) -> Dict:
