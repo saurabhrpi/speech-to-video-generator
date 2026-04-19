@@ -24,7 +24,7 @@
         "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "4"
+      "buildNumber": "6"
     },
     "android": {
       "adaptiveIcon": {
@@ -73,7 +73,10 @@
         {
           "ios": {
             "useFrameworks": "static",
-            "forceStaticLinking": ["RNFBApp", "RNFBAuth"]
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAuth"
+            ]
           }
         }
       ]

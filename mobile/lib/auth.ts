@@ -11,28 +11,7 @@ export async function ensureSignedIn(): Promise<void> {
 }
 
 export async function signInWithApple(): Promise<FirebaseUser> {
-  const rawNonce = await generateRawNonce();
-  const hashedNonce = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    rawNonce,
-  );
-
-  const credential = await AppleAuthentication.signInAsync({
-    requestedScopes: [
-      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-      AppleAuthentication.AppleAuthenticationScope.EMAIL,
-    ],
-    nonce: hashedNonce,
-  });
-
-  if (!credential.identityToken) {
-    throw new Error('Apple Sign In did not return an identity token');
-  }
-
-  const appleCred = auth.AppleAuthProvider.credential(
-    credential.identityToken,
-    rawNonce,
-  );
+  const appleCred = await requestAppleCredential();
 
   const current = auth().currentUser;
   if (current?.isAnonymous) {
@@ -40,11 +19,16 @@ export async function signInWithApple(): Promise<FirebaseUser> {
       const result = await current.linkWithCredential(appleCred);
       return result.user;
     } catch (e: any) {
-      // Apple account already linked to another Firebase user — fall back
-      // to plain sign-in (orphans the anonymous user's data).
       if (e?.code !== 'auth/credential-already-in-use') {
         throw e;
       }
+      // Apple ID is already linked to another Firebase user. The failed link
+      // consumed this nonce, so Firebase rejects re-use with
+      // [auth/unknown] Duplicate credential received. Request a fresh Apple
+      // credential and sign in with it.
+      const freshCred = await requestAppleCredential();
+      const result = await auth().signInWithCredential(freshCred);
+      return result.user;
     }
   }
 
@@ -74,4 +58,29 @@ async function generateRawNonce(length: number = 32): Promise<string> {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+async function requestAppleCredential() {
+  const rawNonce = await generateRawNonce();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce,
+  );
+
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+    nonce: hashedNonce,
+  });
+
+  if (!credential.identityToken) {
+    throw new Error('Apple Sign In did not return an identity token');
+  }
+
+  return auth.AppleAuthProvider.credential(
+    credential.identityToken,
+    rawNonce,
+  );
 }

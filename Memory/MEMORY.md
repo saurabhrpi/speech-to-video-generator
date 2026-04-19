@@ -40,3 +40,7 @@
 - [Apple 4.8 Sign in with Apple rule](reference_apple_48_rule.md) -- Apple Sign In required ONLY if app offers other social logins; Apple-only is compliant; no-auth is compliant
 - [Firebase RN native Apple Sign In](reference_firebase_rn_apple_signin.md) -- Services ID unused (use bundle ID), useFrameworks static required, nonce pattern, anon→Apple linking preserves UID
 - [Monetization Model](project_monetization_model.md) -- Anon free tier → paywall → paid; sign-in bundled with Apple IAP, never a standalone gate
+- [RNFB modular headers fix](reference_rnfb_modular_headers.md) -- SDK 54 + RN 0.81 + RNFB 24 + static frameworks → use forceStaticLinking in expo-build-properties
+- [Firebase link silent on listener](reference_firebase_link_no_listener.md) -- onAuthStateChanged doesn't fire on linkWithCredential — anon→Apple upgrade needs explicit state sync
+- [EAS inspect/submit — user runs](feedback_eas_user_runs.md) -- For `eas build:view`, `eas submit`, etc. give the command; don't execute. Queueing with `--no-wait` is fine.
+- [Never lose user clips](feedback_never_lose_clips.md) -- Hard rule: no auth/migration/account flow may orphan clips; cross-UID merges required when the active UID changes
