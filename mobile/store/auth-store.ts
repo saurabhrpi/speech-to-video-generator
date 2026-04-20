@@ -20,14 +20,15 @@ interface AuthStore {
   displayName: string | null;
   email: string | null;
   loading: boolean;
-  loginRequired: boolean;
+  paywallOpen: boolean;
   usage: Usage | null;
 
   initialize: () => () => void;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshUsage: () => Promise<void>;
-  setLoginRequired: (v: boolean) => void;
+  openPaywall: () => void;
+  closePaywall: () => void;
   canGenerate: () => boolean;
 }
 
@@ -54,7 +55,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   displayName: null,
   email: null,
   loading: true,
-  loginRequired: false,
+  paywallOpen: false,
   usage: null,
 
   initialize: () => {
@@ -70,9 +71,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return;
       }
       set({ ...applyUser(user), loading: false });
-      if (!user.isAnonymous) {
-        set({ loginRequired: false });
-      }
       syncPurchasesUser(user.uid);
       try {
         await get().refreshUsage();
@@ -85,7 +83,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signInWithApple: async () => {
     const user = await fbSignInWithApple();
-    set({ ...applyUser(user), loginRequired: false });
+    set(applyUser(user));
     try {
       await get().refreshUsage();
     } catch {
@@ -113,7 +111,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  setLoginRequired: (v) => set({ loginRequired: v }),
+  openPaywall: () => set({ paywallOpen: true }),
+  closePaywall: () => set({ paywallOpen: false }),
 
   canGenerate: () => {
     const s = get();

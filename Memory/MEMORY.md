@@ -47,3 +47,5 @@
 - [Firebase anon persists on iOS](reference_firebase_anon_persists_ios.md) -- @react-native-firebase/auth DOES persist anon UIDs across kill+relaunch; new UIDs on Firebase trace to user actions, not persistence bugs
 - [RevenueCat dual SDK keys](reference_revenuecat_sdk_keys.md) -- RC has two iOS SDK keys (appl_ for App Store, test_ for Test Store); wrong key = offerings fetch error; switch via __DEV__
 - [Expo prebuild iOS-only flag](reference_expo_prebuild_ios_only.md) -- npx expo prebuild fails without google-services.json when RNFB is installed; use --platform ios to skip Android
+- [Simulator Keychain survives uninstall](reference_simulator_keychain_persists.md) -- simctl uninstall doesn't wipe Keychain; Firebase anon UIDs persist across reinstall. Use simctl erase booted for true fresh install.
+- [Primary Simulator UDID](reference_simulator_udid.md) -- UDID + correct shutdown→erase→boot sequence for the sim the user runs dev-client builds against

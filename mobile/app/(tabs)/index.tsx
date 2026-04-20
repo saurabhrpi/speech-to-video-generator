@@ -30,7 +30,7 @@ export default function SpeechScreen() {
   const [selectedModel, setSelectedModel] = useState<ModelKey>('hailuo');
   const [selectedDuration, setSelectedDuration] = useState(6);
 
-  const { canGenerate, setLoginRequired, loginRequired } = useAuthStore();
+  const { canGenerate, openPaywall } = useAuthStore();
   const startGeneration = useGalleryStore((s) => s.startGeneration);
 
   // Confirmation modal state
@@ -65,7 +65,7 @@ export default function SpeechScreen() {
 
   function dispatchGeneration(formData: FormData, promptLabel: string) {
     if (!canGenerate()) {
-      setLoginRequired(true);
+      openPaywall();
       return;
     }
     const model = MODELS.find((m) => m.key === selectedModel)!;
@@ -131,13 +131,6 @@ export default function SpeechScreen() {
           Type a prompt or record audio to generate a video.
         </Text>
       </View>
-
-      {/* Login required */}
-      {loginRequired && (
-        <View className="rounded-card border border-destructive/50 bg-destructive/10 p-3">
-          <Text className="text-body font-body text-destructive">Sign in required — tap the gear icon above.</Text>
-        </View>
-      )}
 
       {/* Model selector */}
       <View className="gap-2">

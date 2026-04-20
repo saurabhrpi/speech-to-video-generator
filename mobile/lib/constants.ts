@@ -3,6 +3,13 @@ export const API_BASE = 'https://speech-2-video.ai';
 export const REVENUECAT_IOS_APP_STORE_KEY = 'appl_vmQCgcGmPddGaeaDkwiAOvJPaWt';
 export const REVENUECAT_TEST_STORE_KEY = 'test_zQWpCAsWrKrLmsEhEVhFzZAUIwi';
 
+// Pending final lock in LAUNCH_CHECKLIST Task #2. Moves server-side once
+// entitlement/credit tracking (Task #8) lands.
+export const PRO_PACK_COUNT = 15;
+
+export const TERMS_URL = 'https://speech-2-video.ai/terms';
+export const PRIVACY_URL = 'https://speech-2-video.ai/privacy';
+
 export const NUM_STAGES = 7;
 
 export const STAGE_PHASES = Array.from({ length: NUM_STAGES }, (_, i) => `stage_${i + 1}`);

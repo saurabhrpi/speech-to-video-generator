@@ -19,6 +19,7 @@ import { configurePurchases } from '@/lib/purchases';
 import { useGalleryStore } from '@/store/gallery-store';
 import { useAuthStore } from '@/store/auth-store';
 import NetworkBanner from '@/components/NetworkBanner';
+import Paywall from '@/components/Paywall';
 import '../global.css';
 
 const WarmDarkTheme: Theme = {
@@ -103,6 +104,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
         </Stack>
+        <Paywall />
       </ThemeProvider>
     </GestureHandlerRootView>
   );
