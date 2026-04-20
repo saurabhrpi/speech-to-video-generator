@@ -7,6 +7,7 @@ import {
   type FirebaseUser,
 } from '@/lib/auth';
 import { apiGet } from '@/lib/api-client';
+import { resetPurchasesUser, syncPurchasesUser } from '@/lib/purchases';
 
 interface Usage {
   usage_count: number;
@@ -72,6 +73,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (!user.isAnonymous) {
         set({ loginRequired: false });
       }
+      syncPurchasesUser(user.uid);
       try {
         await get().refreshUsage();
       } catch {
@@ -93,6 +95,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signOut: async () => {
     await fbSignOut();
+    await resetPurchasesUser();
     set({ usage: null });
   },
 

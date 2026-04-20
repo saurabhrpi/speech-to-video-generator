@@ -44,3 +44,6 @@
 - [Firebase link silent on listener](reference_firebase_link_no_listener.md) -- onAuthStateChanged doesn't fire on linkWithCredential — anon→Apple upgrade needs explicit state sync
 - [EAS inspect/submit — user runs](feedback_eas_user_runs.md) -- For `eas build:view`, `eas submit`, etc. give the command; don't execute. Queueing with `--no-wait` is fine.
 - [Never lose user clips](feedback_never_lose_clips.md) -- Hard rule: no auth/migration/account flow may orphan clips; cross-UID merges required when the active UID changes
+- [Firebase anon persists on iOS](reference_firebase_anon_persists_ios.md) -- @react-native-firebase/auth DOES persist anon UIDs across kill+relaunch; new UIDs on Firebase trace to user actions, not persistence bugs
+- [RevenueCat dual SDK keys](reference_revenuecat_sdk_keys.md) -- RC has two iOS SDK keys (appl_ for App Store, test_ for Test Store); wrong key = offerings fetch error; switch via __DEV__
+- [Expo prebuild iOS-only flag](reference_expo_prebuild_ios_only.md) -- npx expo prebuild fails without google-services.json when RNFB is installed; use --platform ios to skip Android

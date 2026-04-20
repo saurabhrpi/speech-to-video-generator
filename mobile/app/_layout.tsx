@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Colors } from '@/lib/design-tokens';
+import { configurePurchases } from '@/lib/purchases';
 import { useGalleryStore } from '@/store/gallery-store';
 import { useAuthStore } from '@/store/auth-store';
 import NetworkBanner from '@/components/NetworkBanner';
@@ -63,6 +64,7 @@ export default function RootLayout() {
   }, [loaded, isAlreadyRegistered]);
 
   useEffect(() => {
+    configurePurchases();
     const unsub = useAuthStore.getState().initialize();
     return () => unsub();
   }, []);
