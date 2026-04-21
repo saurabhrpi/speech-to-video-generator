@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   View,
@@ -15,29 +15,43 @@ import Purchases, {
 } from 'react-native-purchases';
 
 import { Button } from '@/components/Button';
+import { grantCreditsForTransaction, restoreAndGrant } from '@/lib/purchases';
 import { useAuthStore } from '@/store/auth-store';
 import { Colors } from '@/lib/design-tokens';
 import {
+  BEST_VALUE_PACK,
+  PACK_CREDITS,
+  PACK_SKUS,
   PRIVACY_URL,
-  PRO_PACK_COUNT,
   TERMS_URL,
+  type PackSku,
 } from '@/lib/constants';
 
-const BULLETS = [
-  'Hyper-realistic, film-crew quality renders',
-  'TikTok & Instagram-ready exports',
-  'No watermark',
-  'New styles & room types added regularly',
-];
+type PackageMap = Record<PackSku, PurchasesPackage>;
+
+function formatUnit(price: number, currencyCode: string, credits: number): string {
+  const per = price / credits;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    }).format(per);
+  } catch {
+    return `${currencyCode} ${per.toFixed(3)}`;
+  }
+}
 
 export default function Paywall() {
   const paywallOpen = useAuthStore((s) => s.paywallOpen);
   const closePaywall = useAuthStore((s) => s.closePaywall);
   const isAnonymous = useAuthStore((s) => s.isAnonymous);
   const signInWithApple = useAuthStore((s) => s.signInWithApple);
-  const refreshUsage = useAuthStore((s) => s.refreshUsage);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
 
-  const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+  const [packages, setPackages] = useState<PackageMap | null>(null);
+  const [selectedSku, setSelectedSku] = useState<PackSku>(BEST_VALUE_PACK);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
@@ -47,31 +61,49 @@ export default function Paywall() {
     let cancelled = false;
     setLoadError(null);
     setPurchaseError(null);
+    setPackages(null);
+    setSelectedSku(BEST_VALUE_PACK);
+
     Purchases.getOfferings()
       .then((result) => {
         if (cancelled) return;
-        const current = result.current;
-        if (!current || current.availablePackages.length === 0) {
+        const current: PurchasesOffering | null = result.current ?? null;
+        if (!current) {
           setLoadError('No offerings available. Please try again later.');
-          setOffering(null);
           return;
         }
-        setOffering(current);
+        const map: Partial<PackageMap> = {};
+        for (const pkg of current.availablePackages) {
+          const id = pkg.identifier as PackSku;
+          if (PACK_SKUS.includes(id)) map[id] = pkg;
+        }
+        const missing = PACK_SKUS.filter((s) => !map[s]);
+        if (missing.length > 0) {
+          setLoadError(`Missing packs: ${missing.join(', ')}.`);
+          return;
+        }
+        setPackages(map as PackageMap);
       })
       .catch((e: any) => {
         if (cancelled) return;
         setLoadError(e?.message ?? 'Failed to load offering.');
       });
+
     return () => {
       cancelled = true;
     };
   }, [paywallOpen]);
 
-  const pkg: PurchasesPackage | null = offering?.availablePackages[0] ?? null;
-  const priceString = pkg?.product.priceString;
+  const selectedPkg = packages?.[selectedSku] ?? null;
+
+  const ctaTitle = useMemo(() => {
+    if (purchasing) return 'Processing…';
+    if (!selectedPkg) return 'Loading…';
+    return `Buy ${PACK_CREDITS[selectedSku]} credits — ${selectedPkg.product.priceString}`;
+  }, [purchasing, selectedPkg, selectedSku]);
 
   async function handlePurchase() {
-    if (!pkg) return;
+    if (!selectedPkg) return;
     setPurchasing(true);
     setPurchaseError(null);
     try {
@@ -79,19 +111,26 @@ export default function Paywall() {
         try {
           await signInWithApple();
         } catch (e: any) {
-          if (e?.code === 'ERR_REQUEST_CANCELED') {
-            return;
-          }
+          if (e?.code === 'ERR_REQUEST_CANCELED') return;
           throw e;
         }
       }
-      await Purchases.purchasePackage(pkg);
-      await refreshUsage();
-      closePaywall();
-    } catch (e: any) {
-      if (e?.userCancelled) {
+      const res = await Purchases.purchasePackage(selectedPkg);
+      const txId = res.transaction?.transactionIdentifier;
+      if (!txId) {
+        setPurchaseError('Purchase succeeded but no transaction id returned. Tap Restore.');
         return;
       }
+      try {
+        await grantCreditsForTransaction(selectedPkg.identifier, txId);
+        await refreshCredits();
+        closePaywall();
+      } catch {
+        await refreshCredits();
+        setPurchaseError("Credits delayed — tap Restore if they aren't applied.");
+      }
+    } catch (e: any) {
+      if (e?.userCancelled) return;
       setPurchaseError(e?.message ?? 'Purchase failed. Please try again.');
     } finally {
       setPurchasing(false);
@@ -102,8 +141,8 @@ export default function Paywall() {
     setPurchasing(true);
     setPurchaseError(null);
     try {
-      await Purchases.restorePurchases();
-      await refreshUsage();
+      await restoreAndGrant();
+      await refreshCredits();
       closePaywall();
     } catch (e: any) {
       setPurchaseError(e?.message ?? 'Restore failed. Please try again.');
@@ -111,12 +150,6 @@ export default function Paywall() {
       setPurchasing(false);
     }
   }
-
-  const ctaTitle = !pkg
-    ? 'Loading…'
-    : purchasing
-    ? 'Processing…'
-    : `Unlock Pro — ${PRO_PACK_COUNT} timelapses for ${priceString}`;
 
   return (
     <Modal
@@ -138,42 +171,79 @@ export default function Paywall() {
 
         <ScrollView
           className="flex-1"
-          contentContainerClassName="px-6 pb-8 pt-4 gap-8"
+          contentContainerClassName="px-6 pb-8 pt-4 gap-6"
           showsVerticalScrollIndicator={false}
         >
-          <View className="gap-3">
-            <Text className="text-heading font-heading text-foreground">
-              Unlock Pro
-            </Text>
+          <View className="gap-2">
+            <Text className="text-heading font-heading text-foreground">Buy Credits</Text>
             <Text className="text-body font-body text-muted-foreground">
-              One-time purchase. No subscription.
+              One-time purchase. Credits never expire.
             </Text>
           </View>
 
           <View className="gap-3">
-            {BULLETS.map((b) => (
-              <View key={b} className="flex-row items-start gap-3">
-                <Text className="text-body font-body text-foreground">•</Text>
-                <Text className="flex-1 text-body font-body text-foreground">
-                  {b}
-                </Text>
-              </View>
-            ))}
+            {PACK_SKUS.map((sku) => {
+              const pkg = packages?.[sku];
+              const selected = selectedSku === sku;
+              const isBest = sku === BEST_VALUE_PACK;
+              const credits = PACK_CREDITS[sku];
+              return (
+                <Pressable
+                  key={sku}
+                  onPress={() => setSelectedSku(sku)}
+                  disabled={!pkg}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={{
+                    borderWidth: 2,
+                    borderColor: selected ? Colors.textPrimary : Colors.border,
+                    backgroundColor: Colors.card,
+                    opacity: pkg ? 1 : 0.5,
+                  }}
+                  className="rounded-card p-4"
+                >
+                  {isBest ? (
+                    <View
+                      style={{ backgroundColor: Colors.textPrimary, alignSelf: 'flex-start' }}
+                      className="mb-2 rounded-full px-2 py-0.5"
+                    >
+                      <Text
+                        style={{ color: Colors.background }}
+                        className="text-caption font-body"
+                      >
+                        Best value
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-subheading font-heading text-foreground">
+                      {credits} credits
+                    </Text>
+                    <Text className="text-subheading font-heading text-foreground">
+                      {pkg?.product.priceString ?? '—'}
+                    </Text>
+                  </View>
+                  <View className="mt-1 flex-row items-center justify-end">
+                    <Text className="text-caption font-body text-muted-foreground">
+                      {pkg
+                        ? `${formatUnit(pkg.product.price, pkg.product.currencyCode, credits)} / credit`
+                        : ' '}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
 
           {loadError ? (
             <View className="rounded-card border border-destructive/50 bg-destructive/10 p-3">
-              <Text className="text-body font-body text-destructive">
-                {loadError}
-              </Text>
+              <Text className="text-body font-body text-destructive">{loadError}</Text>
             </View>
           ) : null}
 
           {purchaseError ? (
             <View className="rounded-card border border-destructive/50 bg-destructive/10 p-3">
-              <Text className="text-body font-body text-destructive">
-                {purchaseError}
-              </Text>
+              <Text className="text-body font-body text-destructive">{purchaseError}</Text>
             </View>
           ) : null}
         </ScrollView>
@@ -182,7 +252,7 @@ export default function Paywall() {
           <Button
             size="lg"
             onPress={handlePurchase}
-            disabled={!pkg || purchasing}
+            disabled={!selectedPkg || purchasing}
             title={ctaTitle}
             className="w-full"
           />

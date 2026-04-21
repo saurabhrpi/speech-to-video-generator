@@ -162,7 +162,7 @@ function runPoll(
       abortControllers.delete(jobId);
       if (opts.tempId) abortControllers.delete(opts.tempId);
       if (opts.refreshAuth) {
-        useAuthStore.getState().refreshUsage();
+        useAuthStore.getState().refreshCredits();
       }
       if (!hasGenerating(useGalleryStore.getState().jobs)) {
         deactivateKeepAwake(KEEP_AWAKE_TAG);
@@ -219,7 +219,6 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
         runPoll(job_id, meta.prompt, ac, { tempId, refreshAuth: true });
       } catch (err: any) {
         if (err?.message === 'Aborted') return;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         set((s) => {
           const jobs = s.jobs.filter((j) => j.id !== tempId);
           persist(jobs);
@@ -229,6 +228,15 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
         if (!hasGenerating(get().jobs)) {
           deactivateKeepAwake(KEEP_AWAKE_TAG);
         }
+        // 402 = server's credit gate rejected the request (client balance was stale).
+        // Re-pull balance and surface the paywall silently — the user already knows they're out.
+        if (err?.status === 402) {
+          const auth = useAuthStore.getState();
+          auth.refreshCredits();
+          auth.openPaywall();
+          return;
+        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Generation failed', err.message || 'Network error');
       }
     })();

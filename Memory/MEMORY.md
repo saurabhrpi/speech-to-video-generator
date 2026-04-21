@@ -3,6 +3,7 @@
 - [Expo Migration](project_expo_migration.md) -- Migrated from Capacitor to Expo (React Native) based on friend's advice
 - [User Profile](user_profile.md) -- iOS app business goals, friend with successful iOS app
 - [NOW.md Frequency](feedback_now_md.md) -- Only update NOW.md at end of session, not mid-work
+- [NOW.md Carryover Rule](feedback_now_md_carryover.md) -- Don't drop unresolved Open Questions at /close; trim only when resolved or moved to a tracked artifact
 - [Summary Scope](feedback_summary_delta.md) -- /summary = summarize ALL uncommitted changes since last commit, no delta logic
 - [Replit Log Format](reference_replit_logs.md) -- How to read exported Replit backend logs (4 lines per row)
 - [Analyze Before Concluding](feedback_analysis_depth.md) -- Don't jump to lazy conclusions; analyze evidence, think multi-directionally, make defensible arguments
@@ -46,6 +47,7 @@
 - [Never lose user clips](feedback_never_lose_clips.md) -- Hard rule: no auth/migration/account flow may orphan clips; cross-UID merges required when the active UID changes
 - [Firebase anon persists on iOS](reference_firebase_anon_persists_ios.md) -- @react-native-firebase/auth DOES persist anon UIDs across kill+relaunch; new UIDs on Firebase trace to user actions, not persistence bugs
 - [RevenueCat dual SDK keys](reference_revenuecat_sdk_keys.md) -- RC has two iOS SDK keys (appl_ for App Store, test_ for Test Store); wrong key = offerings fetch error; switch via __DEV__
+- [RC grant fields](reference_revenuecat_grant_fields.md) -- Send `pkg.product.identifier` + `res.transaction.transactionIdentifier` to server; NOT `pkg.identifier`; retry 404 with backoff
 - [Expo prebuild iOS-only flag](reference_expo_prebuild_ios_only.md) -- npx expo prebuild fails without google-services.json when RNFB is installed; use --platform ios to skip Android
 - [Simulator Keychain survives uninstall](reference_simulator_keychain_persists.md) -- simctl uninstall doesn't wipe Keychain; Firebase anon UIDs persist across reinstall. Use simctl erase booted for true fresh install.
 - [Primary Simulator UDID](reference_simulator_udid.md) -- UDID + correct shutdown→erase→boot sequence for the sim the user runs dev-client builds against

@@ -31,7 +31,9 @@ from ..services.video_service import VideoService
 from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
 from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response
+from ..utils import credit_store
 from ..utils.video import stitch_videos_detailed, stitch_timelapse_clips
+from . import credits as credits_api
 from .firebase_auth import verify_firebase_token
 
 
@@ -39,6 +41,7 @@ settings = get_settings()
 service = VideoService(settings)
 
 app = FastAPI(title="Speech to Video API")
+app.include_router(credits_api.router)
 
 
 # CORS for local dev (Vite default origin)
@@ -85,28 +88,70 @@ def setup_status():
     return {"env": info}
 
 
-# --------- Auth and usage limiting (Firebase-based) ---------
-_UNAUTH_LIMIT = int(os.getenv("UNAUTH_GEN_LIMIT", "1"))
-# Per-UID usage bucket. Only anonymous users are limited; signed-in are unlimited.
-_UID_USAGE: dict[str, int] = {}
+# --------- Auth and credit gating (Firebase ID token + Firestore ledger) ---------
+
+# Credit cost per (model_family, duration_seconds). Mobile sends full model
+# ids (e.g. "minimax/hailuo-2.3"); _model_family reduces those to the keys here.
+CREDIT_COSTS: Dict[tuple, int] = {
+    ("hailuo", 6): 5,
+    ("hailuo", 10): 9,
+    ("kling", 3): 5,
+    ("kling", 10): 15,
+    ("kling", 15): 23,
+}
+
+_ANON_STARTER_CREDITS = 5
 
 
-def _get_usage(uid: str) -> int:
-    return int(_UID_USAGE.get(uid, 0))
+def _cost_table_public() -> Dict[str, Dict[str, int]]:
+    """Shape CREDIT_COSTS into {family: {duration_str: cost}} for the mobile client."""
+    out: Dict[str, Dict[str, int]] = {}
+    for (family, dur), cost in CREDIT_COSTS.items():
+        out.setdefault(family, {})[str(dur)] = int(cost)
+    return out
 
 
-def _inc_usage(user: Dict) -> int:
-    """Increment usage for anonymous users only. No-op for signed-in users."""
-    if not user.get("is_anonymous"):
-        return 0
-    uid = user["uid"]
-    _UID_USAGE[uid] = _UID_USAGE.get(uid, 0) + 1
-    return _UID_USAGE[uid]
+def _model_family(model_id: Optional[str]) -> Optional[str]:
+    if not model_id:
+        return None
+    m = model_id.lower()
+    if "hailuo" in m or "minimax" in m:
+        return "hailuo"
+    if "kling" in m:
+        return "kling"
+    return None
 
 
-def _check_usage_or_401(user: Dict) -> None:
-    if user.get("is_anonymous") and _get_usage(user["uid"]) >= _UNAUTH_LIMIT:
-        raise HTTPException(status_code=401, detail="login_required")
+def _cost_for(model_id: Optional[str], duration: Optional[int]) -> Optional[int]:
+    family = _model_family(model_id)
+    if family is None or duration is None:
+        return None
+    return CREDIT_COSTS.get((family, int(duration)))
+
+
+def _ensure_ledger(user: Dict) -> None:
+    """Seed the anon starter once per anon UID. No-op for signed-in users and on replay."""
+    if user.get("is_anonymous"):
+        try:
+            credit_store.ensure_anon_starter(user["uid"], amount=_ANON_STARTER_CREDITS)
+        except Exception:
+            logger.exception("ensure_anon_starter failed uid=%s", user.get("uid"))
+
+
+def _check_credits_or_402(user: Dict, cost: int) -> int:
+    """Raise 402 if balance < cost. Returns current balance on success."""
+    _ensure_ledger(user)
+    balance = credit_store.get_balance(user["uid"])
+    if balance < int(cost):
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "insufficient_credits",
+                "required": int(cost),
+                "balance": int(balance),
+            },
+        )
+    return balance
 
 
 def _user_namespace(user: Dict) -> Optional[str]:
@@ -118,14 +163,16 @@ def _user_namespace(user: Dict) -> Optional[str]:
 
 @app.get("/api/auth/session")
 def auth_session(user: Dict = Depends(verify_firebase_token)):
+    _ensure_ledger(user)
+    balance = credit_store.get_balance(user["uid"])
     return {
         "uid": user["uid"],
         "is_anonymous": user["is_anonymous"],
         "email": user.get("email"),
         "name": user.get("name"),
         "provider": user.get("provider"),
-        "usage_count": _get_usage(user["uid"]),
-        "limit": _UNAUTH_LIMIT,
+        "credit_balance": int(balance),
+        "cost_table": _cost_table_public(),
     }
 
 
@@ -136,12 +183,9 @@ def generate_video(
     quality: str = Form("high"),
     user: Dict = Depends(verify_firebase_token),
 ):
-    _check_usage_or_401(user)
     if not prompt or len(prompt.strip()) == 0:
         raise HTTPException(status_code=400, detail="Prompt is required")
     result = service.generate_video(prompt=prompt.strip(), duration=int(duration), quality=quality)
-    if result.get("success") or result.get("video_url"):
-        _inc_usage(user)
     return JSONResponse(result)
 
 
@@ -153,7 +197,6 @@ async def speech_to_video(
     prompt: Optional[str] = Form(None),
     user: Dict = Depends(verify_firebase_token),
 ):
-    _check_usage_or_401(user)
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio.filename or "")[1] or ".wav") as tmpf:
             contents = await audio.read()
@@ -170,8 +213,6 @@ async def speech_to_video(
             result = service.generate_video(prompt=prompt.strip(), duration=int(duration), quality=quality)
         else:
             result = service.speech_to_video_with_audio(audio_path=tmp_path, duration=int(duration), quality=quality)
-        if result.get("success") or result.get("video_url"):
-            _inc_usage(user)
         return JSONResponse(result)
     finally:
         try:
@@ -417,8 +458,6 @@ def timelapse_options():
 async def generate_timelapse(request: Request, user: Dict = Depends(verify_firebase_token)):
     from ..utils.job_manager import create_job, update_job, start_job
 
-    _check_usage_or_401(user)
-
     try:
         body = await request.json()
     except Exception:
@@ -489,8 +528,6 @@ async def generate_timelapse(request: Request, user: Dict = Depends(verify_fireb
 @app.post("/api/generate/custom-videos")
 async def generate_custom_videos(request: Request, user: Dict = Depends(verify_firebase_token)):
     from ..utils.job_manager import create_job, update_job, start_job
-
-    _check_usage_or_401(user)
 
     try:
         body = await request.json()
@@ -570,20 +607,39 @@ async def stitch_custom_videos(request: Request, user: Dict = Depends(verify_fir
     return JSONResponse(result)
 
 
-def _maybe_count_job_usage(job: Dict, job_id: str) -> None:
-    """If the job just completed with a video_url and belongs to an anon user, count it once."""
-    from ..utils.job_manager import update_job
+def _maybe_consume_job_credits(job: Dict, job_id: str) -> None:
+    """Deduct the job's credit cost from its owner — exactly once per job.
 
-    if job.get("status") != "completed" or job.get("usage_counted"):
+    Runs only after the job has successfully produced a video_url, so failed
+    generations don't consume credits. `try_claim` gives us atomic
+    exactly-once semantics across concurrent pollers.
+    """
+    from ..utils.job_manager import try_claim
+
+    if job.get("status") != "completed":
         return
     result = job.get("result") or {}
     if not result.get("video_url"):
         return
+    if not try_claim(job_id, "credit_consumed"):
+        return
     uid = job.get("uid")
-    is_anonymous = job.get("is_anonymous")
-    if uid and is_anonymous:
-        _inc_usage({"uid": uid, "is_anonymous": True})
-    update_job(job_id, usage_counted=True)
+    cost = int(job.get("credit_cost") or 0)
+    if not uid or cost <= 0:
+        return
+    try:
+        new_balance = credit_store.consume(uid, cost)
+        logger.info(
+            "credits consumed uid=%s job=%s cost=%s new_balance=%s",
+            uid, job_id, cost, new_balance,
+        )
+    except credit_store.InsufficientCredits as exc:
+        logger.error(
+            "credits consume shortfall at completion uid=%s job=%s: %s",
+            uid, job_id, exc,
+        )
+    except Exception:
+        logger.exception("credits consume failed uid=%s job=%s", uid, job_id)
 
 
 @app.get("/api/jobs/{job_id}")
@@ -594,12 +650,10 @@ def get_job_status(job_id: str, user: Dict = Depends(verify_firebase_token)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    _maybe_count_job_usage(job, job_id)
+    _maybe_consume_job_credits(job, job_id)
 
-    job.pop("created_at", None)
-    job.pop("usage_counted", None)
-    job.pop("uid", None)
-    job.pop("is_anonymous", None)
+    for internal_field in ("created_at", "uid", "is_anonymous", "credit_cost", "credit_consumed", "usage_counted"):
+        job.pop(internal_field, None)
     return JSONResponse(job)
 
 
@@ -654,7 +708,7 @@ async def stream_job_sse(request: Request, job_id: str, user: Dict = Depends(ver
 
             if job["status"] == "completed":
                 event["result"] = job.get("result")
-                _maybe_count_job_usage(job, job_id)
+                _maybe_consume_job_credits(job, job_id)
 
             if job["status"] == "failed":
                 event["error"] = (job.get("result") or {}).get("error", job.get("message", ""))
@@ -904,7 +958,13 @@ async def create_speech_to_video(
     duration: Optional[int] = Form(None),
     user: Dict = Depends(verify_firebase_token),
 ):
-    _check_usage_or_401(user)
+    cost = _cost_for(model, duration)
+    if cost is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported_model_or_duration: model={model!r} duration={duration!r}",
+        )
+    _check_credits_or_402(user, cost)
 
     text = (prompt or "").strip()
     tmp_path = None
@@ -935,7 +995,12 @@ async def create_speech_to_video(
     from ..utils.job_manager import create_job, update_job, start_job
 
     job_id = create_job()
-    update_job(job_id, uid=user["uid"], is_anonymous=user["is_anonymous"])
+    update_job(
+        job_id,
+        uid=user["uid"],
+        is_anonymous=user["is_anonymous"],
+        credit_cost=int(cost),
+    )
 
     def on_progress(phase, step, total, message, partial_result=None):
         updates = {"phase": phase, "step": step, "total_steps": total, "message": message}

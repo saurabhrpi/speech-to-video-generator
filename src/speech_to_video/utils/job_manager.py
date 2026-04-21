@@ -48,6 +48,20 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def try_claim(job_id: str, field: str) -> bool:
+    """Atomic compare-and-set: return True only if `field` was falsy and we flipped it to True.
+
+    Gives exactly-once semantics for side-effects that must run once per job
+    (e.g. deducting credits on completion), even when multiple pollers race.
+    """
+    with _lock:
+        job = _jobs.get(job_id)
+        if not job or job.get(field):
+            return False
+        job[field] = True
+        return True
+
+
 def start_job(job_id: str, fn: Callable, *args: Any, **kwargs: Any) -> threading.Thread:
     def wrapper():
         update_job(job_id, status="running")

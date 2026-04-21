@@ -48,6 +48,7 @@ class Settings:
     minimax_api_key: str = os.environ.get("MINIMAX_API_KEY", "")
     firebase_service_account_path: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "")
     firebase_service_account_json: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+    revenuecat_rest_api_key: str = os.environ.get("REVENUECAT_REST_API_KEY", "")
 
 
 def get_settings() -> Settings:

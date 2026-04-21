@@ -3,9 +3,35 @@ export const API_BASE = 'https://speech-2-video.ai';
 export const REVENUECAT_IOS_APP_STORE_KEY = 'appl_vmQCgcGmPddGaeaDkwiAOvJPaWt';
 export const REVENUECAT_TEST_STORE_KEY = 'test_zQWpCAsWrKrLmsEhEVhFzZAUIwi';
 
-// Pending final lock in LAUNCH_CHECKLIST Task #2. Moves server-side once
-// entitlement/credit tracking (Task #8) lands.
-export const PRO_PACK_COUNT = 15;
+export const PACK_SKUS = ['pro_pack_50', 'pro_pack_120', 'pro_pack_250'] as const;
+export type PackSku = (typeof PACK_SKUS)[number];
+
+export const PACK_CREDITS: Record<PackSku, number> = {
+  pro_pack_50: 50,
+  pro_pack_120: 120,
+  pro_pack_250: 250,
+};
+
+export const BEST_VALUE_PACK: PackSku = 'pro_pack_120';
+
+export type CostTable = Record<string, Record<string, number>>;
+
+// Mirrors CREDIT_COSTS in src/speech_to_video/api/server.py. Used only when the
+// server's cost_table hasn't landed yet (cold start / offline). Keep in sync.
+const FALLBACK_COSTS: CostTable = {
+  hailuo: { '6': 5, '10': 9 },
+  kling: { '3': 5, '10': 15, '15': 23 },
+};
+
+export function creditCostFor(
+  modelKey: string,
+  duration: number,
+  costTable?: CostTable | null,
+): number | null {
+  const table = costTable ?? FALLBACK_COSTS;
+  const cost = table[modelKey]?.[String(duration)];
+  return typeof cost === 'number' ? cost : null;
+}
 
 export const TERMS_URL = 'https://speech-2-video.ai/terms';
 export const PRIVACY_URL = 'https://speech-2-video.ai/privacy';

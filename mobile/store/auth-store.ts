@@ -8,11 +8,7 @@ import {
 } from '@/lib/auth';
 import { apiGet } from '@/lib/api-client';
 import { resetPurchasesUser, syncPurchasesUser } from '@/lib/purchases';
-
-interface Usage {
-  usage_count: number;
-  limit: number;
-}
+import { creditCostFor, type CostTable } from '@/lib/constants';
 
 interface AuthStore {
   uid: string | null;
@@ -21,15 +17,16 @@ interface AuthStore {
   email: string | null;
   loading: boolean;
   paywallOpen: boolean;
-  usage: Usage | null;
+  creditBalance: number | null;
+  costTable: CostTable | null;
 
   initialize: () => () => void;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
-  refreshUsage: () => Promise<void>;
+  refreshCredits: () => Promise<void>;
   openPaywall: () => void;
   closePaywall: () => void;
-  canGenerate: () => boolean;
+  canAfford: (modelKey: string, duration: number) => boolean;
 }
 
 function applyUser(user: FirebaseUser | null) {
@@ -56,12 +53,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   email: null,
   loading: true,
   paywallOpen: false,
-  usage: null,
+  creditBalance: null,
+  costTable: null,
 
   initialize: () => {
     const unsub = onAuthChange(async (user) => {
       if (!user) {
-        // No user session — create an anonymous one silently.
         try {
           await ensureSignedIn();
         } catch (e) {
@@ -73,7 +70,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ ...applyUser(user), loading: false });
       syncPurchasesUser(user.uid);
       try {
-        await get().refreshUsage();
+        await get().refreshCredits();
       } catch {
         // ignore
       }
@@ -85,7 +82,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const user = await fbSignInWithApple();
     set(applyUser(user));
     try {
-      await get().refreshUsage();
+      await get().refreshCredits();
     } catch {
       // ignore
     }
@@ -94,17 +91,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   signOut: async () => {
     await fbSignOut();
     await resetPurchasesUser();
-    set({ usage: null });
+    set({ creditBalance: null, costTable: null });
   },
 
-  refreshUsage: async () => {
+  refreshCredits: async () => {
     try {
       const j = await apiGet<Record<string, any>>('/api/auth/session');
       set({
-        usage: {
-          usage_count: Number(j?.usage_count || 0),
-          limit: Number(j?.limit || 0),
-        },
+        creditBalance:
+          typeof j?.credit_balance === 'number' ? j.credit_balance : null,
+        costTable:
+          j?.cost_table && typeof j.cost_table === 'object'
+            ? (j.cost_table as CostTable)
+            : null,
       });
     } catch {
       // ignore
@@ -114,10 +113,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   openPaywall: () => set({ paywallOpen: true }),
   closePaywall: () => set({ paywallOpen: false }),
 
-  canGenerate: () => {
+  canAfford: (modelKey, duration) => {
     const s = get();
-    if (!s.isAnonymous) return true;
-    if (!s.usage) return true;
-    return s.usage.usage_count < s.usage.limit;
+    const cost = creditCostFor(modelKey, duration, s.costTable);
+    if (cost === null) return true;
+    if (s.creditBalance === null) return true;
+    return s.creditBalance >= cost;
   },
 }));

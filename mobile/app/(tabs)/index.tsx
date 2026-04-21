@@ -10,6 +10,7 @@ import { apiPost } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { useGalleryStore } from '@/store/gallery-store';
 import { Colors } from '@/lib/design-tokens';
+import { creditCostFor } from '@/lib/constants';
 
 type ModelKey = 'kling' | 'hailuo';
 
@@ -30,8 +31,12 @@ export default function SpeechScreen() {
   const [selectedModel, setSelectedModel] = useState<ModelKey>('hailuo');
   const [selectedDuration, setSelectedDuration] = useState(6);
 
-  const { canGenerate, openPaywall } = useAuthStore();
+  const canAfford = useAuthStore((s) => s.canAfford);
+  const openPaywall = useAuthStore((s) => s.openPaywall);
+  const costTable = useAuthStore((s) => s.costTable);
   const startGeneration = useGalleryStore((s) => s.startGeneration);
+
+  const cost = creditCostFor(selectedModel, selectedDuration, costTable);
 
   // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -64,7 +69,7 @@ export default function SpeechScreen() {
   }
 
   function dispatchGeneration(formData: FormData, promptLabel: string) {
-    if (!canGenerate()) {
+    if (!canAfford(selectedModel, selectedDuration)) {
       openPaywall();
       return;
     }
@@ -199,7 +204,7 @@ export default function SpeechScreen() {
           size="lg"
           onPress={handleTextToVideo}
           disabled={isRecording || !promptText.trim()}
-          title="Generate Video"
+          title={cost !== null ? `Generate Video · ${cost} credits` : 'Generate Video'}
           className="w-full"
         />
       </View>
