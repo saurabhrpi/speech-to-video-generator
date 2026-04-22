@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Alert } from 'react-native';
+import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Button } from '@/components/Button';
 import { useAuthStore } from '@/store/auth-store';
@@ -77,7 +78,16 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Purchases</Text>
-        <Button onPress={openPaywall} title="Buy Credits" />
+        <Button
+          onPress={() => {
+            // Settings is a modal; iOS rejects stacking the Paywall Modal on
+            // top. Dismiss first, then wait past the ~350ms iOS dismiss animation
+            // before opening. InteractionManager doesn't track native transitions.
+            router.back();
+            setTimeout(() => openPaywall(), 400);
+          }}
+          title="Buy Credits"
+        />
         <Button
           variant="outline"
           onPress={handleRestore}

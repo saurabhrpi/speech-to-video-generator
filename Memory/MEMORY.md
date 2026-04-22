@@ -51,3 +51,11 @@
 - [Expo prebuild iOS-only flag](reference_expo_prebuild_ios_only.md) -- npx expo prebuild fails without google-services.json when RNFB is installed; use --platform ios to skip Android
 - [Simulator Keychain survives uninstall](reference_simulator_keychain_persists.md) -- simctl uninstall doesn't wipe Keychain; Firebase anon UIDs persist across reinstall. Use simctl erase booted for true fresh install.
 - [Primary Simulator UDID](reference_simulator_udid.md) -- UDID + correct shutdown→erase→boot sequence for the sim the user runs dev-client builds against
+- [Verify deploy before mobile integration test](feedback_verify_deploy_before_integration_test.md) -- Uncommitted/undeployed backend + new mobile UI = false-bug diagnoses; git status + fingerprint curl before testing
+- [Screenshot path is debug/](feedback_screenshot_path.md) -- "Screenshot" without an attachment → look in debug/ folder; filenames vary by context
+- [RC Test Store REST delay](reference_rc_test_store_rest_delay.md) -- Test Store receipts take >7s to appear in REST; mobile retry too short, restorePurchases() unsupported; matcher falls through to entry.id
+- [Apple Sign In 1st attempt fails on fresh sim](reference_apple_signin_first_attempt_fresh_sim.md) -- After fresh iCloud sign-in on sim, first ASAuthorization call fails "unknown reason"; second works
+- [Dev session companions + noise filter](feedback_dev_session_companions.md) -- Start log-stream + simctl spawn + Nativewind watcher with Metro; strip CHHapticPattern noise from monitor regexes
+- [iOS modal-on-modal rejection](reference_ios_modal_on_modal.md) -- RN <Modal> can't stack over expo-router presentation:'modal'; use router.back() + setTimeout(400), not InteractionManager
+- [RC offline disk cache](reference_revenuecat_offline_disk_cache.md) -- getOfferings() serves from disk cache offline for returning users; paywall renders normally, failure moves to Buy/Restore handlers
+- [simctl status_bar is cosmetic](reference_simctl_status_bar_cosmetic.md) -- status_bar override only changes icons; use networksetup -setairportpower to actually cut sim network
