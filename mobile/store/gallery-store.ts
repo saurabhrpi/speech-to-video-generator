@@ -16,6 +16,11 @@ export interface GalleryJob {
   prompt: string;
   model: string;
   duration: number;
+  // Credit cost committed at submit time. Used by auth-store.canAfford to compute
+  // a projected balance (creditBalance - sum(in-flight costs)) so concurrent taps
+  // don't bypass the credit gate. Optional for back-compat with jobs persisted
+  // before this field existed; legacy in-flight jobs count as 0.
+  costAtSubmit?: number;
   status: 'generating' | 'completed' | 'failed' | 'paused';
   statusMsg: string;
   videoUrl: string | null;
@@ -31,7 +36,10 @@ interface GalleryStore {
   jobs: GalleryJob[];
   selectedJobId: string | null;
 
-  startGeneration: (formData: FormData, meta: { prompt: string; model: string; duration: number }) => string;
+  startGeneration: (
+    formData: FormData,
+    meta: { prompt: string; model: string; duration: number; cost: number },
+  ) => string;
   markSaved: (id: string) => void;
   removeJob: (id: string) => void;
   selectJob: (id: string | null) => void;
@@ -182,6 +190,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       prompt: meta.prompt,
       model: meta.model,
       duration: meta.duration,
+      costAtSubmit: meta.cost,
       status: 'generating',
       statusMsg: 'Submitting...',
       videoUrl: null,

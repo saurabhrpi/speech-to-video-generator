@@ -67,7 +67,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         }
         return;
       }
-      set({ ...applyUser(user), loading: false });
+      const prevUid = get().uid;
+      const next = { ...applyUser(user), loading: false };
+      // UID changed (sign-in/out/anon-rotation) → drop stale balance immediately so
+      // the projected-balance check in canAfford doesn't gate against a previous user's credits.
+      if (prevUid !== user.uid) {
+        set({ ...next, creditBalance: null, costTable: null });
+      } else {
+        set(next);
+      }
       syncPurchasesUser(user.uid);
       try {
         await get().refreshCredits();
@@ -118,6 +126,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const cost = creditCostFor(modelKey, duration, s.costTable);
     if (cost === null) return true;
     if (s.creditBalance === null) return true;
-    return s.creditBalance >= cost;
+    // Lazy require avoids the circular import (gallery-store already imports this store).
+    // Subtract in-flight job costs so concurrent submits can't slip past the credit gate
+    // — the server still races on submit (TOCTOU), this is the client-side mitigation.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { useGalleryStore } = require('@/store/gallery-store') as typeof import('@/store/gallery-store');
+    const inFlight = useGalleryStore.getState().jobs
+      .filter((j) => j.status === 'generating' || j.status === 'paused')
+      .reduce((sum, j) => sum + (j.costAtSubmit ?? 0), 0);
+    return s.creditBalance - inFlight >= cost;
   },
 }));

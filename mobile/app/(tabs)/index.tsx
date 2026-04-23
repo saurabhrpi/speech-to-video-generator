@@ -34,9 +34,24 @@ export default function SpeechScreen() {
   const canAfford = useAuthStore((s) => s.canAfford);
   const openPaywall = useAuthStore((s) => s.openPaywall);
   const costTable = useAuthStore((s) => s.costTable);
+  const creditBalance = useAuthStore((s) => s.creditBalance);
   const startGeneration = useGalleryStore((s) => s.startGeneration);
+  const inFlightCost = useGalleryStore((s) =>
+    s.jobs
+      .filter((j) => j.status === 'generating' || j.status === 'paused')
+      .reduce((sum, j) => sum + (j.costAtSubmit ?? 0), 0),
+  );
 
   const cost = creditCostFor(selectedModel, selectedDuration, costTable);
+  // Disable Generate ONLY when an in-flight job is the blocker — i.e. balance alone is enough
+  // but the projected (post-in-flight) balance isn't. If balance alone is already < cost, we
+  // leave the button tappable so dispatchGeneration's canAfford fallback opens the paywall.
+  const blockedByInFlight =
+    cost !== null &&
+    creditBalance !== null &&
+    inFlightCost > 0 &&
+    creditBalance >= cost &&
+    creditBalance - inFlightCost < cost;
 
   // Confirmation modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -78,6 +93,7 @@ export default function SpeechScreen() {
       prompt: promptLabel,
       model: model.label,
       duration: selectedDuration,
+      cost: cost ?? 0,
     });
     router.navigate('/(tabs)/gallery');
   }
@@ -203,7 +219,7 @@ export default function SpeechScreen() {
         <Button
           size="lg"
           onPress={handleTextToVideo}
-          disabled={isRecording || !promptText.trim()}
+          disabled={isRecording || !promptText.trim() || blockedByInFlight}
           title={cost !== null ? `Generate Video · ${cost} credits` : 'Generate Video'}
           className="w-full"
         />

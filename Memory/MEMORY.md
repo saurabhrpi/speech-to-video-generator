@@ -56,6 +56,6 @@
 - [RC Test Store REST delay](reference_rc_test_store_rest_delay.md) -- Test Store receipts take >7s to appear in REST; mobile retry too short, restorePurchases() unsupported; matcher falls through to entry.id
 - [Apple Sign In 1st attempt fails on fresh sim](reference_apple_signin_first_attempt_fresh_sim.md) -- After fresh iCloud sign-in on sim, first ASAuthorization call fails "unknown reason"; second works
 - [Dev session companions + noise filter](feedback_dev_session_companions.md) -- Start log-stream + simctl spawn + Nativewind watcher with Metro; strip CHHapticPattern noise from monitor regexes
-- [iOS modal-on-modal rejection](reference_ios_modal_on_modal.md) -- RN <Modal> can't stack over expo-router presentation:'modal'; use router.back() + setTimeout(400), not InteractionManager
+- [RN Modal stacking is fragile](reference_ios_modal_on_modal.md) -- both directions (over expo-router modal route, AND under Apple Sign In sheet) break; durable fix is root-level Animated.View overlay, not transparent={true}
 - [RC offline disk cache](reference_revenuecat_offline_disk_cache.md) -- getOfferings() serves from disk cache offline for returning users; paywall renders normally, failure moves to Buy/Restore handlers
 - [simctl status_bar is cosmetic](reference_simctl_status_bar_cosmetic.md) -- status_bar override only changes icons; use networksetup -setairportpower to actually cut sim network

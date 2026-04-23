@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   Pressable,
   ScrollView,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import Purchases, {
@@ -151,12 +156,35 @@ export default function Paywall() {
     }
   }
 
+  // Refactored off <Modal> to a root-level Animated.View overlay because iOS Modal
+  // (even transparent) leaves the Paywall's touch focus stuck after a stacked sheet
+  // (Apple Sign In, IAP) dismisses — symptom: X unresponsive, drag-handle cursor.
+  // Same View tree as the rest of the app means no separate window, no focus restoration.
+  const { height: screenHeight } = useWindowDimensions();
+  const slideY = useSharedValue(screenHeight);
+  useEffect(() => {
+    slideY.value = withTiming(paywallOpen ? 0 : screenHeight, { duration: 280 });
+  }, [paywallOpen, screenHeight, slideY]);
+  const overlayStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: slideY.value }],
+  }));
+
   return (
-    <Modal
-      visible={paywallOpen}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={closePaywall}
+    <Animated.View
+      pointerEvents={paywallOpen ? 'auto' : 'none'}
+      style={[
+        {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 1000,
+          elevation: 1000,
+          backgroundColor: Colors.background,
+        },
+        overlayStyle,
+      ]}
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
         <View className="flex-row items-center justify-end px-5 pt-2">
@@ -295,6 +323,6 @@ export default function Paywall() {
           </View>
         </View>
       </SafeAreaView>
-    </Modal>
+    </Animated.View>
   );
 }

@@ -65,7 +65,9 @@ export const Button = forwardRef<any, ButtonProps>(
     const scale = useSharedValue(1);
     const animatedStyle = useAnimatedStyle(() => ({
       transform: [{ scale: scale.value }],
-      opacity: scale.value < 1 ? 0.9 : 1,
+      // Inline style trumps className, so bake the disabled fade in here too — otherwise
+      // the className `opacity-50` is silently overridden and disabled buttons look enabled.
+      opacity: disabled ? 0.5 : scale.value < 1 ? 0.9 : 1,
     }));
 
     const handlePressIn = useCallback(() => {
