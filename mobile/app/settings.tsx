@@ -115,18 +115,20 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      <View className="rounded-lg border border-border bg-card p-4 gap-3">
-        <Text className="text-sm font-semibold text-foreground">Danger Zone</Text>
-        <Text className="text-xs text-muted-foreground">
-          Permanently delete your account, credits, and generated videos.
-        </Text>
-        <Button
-          variant="destructive"
-          onPress={() => setDeleteConfirmOpen(true)}
-          disabled={deleting}
-          title={deleting ? 'Deleting…' : 'Delete Account'}
-        />
-      </View>
+      {!isAnonymous && (
+        <View className="rounded-lg border border-border bg-card p-4 gap-3">
+          <Text className="text-sm font-semibold text-foreground">Danger Zone</Text>
+          <Text className="text-xs text-muted-foreground">
+            Permanently delete your account, credits, and generated videos.
+          </Text>
+          <Button
+            variant="destructive"
+            onPress={() => setDeleteConfirmOpen(true)}
+            disabled={deleting}
+            title={deleting ? 'Deleting…' : 'Delete Account'}
+          />
+        </View>
+      )}
 
       <ConfirmModal
         visible={deleteConfirmOpen}

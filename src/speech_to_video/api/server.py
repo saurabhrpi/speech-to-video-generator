@@ -34,6 +34,7 @@ from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips,
 from ..utils import credit_store
 from ..utils.video import stitch_videos_detailed, stitch_timelapse_clips
 from . import credits as credits_api
+from . import legal as legal_api
 from .firebase_auth import verify_firebase_token
 
 
@@ -42,6 +43,7 @@ service = VideoService(settings)
 
 app = FastAPI(title="Speech to Video API")
 app.include_router(credits_api.router)
+app.include_router(legal_api.router)
 
 
 # CORS for local dev (Vite default origin)
