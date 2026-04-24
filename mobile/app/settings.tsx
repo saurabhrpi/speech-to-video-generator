@@ -3,6 +3,7 @@ import { View, Text, Alert } from 'react-native';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Button } from '@/components/Button';
+import ConfirmModal from '@/components/ConfirmModal';
 import { useAuthStore } from '@/store/auth-store';
 import { restoreAndGrant } from '@/lib/purchases';
 
@@ -13,10 +14,13 @@ export default function SettingsScreen() {
   const creditBalance = useAuthStore((s) => s.creditBalance);
   const signInWithApple = useAuthStore((s) => s.signInWithApple);
   const signOut = useAuthStore((s) => s.signOut);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const openPaywall = useAuthStore((s) => s.openPaywall);
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
 
   const [restoring, setRestoring] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleAppleSignIn() {
     try {
@@ -36,6 +40,22 @@ export default function SettingsScreen() {
       Alert.alert('Restore failed', e?.message ?? 'Please try again.');
     } finally {
       setRestoring(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    setDeleteConfirmOpen(false);
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      router.back();
+    } catch (e: any) {
+      Alert.alert(
+        'Delete failed',
+        e?.message ?? 'Could not delete your account. Please try again.',
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -78,16 +98,7 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Purchases</Text>
-        <Button
-          onPress={() => {
-            // Settings is a modal; iOS rejects stacking the Paywall Modal on
-            // top. Dismiss first, then wait past the ~350ms iOS dismiss animation
-            // before opening. InteractionManager doesn't track native transitions.
-            router.back();
-            setTimeout(() => openPaywall(), 400);
-          }}
-          title="Buy Credits"
-        />
+        <Button onPress={openPaywall} title="Buy Credits" />
         <Button
           variant="outline"
           onPress={handleRestore}
@@ -103,6 +114,29 @@ export default function SettingsScreen() {
           Generate AI videos from text or voice prompts.
         </Text>
       </View>
+
+      <View className="rounded-lg border border-border bg-card p-4 gap-3">
+        <Text className="text-sm font-semibold text-foreground">Danger Zone</Text>
+        <Text className="text-xs text-muted-foreground">
+          Permanently delete your account, credits, and generated videos.
+        </Text>
+        <Button
+          variant="destructive"
+          onPress={() => setDeleteConfirmOpen(true)}
+          disabled={deleting}
+          title={deleting ? 'Deleting…' : 'Delete Account'}
+        />
+      </View>
+
+      <ConfirmModal
+        visible={deleteConfirmOpen}
+        title="Delete account?"
+        message="This permanently deletes your account, your remaining credits, and all generated videos. This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </View>
   );
 }

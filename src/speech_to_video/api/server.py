@@ -30,7 +30,7 @@ import glob
 from ..services.video_service import VideoService
 from ..models.timelapse import TimelapseRequest, get_all_options
 from ..utils.config import get_settings
-from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response
+from ..utils.clip_store import add_clip, list_clips, clear_clips, reorder_clips, remove_stitched_clips, remove_clip, get_response, delete_namespace
 from ..utils import credit_store
 from ..utils.video import stitch_videos_detailed, stitch_timelapse_clips
 from . import credits as credits_api
@@ -174,6 +174,47 @@ def auth_session(user: Dict = Depends(verify_firebase_token)):
         "credit_balance": int(balance),
         "cost_table": _cost_table_public(),
     }
+
+
+@app.delete("/api/account")
+def delete_account(user: Dict = Depends(verify_firebase_token)):
+    """Permanently delete the caller's account. Required by App Store 5.1.1(v).
+
+    Three independent, idempotent steps: credits ledger, clip namespace,
+    Firebase user. A failure in one step is logged but does not prevent the
+    others — on retry each already-completed step is a no-op.
+    """
+    import firebase_admin
+    from firebase_admin import auth as fb_auth
+
+    uid = user["uid"]
+    namespace = _user_namespace(user)
+    deleted = {"credits": False, "clips": False, "firebase_user": False}
+
+    try:
+        deleted["credits"] = bool(credit_store.delete_ledger(uid))
+    except Exception:
+        logger.exception("delete_account: credits ledger delete failed uid=%s", uid)
+
+    if namespace:
+        try:
+            deleted["clips"] = bool(delete_namespace(namespace))
+        except Exception:
+            logger.exception("delete_account: clip namespace delete failed uid=%s ns=%s", uid, namespace)
+
+    # Firebase user deletion is the canonical App Store requirement; must succeed
+    # or the retry loop can fix everything else later.
+    try:
+        fb_auth.delete_user(uid)
+        deleted["firebase_user"] = True
+    except fb_auth.UserNotFoundError:
+        deleted["firebase_user"] = True  # already gone — treat as success
+    except Exception as exc:
+        logger.exception("delete_account: firebase user delete failed uid=%s", uid)
+        raise HTTPException(status_code=500, detail=f"firebase_delete_failed: {exc}")
+
+    logger.info("account deleted uid=%s result=%s", uid, deleted)
+    return JSONResponse({"success": True, "deleted": deleted})
 
 
 @app.post("/api/generate")

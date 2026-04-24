@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import time
 import re
 from typing import List, Dict, Optional
@@ -135,6 +136,24 @@ def remove_stitched_clips(namespace: Optional[str] = None) -> int:
     if removed:
         _save(new_items, namespace)
     return removed
+
+
+def delete_namespace(namespace: str) -> bool:
+    """Delete the entire per-user clip directory (playlist, responses, stitched).
+
+    Used by account deletion. Refuses empty/None namespace so an accidental call
+    can never wipe the root clip store. Returns True if the dir existed, False
+    if already absent.
+    """
+    if not namespace:
+        raise ValueError("namespace is required for delete_namespace")
+    ns = _sanitize_segment(namespace)
+    base = _base_dir()
+    ns_dir = os.path.join(base, ns)
+    if not os.path.isdir(ns_dir):
+        return False
+    shutil.rmtree(ns_dir)
+    return True
 
 
 def remove_clip(ts_value: int, namespace: Optional[str] = None) -> bool:

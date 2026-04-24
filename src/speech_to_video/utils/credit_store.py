@@ -163,6 +163,25 @@ def grant(uid: str, amount: int, tx_id: str) -> Dict:
     return _run(tx)
 
 
+def delete_ledger(uid: str) -> bool:
+    """Delete the user's ledger doc. Returns True if a doc existed, False if already absent."""
+    from firebase_admin import firestore as fb_firestore
+
+    db = _db()
+    ref = db.collection(_COLLECTION).document(uid)
+    tx = db.transaction()
+
+    @fb_firestore.transactional
+    def _run(t):
+        snap = ref.get(transaction=t)
+        if not snap.exists:
+            return False
+        t.delete(ref)
+        return True
+
+    return _run(tx)
+
+
 def consume(uid: str, amount: int) -> int:
     """Atomically decrement the balance. Raises InsufficientCredits on shortfall."""
     if amount <= 0:

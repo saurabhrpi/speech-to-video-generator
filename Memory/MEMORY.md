@@ -59,3 +59,4 @@
 - [RN Modal stacking is fragile](reference_ios_modal_on_modal.md) -- both directions (over expo-router modal route, AND under Apple Sign In sheet) break; durable fix is root-level Animated.View overlay, not transparent={true}
 - [RC offline disk cache](reference_revenuecat_offline_disk_cache.md) -- getOfferings() serves from disk cache offline for returning users; paywall renders normally, failure moves to Buy/Restore handlers
 - [simctl status_bar is cosmetic](reference_simctl_status_bar_cosmetic.md) -- status_bar override only changes icons; use networksetup -setairportpower to actually cut sim network
+- [MiniMax has no per-user quotas](reference_minimax_no_per_user_quota.md) -- no sub-accounts, no programmatic keys, no per-user limits; any per-end-user gating must live in our backend

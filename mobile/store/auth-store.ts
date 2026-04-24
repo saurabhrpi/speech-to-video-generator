@@ -6,7 +6,7 @@ import {
   onAuthChange,
   type FirebaseUser,
 } from '@/lib/auth';
-import { apiGet } from '@/lib/api-client';
+import { apiGet, apiDelete } from '@/lib/api-client';
 import { resetPurchasesUser, syncPurchasesUser } from '@/lib/purchases';
 import { creditCostFor, type CostTable } from '@/lib/constants';
 
@@ -23,6 +23,7 @@ interface AuthStore {
   initialize: () => () => void;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   refreshCredits: () => Promise<void>;
   openPaywall: () => void;
   closePaywall: () => void;
@@ -99,6 +100,30 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   signOut: async () => {
     await fbSignOut();
     await resetPurchasesUser();
+    set({ creditBalance: null, costTable: null });
+  },
+
+  deleteAccount: async () => {
+    // Server deletion goes first while the Firebase ID token is still valid.
+    // Server wipes credits doc + clip namespace + Firebase user (in that order).
+    // Once the Firebase user is gone, further authed calls would 401, so all
+    // local cleanup runs after the server call completes.
+    await apiDelete('/api/account');
+
+    // Lazy require avoids a circular dependency with gallery-store, which
+    // already imports this store for the canAfford check.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { useGalleryStore } = require('@/store/gallery-store') as typeof import('@/store/gallery-store');
+    await useGalleryStore.getState().wipe();
+
+    await resetPurchasesUser();
+    try {
+      await fbSignOut();
+    } catch {
+      // Firebase user already deleted server-side; signOut may throw. The
+      // onAuthStateChanged listener will fire with null and re-anon via
+      // ensureSignedIn(), so the app stays usable.
+    }
     set({ creditBalance: null, costTable: null });
   },
 

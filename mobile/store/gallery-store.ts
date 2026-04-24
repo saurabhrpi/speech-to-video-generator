@@ -45,6 +45,7 @@ interface GalleryStore {
   selectJob: (id: string | null) => void;
   hydrate: () => Promise<void>;
   resumePausedJobs: () => void;
+  wipe: () => Promise<void>;
 }
 
 function hasGenerating(jobs: GalleryJob[]): boolean {
@@ -344,6 +345,18 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       const ac = new AbortController();
       abortControllers.set(job.id, ac);
       runPoll(job.id, job.prompt, ac);
+    }
+  },
+
+  wipe: async () => {
+    for (const ac of abortControllers.values()) ac.abort();
+    abortControllers.clear();
+    deactivateKeepAwake(KEEP_AWAKE_TAG);
+    set({ jobs: [], selectedJobId: null });
+    try {
+      await AsyncStorage.multiRemove([STORAGE_KEY, BACKUP_KEY]);
+    } catch (err) {
+      console.error('[Gallery] wipe storage failed:', err);
     }
   },
 }));
