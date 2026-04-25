@@ -184,6 +184,39 @@ _TERMS_BODY = f"""
 """
 
 
+_SUPPORT_BODY = f"""
+<h1>Support</h1>
+<p class="meta">For help with AI Speech to Video</p>
+
+<h2>Contact us</h2>
+<p>For all questions — bug reports, feature requests, account help, refund inquiries, or anything else — email us at: <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a></p>
+<p>We typically respond within 1–2 business days.</p>
+
+<h2>Common questions</h2>
+
+<h3>How do credits work?</h3>
+<p>One video = 10 credits. New users get 10 free credits — enough for one free video. When you want more, buy a credit pack from the in-app paywall: $4.99 for 50 credits (5 videos), $9.99 for 120 credits (12 videos), or $19.99 for 250 credits (25 videos). Credits never expire.</p>
+
+<h3>Where are my generated videos stored?</h3>
+<p>Each generated video is saved in your in-app Gallery. From there you can save it to your Camera Roll, share via the iOS share sheet, or delete it.</p>
+
+<h3>Refunds</h3>
+<p>Credit pack refunds are handled directly by Apple under their standard App Store refund policy. Request one at <a href="https://reportaproblem.apple.com">reportaproblem.apple.com</a>. We are unable to process refunds directly.</p>
+
+<h3>How do I delete my account?</h3>
+<p>In the app, tap the gear icon → Settings → Danger Zone → Delete Account. This permanently removes your account, credits, and generated videos.</p>
+
+<h3>Keep my videos across devices</h3>
+<p>If you're signed in anonymously and want your gallery and credits to persist across devices, tap the gear icon → Settings → Sign in with Apple. Your existing data carries over.</p>
+
+<h3>The video didn't match my prompt</h3>
+<p>AI video generation is non-deterministic — output can vary. Try rewording your prompt with more specific visual details (subject, action, environment, mood). For example, "a corgi in a tuxedo, slow motion, golden hour lighting" works better than "a fancy dog."</p>
+
+<h2>Privacy &amp; terms</h2>
+<p>For full details on how we handle your information, see our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Use</a>.</p>
+"""
+
+
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_policy() -> HTMLResponse:
     return HTMLResponse(_shell("Privacy Policy", _PRIVACY_BODY))
@@ -192,3 +225,8 @@ def privacy_policy() -> HTMLResponse:
 @router.get("/terms", response_class=HTMLResponse)
 def terms_of_use() -> HTMLResponse:
     return HTMLResponse(_shell("Terms of Use", _TERMS_BODY))
+
+
+@router.get("/support", response_class=HTMLResponse)
+def support_page() -> HTMLResponse:
+    return HTMLResponse(_shell("Support", _SUPPORT_BODY))
