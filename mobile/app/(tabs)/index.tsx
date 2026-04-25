@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
+import { View, Text, TextInput, ScrollView } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/Button';
@@ -12,24 +12,15 @@ import { useGalleryStore } from '@/store/gallery-store';
 import { Colors } from '@/lib/design-tokens';
 import { creditCostFor } from '@/lib/constants';
 
-type ModelKey = 'kling' | 'hailuo';
-
-const MODELS: { key: ModelKey; label: string; id: string }[] = [
-  { key: 'hailuo', label: 'Hailuo', id: 'minimax/hailuo-2.3' },
-  { key: 'kling', label: 'Kling', id: 'klingai/video-v3-standard-text-to-video' },
-];
-
-const DURATIONS: Record<ModelKey, number[]> = {
-  kling: [3, 10, 15],
-  hailuo: [6, 10],
-};
+// V1 ships single model + single duration (Session 52). Picker UIs removed.
+const HAILUO_MODEL_ID = 'minimax/hailuo-2.3';
+const HAILUO_MODEL_KEY = 'hailuo';
+const CLIP_DURATION = 10;
 
 export default function SpeechScreen() {
   const router = useRouter();
   const { isRecording, metering, startRecording, stopRecording } = useRecording();
   const [promptText, setPromptText] = useState('');
-  const [selectedModel, setSelectedModel] = useState<ModelKey>('hailuo');
-  const [selectedDuration, setSelectedDuration] = useState(6);
 
   const canAfford = useAuthStore((s) => s.canAfford);
   const openPaywall = useAuthStore((s) => s.openPaywall);
@@ -42,7 +33,7 @@ export default function SpeechScreen() {
       .reduce((sum, j) => sum + (j.costAtSubmit ?? 0), 0),
   );
 
-  const cost = creditCostFor(selectedModel, selectedDuration, costTable);
+  const cost = creditCostFor(HAILUO_MODEL_KEY, CLIP_DURATION, costTable);
   // Disable Generate ONLY when an in-flight job is the blocker — i.e. balance alone is enough
   // but the projected (post-in-flight) balance isn't. If balance alone is already < cost, we
   // leave the button tappable so dispatchGeneration's canAfford fallback opens the paywall.
@@ -58,14 +49,6 @@ export default function SpeechScreen() {
   const [pendingUri, setPendingUri] = useState<string | null>(null);
   const [pendingTranscript, setPendingTranscript] = useState('');
 
-  function handleModelChange(key: ModelKey) {
-    setSelectedModel(key);
-    const durations = DURATIONS[key];
-    if (!durations.includes(selectedDuration)) {
-      setSelectedDuration(durations[durations.length - 1]);
-    }
-  }
-
   function buildFormData(prompt?: string, audioUri?: string): FormData {
     const formData = new FormData();
     if (prompt) {
@@ -77,22 +60,20 @@ export default function SpeechScreen() {
         name: 'recording.m4a',
       } as any);
     }
-    const model = MODELS.find((m) => m.key === selectedModel)!;
-    formData.append('model', model.id);
-    formData.append('duration', String(selectedDuration));
+    formData.append('model', HAILUO_MODEL_ID);
+    formData.append('duration', String(CLIP_DURATION));
     return formData;
   }
 
   function dispatchGeneration(formData: FormData, promptLabel: string) {
-    if (!canAfford(selectedModel, selectedDuration)) {
+    if (!canAfford(HAILUO_MODEL_KEY, CLIP_DURATION)) {
       openPaywall();
       return;
     }
-    const model = MODELS.find((m) => m.key === selectedModel)!;
     startGeneration(formData, {
       prompt: promptLabel,
-      model: model.label,
-      duration: selectedDuration,
+      model: 'Hailuo',
+      duration: CLIP_DURATION,
       cost: cost ?? 0,
     });
     router.navigate('/(tabs)/gallery');
@@ -142,65 +123,13 @@ export default function SpeechScreen() {
     setPendingUri(null);
   }
 
-  const durations = DURATIONS[selectedModel];
-
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-8">
       <View className="gap-1">
         <Text className="text-heading font-body text-foreground">Speech to Video</Text>
         <Text className="text-body font-body text-muted-foreground">
-          Type a prompt or record audio to generate a video.
+          Type a prompt or record audio to generate a 10-second video.
         </Text>
-      </View>
-
-      {/* Model selector */}
-      <View className="gap-2">
-        <Text className="text-caption font-body-medium text-muted-foreground uppercase tracking-wide">Model</Text>
-        <View className="flex-row rounded-input-r bg-card p-1">
-          {MODELS.map((m) => {
-            const active = selectedModel === m.key;
-            return (
-              <Pressable key={m.key} onPress={() => handleModelChange(m.key)} style={{ flex: 1 }}>
-                <View
-                  className="items-center rounded-input-r py-2.5"
-                  style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
-                >
-                  <Text
-                    className="font-body-medium"
-                    style={{ fontSize: 14, color: active ? '#F5F0EB' : Colors.textSecondary }}
-                  >
-                    {m.label}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Duration selector */}
-      <View className="gap-2">
-        <Text className="text-caption font-body-medium text-muted-foreground uppercase tracking-wide">Duration</Text>
-        <View className="flex-row rounded-input-r bg-card p-1">
-          {durations.map((d) => {
-            const active = selectedDuration === d;
-            return (
-              <Pressable key={d} onPress={() => setSelectedDuration(d)} style={{ flex: 1 }}>
-                <View
-                  className="items-center rounded-input-r py-2.5"
-                  style={active ? { backgroundColor: Colors.accent, borderWidth: 1, borderColor: Colors.glassyBorder } : undefined}
-                >
-                  <Text
-                    className="font-body-medium"
-                    style={{ fontSize: 14, color: active ? '#F5F0EB' : Colors.textSecondary }}
-                  >
-                    {d}s
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
       </View>
 
       {/* Text prompt input */}

@@ -18,9 +18,9 @@ export type CostTable = Record<string, Record<string, number>>;
 
 // Mirrors CREDIT_COSTS in src/speech_to_video/api/server.py. Used only when the
 // server's cost_table hasn't landed yet (cold start / offline). Keep in sync.
+// V1 ships single model + single duration (Session 52).
 const FALLBACK_COSTS: CostTable = {
-  hailuo: { '6': 5, '10': 9 },
-  kling: { '3': 5, '10': 15, '15': 23 },
+  hailuo: { '10': 10 },
 };
 
 export function creditCostFor(

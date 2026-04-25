@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 
-EFFECTIVE_DATE = "April 24, 2026"
+EFFECTIVE_DATE = "April 25, 2026"
 SUPPORT_EMAIL = "support@speech-2-video.ai"
 GOVERNING_LAW_JURISDICTION = "the State of Tennessee, United States"
 GOVERNING_LAW_VENUE = "Davidson County, Tennessee"
@@ -73,7 +73,7 @@ _PRIVACY_BODY = f"""
 
 <p><strong>Generated content.</strong></p>
 <ul>
-  <li><strong>Prompts and audio.</strong> Text prompts you type, and audio you record for transcription, are sent to third-party AI providers (OpenAI for transcription, MiniMax or Kling for video generation). We do not retain audio files after transcription.</li>
+  <li><strong>Prompts and audio.</strong> Text prompts you type, and audio you record for transcription, are sent to third-party AI providers (OpenAI for transcription, MiniMax for video generation). We do not retain audio files after transcription.</li>
   <li><strong>Generated videos.</strong> URLs to your generated videos are stored on our servers under your account identifier so you can access them from the App's gallery. The video files themselves are hosted by the AI providers.</li>
 </ul>
 
@@ -102,7 +102,7 @@ _PRIVACY_BODY = f"""
   <li><strong>Google Firebase</strong> — authentication, document database for credit balance</li>
   <li><strong>RevenueCat</strong> — purchase verification</li>
   <li><strong>OpenAI</strong> — audio transcription (Whisper)</li>
-  <li><strong>MiniMax</strong>, <strong>Kling AI</strong> — text-to-video generation</li>
+  <li><strong>MiniMax (Hailuo)</strong> — text-to-video generation</li>
   <li><strong>Replit</strong> — backend hosting</li>
 </ul>
 
@@ -146,7 +146,7 @@ _TERMS_BODY = f"""
   <li>Sexualizes or harms minors in any way</li>
   <li>Promotes violence, self-harm, or hatred toward any group</li>
   <li>Impersonates a real person without their consent</li>
-  <li>Violates the policies of the underlying AI providers (OpenAI, MiniMax, Kling)</li>
+  <li>Violates the policies of the underlying AI providers (OpenAI, MiniMax)</li>
 </ul>
 <p>We reserve the right to revoke your access if we determine you have violated this section.</p>
 

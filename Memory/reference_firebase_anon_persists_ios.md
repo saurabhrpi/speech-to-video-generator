@@ -4,7 +4,7 @@ description: @react-native-firebase/auth DOES persist anonymous UIDs across kill
 type: reference
 ---
 
-`@react-native-firebase/auth` Keychain persistence works for anonymous users on real iOS device (build 7, Session 39). Kill + relaunch preserves the anon UID AND the server-side usage count across multiple kill cycles. The free-tier gate (`UNAUTH_GEN_LIMIT` per-UID) survives as expected.
+`@react-native-firebase/auth` Keychain persistence works for anonymous users on real iOS device (build 7, Session 39). Kill + relaunch preserves the anon UID AND the server-side usage state across multiple kill cycles. The free-tier gate (originally `UNAUTH_GEN_LIMIT=1` per-UID at Session 39; replaced Session 44 by the credit-balance gate at 10 starter credits per anon UID) survives as expected.
 
 A new anon UID appearing on the Firebase Authentication console almost always traces to a specific user action — Sign Out in-app, or (on a fresh install) the first user action that triggers the lazy `signInAnonymously()` call. It is NOT a persistence failure.
 

@@ -92,17 +92,15 @@ def setup_status():
 
 # --------- Auth and credit gating (Firebase ID token + Firestore ledger) ---------
 
-# Credit cost per (model_family, duration_seconds). Mobile sends full model
-# ids (e.g. "minimax/hailuo-2.3"); _model_family reduces those to the keys here.
+# Credit cost per (model_family, duration_seconds). V1 ships single
+# model + single duration (Session 52). Hailuo 6s and all Kling SKUs were
+# dropped — mobile no longer sends a picker. Kept as a dict so future
+# variants slot back in without restructuring callers.
 CREDIT_COSTS: Dict[tuple, int] = {
-    ("hailuo", 6): 5,
-    ("hailuo", 10): 9,
-    ("kling", 3): 5,
-    ("kling", 10): 15,
-    ("kling", 15): 23,
+    ("hailuo", 10): 10,
 }
 
-_ANON_STARTER_CREDITS = 5
+_ANON_STARTER_CREDITS = 10
 
 
 def _cost_table_public() -> Dict[str, Dict[str, int]]:
@@ -114,13 +112,12 @@ def _cost_table_public() -> Dict[str, Dict[str, int]]:
 
 
 def _model_family(model_id: Optional[str]) -> Optional[str]:
+    """V1 ships Hailuo only. Kling branch removed Session 52."""
     if not model_id:
         return None
     m = model_id.lower()
     if "hailuo" in m or "minimax" in m:
         return "hailuo"
-    if "kling" in m:
-        return "kling"
     return None
 
 

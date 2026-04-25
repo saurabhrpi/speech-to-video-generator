@@ -61,3 +61,5 @@
 - [simctl status_bar is cosmetic](reference_simctl_status_bar_cosmetic.md) -- status_bar override only changes icons; use networksetup -setairportpower to actually cut sim network
 - [MiniMax has no per-user quotas](reference_minimax_no_per_user_quota.md) -- no sub-accounts, no programmatic keys, no per-user limits; any per-end-user gating must live in our backend
 - [Deployed backend API base](reference_api_base.md) -- speech-2-video.ai (canonical, what mobile uses) and speech-to-video-generator.replit.app (alias); fingerprint curl one-liners
+- [ASC IAP screenshots: simctl, not framed](reference_asc_iap_screenshots.md) -- Cleanshot/device-frame mockups get rejected by ASC; use `xcrun simctl io booted screenshot` for native iPhone resolution that always passes
+- [RC Project structure](reference_revenuecat_project_structure.md) -- Project has multiple Apps; products are app-scoped but offering packages auto-link by identifier across apps; needs ASC In-App Purchase Key for receipt validation; "Could not check" status is normal post-create

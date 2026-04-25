@@ -857,33 +857,28 @@ class VideoService:
         duration: Optional[int] = None,
     ) -> Dict:
         """
-        Generate a single T2V clip from text (typed prompt or Whisper transcript).
-        Supports Kling and Hailuo models with model-specific duration defaults.
-        Routes Hailuo models through direct MiniMax API when MINIMAX_API_KEY is set.
+        Generate a single Hailuo T2V clip via direct MiniMax API.
+
+        V1 (Session 52): single model (Hailuo 2.3), single duration (10s).
+        Kling and Hailuo 6s were dropped. `model` and `duration` parameters
+        are accepted for back-compat with older clients but normalized to
+        the V1 defaults if anything else is provided.
         """
-        resolved_model = model or self.settings.kling_t2v_model
-        if duration is None:
-            duration = 10
+        if not self.minimax_client:
+            return {
+                "success": False,
+                "error": "MiniMax client not configured. Set MINIMAX_API_KEY in .env",
+            }
 
-        is_hailuo = "hailuo" in resolved_model.lower() or "minimax" in resolved_model.lower()
-        if is_hailuo and self.minimax_client:
-            logger.info("[VideoService] Routing %s through direct MiniMax API", resolved_model)
-            return self.minimax_client.generate_and_poll(
-                prompt=prompt,
-                model=resolved_model,
-                duration=duration,
-                resolution=self.settings.i2v_resolution or "768P",
-            )
+        resolved_model = model or getattr(self.settings, "hailuo_23_t2v_model", None) or "minimax/hailuo-2.3"
+        resolved_duration = duration if duration else 10
 
-        return self._single_generation(
+        logger.info("[VideoService] Hailuo T2V via direct MiniMax: model=%s duration=%s", resolved_model, resolved_duration)
+        return self.minimax_client.generate_and_poll(
             prompt=prompt,
-            duration=duration,
-            quality="high",
             model=resolved_model,
-            aspect_ratio="16:9",
-            endpoint_path="/video/generations",
-            status_path="/video/generations",
-            generate_audio=False,
+            duration=resolved_duration,
+            resolution=self.settings.i2v_resolution or "768P",
         )
 
 
