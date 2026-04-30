@@ -5,7 +5,6 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { Button } from '@/components/Button';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useAuthStore } from '@/store/auth-store';
-import { restoreAndGrant } from '@/lib/purchases';
 
 export default function SettingsScreen() {
   const isAnonymous = useAuthStore((s) => s.isAnonymous);
@@ -16,9 +15,7 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const openPaywall = useAuthStore((s) => s.openPaywall);
-  const refreshCredits = useAuthStore((s) => s.refreshCredits);
 
-  const [restoring, setRestoring] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -28,18 +25,6 @@ export default function SettingsScreen() {
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') return;
       Alert.alert('Sign-in failed', e?.message ?? 'Please try again.');
-    }
-  }
-
-  async function handleRestore() {
-    setRestoring(true);
-    try {
-      await restoreAndGrant();
-      await refreshCredits();
-    } catch (e: any) {
-      Alert.alert('Restore failed', e?.message ?? 'Please try again.');
-    } finally {
-      setRestoring(false);
     }
   }
 
@@ -98,18 +83,18 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Purchases</Text>
-        <Button onPress={openPaywall} title="Buy Credits" />
         <Button
-          variant="outline"
-          onPress={handleRestore}
-          disabled={restoring}
-          title={restoring ? 'Restoring…' : 'Restore Purchases'}
+          onPress={() => {
+            router.back();
+            openPaywall();
+          }}
+          title="Buy Credits"
         />
       </View>
 
       <View className="rounded-lg border border-border bg-card p-4 gap-2">
         <Text className="text-sm font-semibold text-foreground">About</Text>
-        <Text className="text-xs text-muted-foreground">Speech to Video v1.0.0</Text>
+        <Text className="text-xs text-muted-foreground">AI Speech to Video v1.0.0</Text>
         <Text className="text-xs text-muted-foreground">
           Generate AI videos from text or voice prompts.
         </Text>

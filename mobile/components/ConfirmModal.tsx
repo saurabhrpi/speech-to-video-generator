@@ -12,6 +12,8 @@ interface ConfirmModalProps {
   children?: React.ReactNode;
 }
 
+const CTA_BLUE = '#2563EB';
+
 export default function ConfirmModal({
   visible,
   title,
@@ -30,27 +32,39 @@ export default function ConfirmModal({
       onRequestClose={onCancel}
     >
       <Pressable
-        className="flex-1 bg-black/50 items-center justify-center p-6"
+        className="flex-1 bg-black/50 items-center justify-center p-4"
         onPress={onCancel}
       >
-        <Pressable className="w-full max-w-sm rounded-card bg-elevated p-5 gap-3">
-          <Text className="text-subheading font-heading text-foreground">{title}</Text>
+        <Pressable className="w-full max-w-lg rounded-card bg-elevated p-6 gap-4">
+          <Text className="text-subheading font-body text-foreground">{title}</Text>
           {message && (
-            <Text className="text-sm text-muted-foreground">{message}</Text>
+            <Text className="text-body font-body text-muted-foreground">{message}</Text>
           )}
           {children}
-          <View className="flex-row gap-2 pt-2">
+          <View className="flex-row gap-3 pt-2">
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 h-12"
               onPress={onCancel}
               title={cancelText}
             />
-            <Button
-              className="flex-1"
+            {/* Same blue capsule + white text as the home Generate button, slightly smaller. */}
+            <Pressable
               onPress={onConfirm}
-              title={confirmText}
-            />
+              accessibilityLabel={confirmText}
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: CTA_BLUE,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                {confirmText}
+              </Text>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>

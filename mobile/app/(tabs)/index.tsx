@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TextInput, ScrollView } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { Button } from '@/components/Button';
 import MicVisualizer from '@/components/MicVisualizer';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useRecording } from '@/hooks/useRecording';
@@ -16,6 +16,10 @@ import { creditCostFor } from '@/lib/constants';
 const HAILUO_MODEL_ID = 'minimax/hailuo-2.3';
 const HAILUO_MODEL_KEY = 'hailuo';
 const CLIP_DURATION = 10;
+
+// Primary CTA color — same hex used for ConfirmModal's Generate button.
+const CTA_BLUE = '#2563EB';
+const RECORDING_RED = '#B91C1C';
 
 export default function SpeechScreen() {
   const router = useRouter();
@@ -34,9 +38,6 @@ export default function SpeechScreen() {
   );
 
   const cost = creditCostFor(HAILUO_MODEL_KEY, CLIP_DURATION, costTable);
-  // Disable Generate ONLY when an in-flight job is the blocker — i.e. balance alone is enough
-  // but the projected (post-in-flight) balance isn't. If balance alone is already < cost, we
-  // leave the button tappable so dispatchGeneration's canAfford fallback opens the paywall.
   const blockedByInFlight =
     cost !== null &&
     creditBalance !== null &&
@@ -44,7 +45,8 @@ export default function SpeechScreen() {
     creditBalance >= cost &&
     creditBalance - inFlightCost < cost;
 
-  // Confirmation modal state
+  const generateDisabled = isRecording || !promptText.trim() || blockedByInFlight;
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
   const [pendingTranscript, setPendingTranscript] = useState('');
@@ -88,7 +90,6 @@ export default function SpeechScreen() {
     setPendingTranscript('');
     setConfirmOpen(true);
 
-    // Transcribe in background
     try {
       const formData = new FormData();
       formData.append('audio', {
@@ -103,6 +104,11 @@ export default function SpeechScreen() {
     } catch {
       // Transcription failure is non-fatal — user can type prompt manually
     }
+  }
+
+  function handleStartRecording() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startRecording();
   }
 
   function handleTextToVideo() {
@@ -124,15 +130,69 @@ export default function SpeechScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-8">
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-6">
+      {/* Header — voice-first framing */}
       <View className="gap-1">
         <Text className="text-heading font-body text-foreground">Speech to Video</Text>
         <Text className="text-body font-body text-muted-foreground">
-          Type a prompt or record audio to generate a 10-second video.
+          Speak your idea — get a 10-second video.
         </Text>
       </View>
 
-      {/* Text prompt input */}
+      {/* Primary input: large mic CTA. Idle = blue circle with mic icon. Recording = red capsule with "Stop Recording" text. */}
+      <View style={{ alignItems: 'center', gap: 12, paddingTop: 8 }}>
+        {isRecording && <MicVisualizer metering={metering} isActive={isRecording} />}
+        {isRecording ? (
+          <Pressable
+            onPress={handleStop}
+            accessibilityLabel="Stop Recording"
+            style={{
+              height: 72,
+              paddingHorizontal: 32,
+              minWidth: 220,
+              borderRadius: 36,
+              backgroundColor: RECORDING_RED,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: 'rgba(255,255,255,0.22)',
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '600' }}>
+              Stop Recording
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleStartRecording}
+            accessibilityLabel="Start Recording"
+            style={{
+              width: 130,
+              height: 130,
+              borderRadius: 65,
+              backgroundColor: CTA_BLUE,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 3,
+              borderColor: 'rgba(255,255,255,0.22)',
+            }}
+          >
+            <Ionicons name="mic" size={56} color="#FFFFFF" />
+          </Pressable>
+        )}
+        <Text className="text-caption font-body text-muted-foreground">
+          {isRecording ? 'Tap when you’re done' : 'Tap to speak your idea'}
+        </Text>
+      </View>
+
+      {/* Divider — text is the secondary input mode */}
+      <View className="flex-row items-center gap-3">
+        <View className="flex-1 h-px bg-border" />
+        <Text className="text-caption font-body text-muted-foreground">or type</Text>
+        <View className="flex-1 h-px bg-border" />
+      </View>
+
+      {/* Text prompt input + Generate */}
       <View className="gap-3">
         <TextInput
           value={promptText}
@@ -145,39 +205,30 @@ export default function SpeechScreen() {
           editable={!isRecording}
           className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[96px]"
         />
-        <Button
-          size="lg"
+        {/* Generate Video — blue capsule, 2x font (~28px), white text. Primary CTA. */}
+        <Pressable
           onPress={handleTextToVideo}
-          disabled={isRecording || !promptText.trim() || blockedByInFlight}
-          title={cost !== null ? `Generate Video · ${cost} credits` : 'Generate Video'}
-          className="w-full"
-        />
+          disabled={generateDisabled}
+          accessibilityLabel="Generate Video"
+          style={{
+            height: 64,
+            borderRadius: 32,
+            backgroundColor: CTA_BLUE,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: generateDisabled ? 0.4 : 1,
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: '600' }}>
+            Generate Video
+          </Text>
+        </Pressable>
       </View>
 
-      {/* Divider */}
-      <View className="flex-row items-center gap-3">
-        <View className="flex-1 h-px bg-border" />
-        <Text className="text-caption font-body text-muted-foreground">or record your voice</Text>
-        <View className="flex-1 h-px bg-border" />
-      </View>
-
-      {/* Record button + visualizer */}
-      <View className="gap-3">
-        {isRecording && <MicVisualizer metering={metering} isActive={isRecording} />}
-
-        <Button
-          size="lg"
-          variant={isRecording ? 'destructive' : 'outline'}
-          onPress={isRecording ? handleStop : startRecording}
-          title={isRecording ? 'Stop Recording' : 'Start Recording'}
-          className="w-full"
-        />
-      </View>
-
-      {/* Confirmation modal */}
+      {/* Transcript review modal — fires after voice recording stops */}
       <ConfirmModal
         visible={confirmOpen}
-        title="Review Transcript"
+        title="Edit the transcript below if you want. Then, generate the video."
         confirmText="Generate Video"
         cancelText="Cancel"
         onConfirm={handleConfirmProceed}
@@ -186,21 +237,16 @@ export default function SpeechScreen() {
           setPendingUri(null);
         }}
       >
-        <View className="gap-2">
-          <Text className="text-caption font-body text-muted-foreground">
-            Edit the transcript below, then generate your video.
-          </Text>
-          <TextInput
-            value={pendingTranscript}
-            onChangeText={setPendingTranscript}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            placeholder={pendingTranscript ? undefined : 'Transcribing...'}
-            placeholderTextColor={Colors.textSecondary}
-            className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[80px]"
-          />
-        </View>
+        <TextInput
+          value={pendingTranscript}
+          onChangeText={setPendingTranscript}
+          multiline
+          numberOfLines={5}
+          textAlignVertical="top"
+          placeholder={pendingTranscript ? undefined : 'Transcribing...'}
+          placeholderTextColor={Colors.textSecondary}
+          className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[120px]"
+        />
       </ConfirmModal>
     </ScrollView>
   );

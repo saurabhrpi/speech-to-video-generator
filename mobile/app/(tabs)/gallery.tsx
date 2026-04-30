@@ -22,6 +22,8 @@ const PADDING = 20;
 export default function GalleryScreen() {
   const { width } = useWindowDimensions();
   const cardWidth = (width - PADDING * 2 - CARD_GAP) / 2;
+  // Taller 2:3 portrait cards (was 1.2 ratio); matches social-video aesthetic.
+  const cardHeight = cardWidth * 1.5;
 
   const jobs = useGalleryStore((s) => s.jobs);
   const selectedJobId = useGalleryStore((s) => s.selectedJobId);
@@ -61,7 +63,7 @@ export default function GalleryScreen() {
         <View
           style={{
             width: cardWidth,
-            height: cardWidth * 1.2,
+            height: cardHeight,
             backgroundColor: Colors.card,
             borderRadius: 16,
             borderWidth: 1,
@@ -77,16 +79,10 @@ export default function GalleryScreen() {
             <ActivityIndicator color={Colors.textPrimary} size="small" />
           )}
           <Text
-            style={{ color: Colors.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'center' }}
-            numberOfLines={2}
-          >
-            {item.statusMsg || (paused ? 'Paused' : 'Generating...')}
-          </Text>
-          <Text
-            style={{ color: Colors.textSecondary, fontSize: 11, marginTop: 6, textAlign: 'center' }}
+            style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 10, textAlign: 'center' }}
             numberOfLines={1}
           >
-            {item.model} · {item.duration}s
+            {paused ? 'Paused' : 'Generating Video'}
           </Text>
         </View>
       );
@@ -101,14 +97,13 @@ export default function GalleryScreen() {
         <View
           style={{
             width: cardWidth,
-            height: cardWidth * 1.2,
+            height: cardHeight,
             backgroundColor: Colors.card,
             borderRadius: 16,
             borderWidth: 1,
             borderColor: isSelected ? Colors.textPrimary : Colors.glassyBorder,
             justifyContent: 'center',
             alignItems: 'center',
-            padding: 12,
             overflow: 'hidden',
           }}
         >
@@ -123,30 +118,34 @@ export default function GalleryScreen() {
                 position: 'absolute',
                 top: 6,
                 left: 6,
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: 'rgba(0,0,0,0.4)',
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: 'rgba(0,0,0,0.5)',
                 justifyContent: 'center',
                 alignItems: 'center',
                 zIndex: 10,
               }}
             >
-              <Ionicons name="close" size={14} color="#fff" />
+              <Ionicons name="close" size={16} color="#fff" />
             </Pressable>
           )}
-          <Ionicons name="play-circle" size={40} color={Colors.textPrimary} style={{ opacity: 0.8 }} />
+          {/* Center play icon — placeholder until image-thumbnail support lands (ToDo: V1 fast-follow) */}
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 12 }}>
+            <Ionicons name="play-circle" size={56} color={Colors.textPrimary} style={{ opacity: 0.85 }} />
+          </View>
+          {/* Prompt text — kept for V1 since cards have no image thumbnail yet */}
           <Text
-            style={{ color: Colors.textPrimary, fontSize: 12, marginTop: 8, textAlign: 'center' }}
+            style={{
+              color: Colors.textPrimary,
+              fontSize: 12,
+              textAlign: 'center',
+              paddingHorizontal: 8,
+              paddingBottom: 36, // leave room for the download/saved badge below
+            }}
             numberOfLines={2}
           >
             {item.prompt}
-          </Text>
-          <Text
-            style={{ color: Colors.textSecondary, fontSize: 11, marginTop: 4 }}
-            numberOfLines={1}
-          >
-            {item.model} · {item.duration}s
           </Text>
           {/* Download button — hidden after save */}
           {!item.saved && (
@@ -178,15 +177,15 @@ export default function GalleryScreen() {
         </View>
       </Pressable>
     );
-  }, [cardWidth, selectedJobId, selectJob, removeJob, handleSave, markSaved]);
+  }, [cardWidth, cardHeight, selectedJobId, selectJob, removeJob, handleSave, markSaved]);
 
   return (
     <Pressable style={{ flex: 1, backgroundColor: Colors.background }} onPress={() => selectJob(null)}>
-      {/* Selected video player */}
+      {/* Selected video player — full-bleed for ~25% larger feel vs the prior padded layout */}
       {selectedJob?.videoUrl && (
-        <View style={{ paddingHorizontal: PADDING, paddingTop: 12, paddingBottom: 4 }}>
+        <View style={{ paddingTop: 12, paddingBottom: 4 }}>
           <VideoPlayer url={selectedJob.videoUrl} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingHorizontal: PADDING }}>
             <Text style={{ color: Colors.textSecondary, fontSize: 12, flex: 1 }} numberOfLines={1}>
               {selectedJob.prompt}
             </Text>

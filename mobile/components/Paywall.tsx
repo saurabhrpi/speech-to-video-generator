@@ -20,11 +20,12 @@ import Purchases, {
 } from 'react-native-purchases';
 
 import { Button } from '@/components/Button';
-import { grantCreditsForTransaction, restoreAndGrant } from '@/lib/purchases';
+import { grantCreditsForTransaction } from '@/lib/purchases';
 import { useAuthStore } from '@/store/auth-store';
 import { Colors } from '@/lib/design-tokens';
 import {
   BEST_VALUE_PACK,
+  DEFAULT_SELECTED_PACK,
   PACK_CREDITS,
   PACK_SKUS,
   PRIVACY_URL,
@@ -56,7 +57,7 @@ export default function Paywall() {
   const refreshCredits = useAuthStore((s) => s.refreshCredits);
 
   const [packages, setPackages] = useState<PackageMap | null>(null);
-  const [selectedSku, setSelectedSku] = useState<PackSku>(BEST_VALUE_PACK);
+  const [selectedSku, setSelectedSku] = useState<PackSku>(DEFAULT_SELECTED_PACK);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
@@ -67,7 +68,7 @@ export default function Paywall() {
     setLoadError(null);
     setPurchaseError(null);
     setPackages(null);
-    setSelectedSku(BEST_VALUE_PACK);
+    setSelectedSku(DEFAULT_SELECTED_PACK);
 
     Purchases.getOfferings()
       .then((result) => {
@@ -123,7 +124,9 @@ export default function Paywall() {
       const res = await Purchases.purchasePackage(selectedPkg);
       const txId = res.transaction?.transactionIdentifier;
       if (!txId) {
-        setPurchaseError('Purchase succeeded but no transaction id returned. Tap Restore.');
+        setPurchaseError(
+          'Purchase succeeded but could not be confirmed. If credits do not appear, please email support@speech-2-video.ai.',
+        );
         return;
       }
       try {
@@ -132,25 +135,13 @@ export default function Paywall() {
         closePaywall();
       } catch {
         await refreshCredits();
-        setPurchaseError("Credits delayed — tap Restore if they aren't applied.");
+        setPurchaseError(
+          'Credits should appear shortly. If not, please email support@speech-2-video.ai.',
+        );
       }
     } catch (e: any) {
       if (e?.userCancelled) return;
       setPurchaseError(e?.message ?? 'Purchase failed. Please try again.');
-    } finally {
-      setPurchasing(false);
-    }
-  }
-
-  async function handleRestore() {
-    setPurchasing(true);
-    setPurchaseError(null);
-    try {
-      await restoreAndGrant();
-      await refreshCredits();
-      closePaywall();
-    } catch (e: any) {
-      setPurchaseError(e?.message ?? 'Restore failed. Please try again.');
     } finally {
       setPurchasing(false);
     }
@@ -203,7 +194,7 @@ export default function Paywall() {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-heading font-heading text-foreground">Buy Credits</Text>
+            <Text className="text-heading font-body-medium text-foreground">Buy Credits</Text>
             <Text className="text-body font-body text-muted-foreground">
               One-time purchase. Credits never expire.
             </Text>
@@ -244,10 +235,10 @@ export default function Paywall() {
                     </View>
                   ) : null}
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-subheading font-heading text-foreground">
+                    <Text className="text-subheading font-body-medium text-foreground">
                       {credits} credits
                     </Text>
-                    <Text className="text-subheading font-heading text-foreground">
+                    <Text className="text-subheading font-body-medium text-foreground">
                       {pkg?.product.priceString ?? '—'}
                     </Text>
                   </View>
@@ -289,18 +280,7 @@ export default function Paywall() {
             <View className="items-center py-1">
               <ActivityIndicator color={Colors.textPrimary} />
             </View>
-          ) : (
-            <Pressable
-              onPress={handleRestore}
-              disabled={purchasing}
-              hitSlop={8}
-              accessibilityLabel="Restore purchases"
-            >
-              <Text className="text-center text-body font-body text-muted-foreground">
-                Restore purchases
-              </Text>
-            </Pressable>
-          )}
+          ) : null}
 
           <View className="flex-row items-center justify-center gap-4 pt-1">
             <Pressable

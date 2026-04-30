@@ -12,7 +12,14 @@ export const PACK_CREDITS: Record<PackSku, number> = {
   pro_pack_250: 250,
 };
 
-export const BEST_VALUE_PACK: PackSku = 'pro_pack_120';
+// Badge target — the pack with the lowest per-credit price (best deal).
+// $19.99 / 250 = $0.080/credit beats $9.99 / 120 = $0.083/credit and $4.99 / 50 = $0.100/credit.
+export const BEST_VALUE_PACK: PackSku = 'pro_pack_250';
+
+// Default-selected radio when the paywall opens. We deliberately do NOT default
+// to the badge-bearing pack — defaulting users to the most expensive option
+// reads as pushy. Middle pack is the comfortable starting point.
+export const DEFAULT_SELECTED_PACK: PackSku = 'pro_pack_120';
 
 export type CostTable = Record<string, Record<string, number>>;
 
