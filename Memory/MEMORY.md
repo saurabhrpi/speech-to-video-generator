@@ -17,7 +17,7 @@
 - [Signed URLs reject HEAD](reference_signed_url_head.md) -- AIMLAPI CDN (Alibaba OSS) signed URLs are GET-only; HEAD → 403, use GET+Range instead
 - [VideoPlayer timeout strategy](feedback_video_timeout_strategy.md) -- Verify URL first (GET+Range), then generous 90s safety net; don't use short fixed timeouts
 - [AIMLAPI I2I ~4:45 is upstream](reference_aimlapi_i2i_latency.md) -- nano-banana-pro-edit holds chunked response open ~4min; T2I fine; fix = direct Gemini, not client tuning
-- [Replit republish grace period](reference_replit_republish.md) -- Old container runs ~5 min after republish before SIGTERM; not an instant kill
+- [Replit republish grace period (+ curl race)](reference_replit_republish.md) -- Old container runs ~5 min after republish; during handover, a single curl can hit either container, so one failed grep ≠ failed deploy
 - [Mobile OAuth cookie jar](feedback_mobile_oauth_cookie_jar.md) -- ASWebAuthenticationSession has separate cookie jar from app's fetch(); use one-time token exchange
 - [Zustand clear state on new runs](feedback_zustand_clear_state.md) -- Pipeline store leaks old results into new runs without explicit clearing
 - [Explicit handoff instructions](feedback_explicit_handoff.md) -- At handoff moments, spell out exact command/click-path, don't assume user will infer the mechanism
@@ -56,6 +56,7 @@
 - [RC Test Store REST delay](reference_rc_test_store_rest_delay.md) -- Test Store receipts take >7s to appear in REST; mobile retry too short, restorePurchases() unsupported; matcher falls through to entry.id
 - [Apple Sign In 1st attempt fails on fresh iCloud](reference_apple_signin_first_attempt_fresh_sim.md) -- Fresh iCloud sign-in (sim or real device w/ sandbox) → first ASAuthorization call fails "unknown reason"; auto-retry implemented in lib/auth.ts. Cause of Build #13 review rejection.
 - [Pattern-match the scenario, not the prior fix](feedback_pattern_match_scenario_not_fix.md) -- Same error string can have different root causes; check execution logs before assuming "code didn't load"; verify a memory's scenario matches yours before applying its fix
+- [FastAPI HEAD returns 404](reference_fastapi_head_404.md) -- @router.get only handles GET; `curl -I` returns 404 on FastAPI routes. Use `curl -s` for reachability checks; only add HEAD support if a real client needs it.
 - [Dev session companions + noise filter](feedback_dev_session_companions.md) -- Start log-stream + simctl spawn + Nativewind watcher with Metro; strip CHHapticPattern noise from monitor regexes
 - [RN Modal stacking is fragile](reference_ios_modal_on_modal.md) -- both directions (over expo-router modal route, AND under Apple Sign In sheet) break; durable fix is root-level Animated.View overlay, not transparent={true}
 - [RC offline disk cache](reference_revenuecat_offline_disk_cache.md) -- getOfferings() serves from disk cache offline for returning users; paywall renders normally, failure moves to Buy/Restore handlers
