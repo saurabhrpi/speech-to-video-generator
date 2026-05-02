@@ -54,7 +54,8 @@
 - [Verify deploy before mobile integration test](feedback_verify_deploy_before_integration_test.md) -- Uncommitted/undeployed backend + new mobile UI = false-bug diagnoses; git status + fingerprint curl before testing
 - [Screenshot path is debug/](feedback_screenshot_path.md) -- "Screenshot" without an attachment → look in debug/ folder; filenames vary by context
 - [RC Test Store REST delay](reference_rc_test_store_rest_delay.md) -- Test Store receipts take >7s to appear in REST; mobile retry too short, restorePurchases() unsupported; matcher falls through to entry.id
-- [Apple Sign In 1st attempt fails on fresh sim](reference_apple_signin_first_attempt_fresh_sim.md) -- After fresh iCloud sign-in on sim, first ASAuthorization call fails "unknown reason"; second works
+- [Apple Sign In 1st attempt fails on fresh iCloud](reference_apple_signin_first_attempt_fresh_sim.md) -- Fresh iCloud sign-in (sim or real device w/ sandbox) → first ASAuthorization call fails "unknown reason"; auto-retry implemented in lib/auth.ts. Cause of Build #13 review rejection.
+- [Pattern-match the scenario, not the prior fix](feedback_pattern_match_scenario_not_fix.md) -- Same error string can have different root causes; check execution logs before assuming "code didn't load"; verify a memory's scenario matches yours before applying its fix
 - [Dev session companions + noise filter](feedback_dev_session_companions.md) -- Start log-stream + simctl spawn + Nativewind watcher with Metro; strip CHHapticPattern noise from monitor regexes
 - [RN Modal stacking is fragile](reference_ios_modal_on_modal.md) -- both directions (over expo-router modal route, AND under Apple Sign In sheet) break; durable fix is root-level Animated.View overlay, not transparent={true}
 - [RC offline disk cache](reference_revenuecat_offline_disk_cache.md) -- getOfferings() serves from disk cache offline for returning users; paywall renders normally, failure moves to Buy/Restore handlers
