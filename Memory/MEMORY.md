@@ -76,3 +76,4 @@
 - [No Restore UI for consumable-only apps](reference_no_restore_ui_for_consumables.md) -- Apple 3.1.1 forbids Apple-account Restore for consumables; remove the UI entirely; use CustomerInfo listener for edge-case recovery instead
 - [Apple Dev enrollment is App-only on web](reference_apple_dev_enrollment_app_only.md) -- Web sign-in offers only "install Apple Developer App" + a small "contact us" support link; no self-service browser/webcam flow exists today
 - [RN v7 back button label](reference_react_navigation_v7_back_button.md) -- `headerBackTitle: ''` is ignored in RN v7; use `headerBackButtonDisplayMode: 'minimal'` to hide the back button label
+- [supportsTablet false doesn't block iPad](reference_supports_tablet_false_does_not_block_ipad.md) -- supportsTablet: false only removes the Universal badge + skips iPad screenshots; Apple reviewers can still pick iPad and the app runs scaled — must test iPad simulator before submit
