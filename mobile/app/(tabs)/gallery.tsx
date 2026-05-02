@@ -131,11 +131,10 @@ export default function GalleryScreen() {
               <Ionicons name="close" size={16} color="#fff" />
             </Pressable>
           )}
-          {/* Thumbnail (full-bleed) when available; play-icon overlay sits on top.
-              Pre-thumbnail jobs and any failed thumbnail gen fall through to the
-              play-icon-only layout. Prompt text is shown only at playback time
-              (under the inline player) — see ToDo #28 for the dedicated
-              playback screen with full prompt text. */}
+          {/* Thumbnail full-bleed. IG-style pure-thumbnail card — no play icon,
+              no download/saved badge. Save and saved-state live in the inline
+              playback area; see ToDo #28 for the dedicated playback screen.
+              Pre-thumbnail jobs (no thumbnailUri) render as a plain dark card. */}
           {item.thumbnailUri && (
             <Image
               source={{ uri: item.thumbnailUri }}
@@ -143,45 +142,10 @@ export default function GalleryScreen() {
               resizeMode="cover"
             />
           )}
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons
-              name="play-circle"
-              size={56}
-              color={Colors.textPrimary}
-              style={{ opacity: item.thumbnailUri ? 0.9 : 0.85 }}
-            />
-          </View>
-          {/* Download button — hidden after save */}
-          {!item.saved && (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation?.();
-                if (item.videoUrl) handleSave(item.videoUrl, item.id);
-              }}
-              style={{
-                position: 'absolute',
-                bottom: 8,
-                right: 8,
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-            >
-              <Ionicons name="download-outline" size={18} color={Colors.textPrimary} />
-            </Pressable>
-          )}
-          {item.saved && (
-            <View style={{ position: 'absolute', bottom: 8, right: 8 }}>
-              <Ionicons name="checkmark-circle" size={22} color={Colors.textSecondary} />
-            </View>
-          )}
         </View>
       </Pressable>
     );
-  }, [cardWidth, cardHeight, selectedJobId, selectJob, removeJob, handleSave, markSaved]);
+  }, [cardWidth, cardHeight, selectedJobId, selectJob, removeJob]);
 
   return (
     <Pressable style={{ flex: 1, backgroundColor: Colors.background }} onPress={() => selectJob(null)}>
