@@ -46,6 +46,7 @@ interface GalleryStore {
     meta: { prompt: string; model: string; duration: number; cost: number },
   ) => string;
   markSaved: (id: string) => void;
+  clearThumbnail: (id: string) => void;
   removeJob: (id: string) => void;
   selectJob: (id: string | null) => void;
   hydrate: () => Promise<void>;
@@ -284,6 +285,17 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   markSaved: (id) => {
     set((s) => {
       const jobs = s.jobs.map((j) => (j.id === id ? { ...j, saved: true } : j));
+      persist(jobs);
+      return { jobs };
+    });
+  },
+
+  clearThumbnail: (id) => {
+    // Called from <Image onError> when the persisted local URI is stale
+    // (e.g., after a rebuild changed the app container path). Wipes the URI
+    // so the card stops retrying and falls back to the plain dark layout.
+    set((s) => {
+      const jobs = s.jobs.map((j) => (j.id === id ? { ...j, thumbnailUri: undefined } : j));
       persist(jobs);
       return { jobs };
     });

@@ -103,6 +103,7 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
+          <Stack.Screen name="clip/[id]" options={{ title: 'S2V', headerBackButtonDisplayMode: 'minimal' }} />
         </Stack>
         <Paywall />
       </ThemeProvider>
