@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  Image,
   Pressable,
   ActivityIndicator,
   Alert,
@@ -130,23 +131,26 @@ export default function GalleryScreen() {
               <Ionicons name="close" size={16} color="#fff" />
             </Pressable>
           )}
-          {/* Center play icon — placeholder until image-thumbnail support lands (ToDo: V1 fast-follow) */}
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 12 }}>
-            <Ionicons name="play-circle" size={56} color={Colors.textPrimary} style={{ opacity: 0.85 }} />
+          {/* Thumbnail (full-bleed) when available; play-icon overlay sits on top.
+              Pre-thumbnail jobs and any failed thumbnail gen fall through to the
+              play-icon-only layout. Prompt text is shown only at playback time
+              (under the inline player) — see ToDo #28 for the dedicated
+              playback screen with full prompt text. */}
+          {item.thumbnailUri && (
+            <Image
+              source={{ uri: item.thumbnailUri }}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              resizeMode="cover"
+            />
+          )}
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons
+              name="play-circle"
+              size={56}
+              color={Colors.textPrimary}
+              style={{ opacity: item.thumbnailUri ? 0.9 : 0.85 }}
+            />
           </View>
-          {/* Prompt text — kept for V1 since cards have no image thumbnail yet */}
-          <Text
-            style={{
-              color: Colors.textPrimary,
-              fontSize: 12,
-              textAlign: 'center',
-              paddingHorizontal: 8,
-              paddingBottom: 36, // leave room for the download/saved badge below
-            }}
-            numberOfLines={2}
-          >
-            {item.prompt}
-          </Text>
           {/* Download button — hidden after save */}
           {!item.saved && (
             <Pressable

@@ -5,6 +5,7 @@ import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiPost, resolveVideoUrl } from '@/lib/api-client';
 import { pollJob, ERR_CONNECTION_LOST, ERR_JOB_NOT_FOUND } from '@/lib/polling';
+import { generateThumbnail } from '@/lib/thumbnails';
 import { useAuthStore } from '@/store/auth-store';
 
 const STORAGE_KEY = 'gallery_jobs';
@@ -24,6 +25,10 @@ export interface GalleryJob {
   status: 'generating' | 'completed' | 'failed' | 'paused';
   statusMsg: string;
   videoUrl: string | null;
+  // Local cache URI for the gallery card thumbnail. Generated 2s into the clip
+  // via expo-video-thumbnails right after completion. Optional/back-compat:
+  // pre-thumbnail jobs render the play-icon fallback in gallery.tsx.
+  thumbnailUri?: string;
   error: string | null;
   createdAt: number;
   saved: boolean;
@@ -114,14 +119,25 @@ function runPoll(
 
       if (result?.video_url) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const resolvedUrl = resolveVideoUrl(result.video_url);
         useGalleryStore.setState((s) => {
           const jobs = s.jobs.map((j) =>
             j.id === jobId
-              ? { ...j, status: 'completed' as const, statusMsg: 'Done!', videoUrl: resolveVideoUrl(result.video_url) }
+              ? { ...j, status: 'completed' as const, statusMsg: 'Done!', videoUrl: resolvedUrl }
               : j,
           );
           persist(jobs);
           return { jobs };
+        });
+        // Fire-and-forget thumbnail generation. Hailuo URLs have a ~1h TTL, so
+        // the only window this lands is right after completion — perfect.
+        generateThumbnail(resolvedUrl).then((uri) => {
+          if (!uri) return;
+          useGalleryStore.setState((s) => {
+            const jobs = s.jobs.map((j) => (j.id === jobId ? { ...j, thumbnailUri: uri } : j));
+            persist(jobs);
+            return { jobs };
+          });
         });
       } else {
         // Backend finished the job but returned no video_url (e.g. result.success=false).
