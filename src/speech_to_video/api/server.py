@@ -1032,15 +1032,25 @@ async def create_speech_to_video(
     if not text:
         raise HTTPException(status_code=400, detail="prompt_or_audio_required")
 
-    from ..utils.job_manager import create_job, update_job, start_job
+    from ..utils.job_manager import try_create_credit_job, update_job, start_job
 
-    job_id = create_job()
-    update_job(
-        job_id,
+    # Atomic gate: at most one unsettled credit-bearing job per uid. Closes the
+    # TOCTOU race between _check_credits_or_402 (read) and consume (write at
+    # completion) — concurrent submits with the same balance would otherwise
+    # all pass the eager check and only the first deduction would succeed.
+    job_id = try_create_credit_job(
         uid=user["uid"],
-        is_anonymous=user["is_anonymous"],
         credit_cost=int(cost),
+        is_anonymous=bool(user["is_anonymous"]),
     )
+    if not job_id:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "concurrent_job_in_flight",
+                "message": "A generation is already in progress for this account.",
+            },
+        )
 
     def on_progress(phase, step, total, message, partial_result=None):
         updates = {"phase": phase, "step": step, "total_steps": total, "message": message}

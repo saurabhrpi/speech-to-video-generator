@@ -246,6 +246,17 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
           auth.openPaywall();
           return;
         }
+        // 429 = server's per-uid concurrent-submit gate (ToDo #1). Honest users
+        // are blocked by `blockedByInFlight` upstream; this branch covers the
+        // multi-device collision (same UID signed in on two devices).
+        if (err?.status === 429) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert(
+            'Generation in progress',
+            'Please wait for your current generation to finish before starting another.',
+          );
+          return;
+        }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Generation failed', err.message || 'Network error');
       }

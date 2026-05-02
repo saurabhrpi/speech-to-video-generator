@@ -38,12 +38,9 @@ export default function SpeechScreen() {
   );
 
   const cost = creditCostFor(HAILUO_MODEL_KEY, CLIP_DURATION, costTable);
-  const blockedByInFlight =
-    cost !== null &&
-    creditBalance !== null &&
-    inFlightCost > 0 &&
-    creditBalance >= cost &&
-    creditBalance - inFlightCost < cost;
+  // Server enforces one unsettled credit-bearing job per uid (ToDo #1 fix);
+  // mirror that here so honest users never see the 429.
+  const blockedByInFlight = inFlightCost > 0;
 
   const generateDisabled = isRecording || !promptText.trim() || blockedByInFlight;
 

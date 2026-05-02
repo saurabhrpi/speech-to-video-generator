@@ -12,15 +12,42 @@ _MAX_JOBS = 50
 _JOB_TTL = 3600
 
 
+def _gc_stale_locked(now: float) -> None:
+    """Evict jobs older than TTL once we exceed MAX_JOBS. Caller must hold _lock."""
+    if len(_jobs) > _MAX_JOBS:
+        cutoff = now - _JOB_TTL
+        stale = [jid for jid, j in _jobs.items() if j.get("created_at", 0) < cutoff]
+        for jid in stale:
+            del _jobs[jid]
+
+
+def _is_unsettled_credit_job(job: Dict[str, Any]) -> bool:
+    """A credit-bearing job that still owes a deduction.
+
+    True for queued/running jobs, AND for completed jobs whose consume hasn't
+    fired yet (the exact window the TOCTOU race exploited). False for failed
+    jobs, jobs that returned {success: False, no video_url} (no consume due),
+    and jobs whose credit was already consumed.
+    """
+    if int(job.get("credit_cost") or 0) <= 0:
+        return False
+    if job.get("credit_consumed"):
+        return False
+    status = job.get("status")
+    if status == "failed":
+        return False
+    if status == "completed":
+        result = job.get("result") or {}
+        if not result.get("video_url"):
+            return False
+    return True
+
+
 def create_job() -> str:
     job_id = str(uuid.uuid4())
     now = time.time()
     with _lock:
-        if len(_jobs) > _MAX_JOBS:
-            cutoff = now - _JOB_TTL
-            stale = [jid for jid, j in _jobs.items() if j.get("created_at", 0) < cutoff]
-            for jid in stale:
-                del _jobs[jid]
+        _gc_stale_locked(now)
         _jobs[job_id] = {
             "status": "queued",
             "phase": None,
@@ -31,6 +58,39 @@ def create_job() -> str:
             "partial_result": None,
             "created_at": now,
             "usage_counted": False,
+        }
+    return job_id
+
+
+def try_create_credit_job(uid: str, credit_cost: int, is_anonymous: bool) -> Optional[str]:
+    """Atomically gate concurrent credit-bearing submits per uid.
+
+    Returns a fresh job_id if this uid has no unsettled credit-bearing job;
+    returns None if one is already in flight. The check + create runs under
+    _lock so two concurrent callers cannot both win.
+    """
+    now = time.time()
+    job_id = str(uuid.uuid4())
+    with _lock:
+        _gc_stale_locked(now)
+        for j in _jobs.values():
+            if j.get("uid") != uid:
+                continue
+            if _is_unsettled_credit_job(j):
+                return None
+        _jobs[job_id] = {
+            "status": "queued",
+            "phase": None,
+            "step": 0,
+            "total_steps": 0,
+            "message": "Queued",
+            "result": None,
+            "partial_result": None,
+            "created_at": now,
+            "usage_counted": False,
+            "uid": uid,
+            "is_anonymous": bool(is_anonymous),
+            "credit_cost": int(credit_cost),
         }
     return job_id
 

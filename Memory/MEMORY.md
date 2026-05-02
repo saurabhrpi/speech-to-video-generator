@@ -72,3 +72,6 @@
 - [No EAS build emails](reference_no_eas_build_emails.md) -- EAS never sends email on build success; monitor via the build URL or eas CLI
 - [TestFlight approval source of truth](reference_testflight_approval_truth.md) -- ASC yellow warning lies; tap the public link in mobile browser or check Apple's email for real approval state
 - [App Transfer criteria (verified)](reference_app_transfer_criteria.md) -- App Store release required; NO 60-day cooldown despite prior wrong claim of one
+- [Paid Apps Agreement Active before submission](reference_paid_apps_agreement_active_first.md) -- Pending agreement → RC products empty → Apple cites 2.1(b) "buy button unresponsive"; verify all three Business rows Active before Add for Review
+- [No Restore UI for consumable-only apps](reference_no_restore_ui_for_consumables.md) -- Apple 3.1.1 forbids Apple-account Restore for consumables; remove the UI entirely; use CustomerInfo listener for edge-case recovery instead
+- [Apple Dev enrollment is App-only on web](reference_apple_dev_enrollment_app_only.md) -- Web sign-in offers only "install Apple Developer App" + a small "contact us" support link; no self-service browser/webcam flow exists today
