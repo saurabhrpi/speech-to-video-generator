@@ -1,7 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Ionicons } from '@expo/vector-icons';
 import { resolveVideoUrl } from '@/lib/api-client';
 
 interface VideoPlayerProps {
@@ -17,8 +16,6 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(true);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resolvedUrl = resolveVideoUrl(url);
@@ -63,37 +60,25 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
     };
   }, [resolvedUrl]);
 
-  const scheduleHide = useCallback(() => {
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setShowOverlay(false), 1500);
-  }, []);
-
+  // Tap-to-pause / tap-to-resume. Initial play is driven by the Video onLoad
+  // hook below, so the gallery card → play flow is single-tap (no separate
+  // "tap play icon" step).
   const handleTap = useCallback(async () => {
     if (!videoRef.current) return;
-
     if (isPlaying) {
-      // If playing and overlay hidden, just show overlay briefly
-      if (!showOverlay) {
-        setShowOverlay(true);
-        scheduleHide();
-        return;
-      }
-      // If playing and overlay visible, pause
       await videoRef.current.pauseAsync();
     } else {
       await videoRef.current.playAsync();
-      setShowOverlay(true);
-      scheduleHide();
     }
-  }, [isPlaying, showOverlay, scheduleHide]);
+  }, [isPlaying]);
 
   const onPlaybackStatusUpdate = useCallback(async (status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     setIsPlaying(status.isPlaying);
     if (status.didJustFinish) {
+      // Reset to first frame and pause; user taps to replay.
       await videoRef.current?.setPositionAsync(0);
       await videoRef.current?.pauseAsync();
-      setShowOverlay(true);
     }
   }, []);
 
@@ -116,9 +101,18 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
             resizeMode={ResizeMode.CONTAIN}
             isLooping={false}
             style={{ width: '100%', aspectRatio: 16 / 9 }}
-            onLoad={() => {
+            onLoad={async () => {
               if (loadTimer.current) clearTimeout(loadTimer.current);
               setLoading(false);
+              // Auto-play as soon as the video is decodable so tapping a
+              // thumbnail goes straight to playback (no second tap on a play
+              // icon). Tap-to-pause/resume is still handled by handleTap.
+              try {
+                await videoRef.current?.playAsync();
+              } catch {
+                // Best-effort; if playback fails (e.g., autoplay restrictions),
+                // user can still tap to start manually.
+              }
             }}
             onPlaybackStatusUpdate={onPlaybackStatusUpdate}
             onError={() => {
@@ -127,15 +121,6 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
               setError('Video failed to load');
             }}
           />
-          {showOverlay && !loading && (
-            <View className="absolute inset-0 items-center justify-center">
-              {!isPlaying && (
-                <View className="rounded-full bg-black/40 p-4">
-                  <Ionicons name="play" size={36} color="white" />
-                </View>
-              )}
-            </View>
-          )}
         </Pressable>
       )}
     </View>
