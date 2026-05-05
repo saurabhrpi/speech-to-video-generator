@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 
-EFFECTIVE_DATE = "April 25, 2026"
+EFFECTIVE_DATE = "May 2, 2026"
 SUPPORT_EMAIL = "support@speech-2-video.ai"
 GOVERNING_LAW_JURISDICTION = "the State of Tennessee, United States"
 GOVERNING_LAW_VENUE = "Davidson County, Tennessee"
@@ -73,7 +73,12 @@ _PRIVACY_BODY = f"""
 
 <p><strong>Generated content.</strong></p>
 <ul>
-  <li><strong>Prompts and audio.</strong> Text prompts you type, and audio you record for transcription, are sent to third-party AI providers (OpenAI for transcription, MiniMax for video generation). We do not retain audio files after transcription.</li>
+  <li><strong>Prompts and audio.</strong> Text prompts you type, and audio you record for transcription, are sent to third-party AI providers each time you tap Generate:
+    <ul>
+      <li><strong>OpenAI</strong> receives your audio recording and returns a text transcription (Whisper). We do not retain audio after transcription.</li>
+      <li><strong>MiniMax</strong> receives your text prompt and returns a generated video clip (Hailuo).</li>
+    </ul>
+    Before any data is sent for the first time, the App shows an in-app disclosure listing these providers and the data they receive, and asks for your consent. These providers handle your data under their own privacy policies, which we have reviewed to confirm they provide equal or better protection of your information. Links: <a href="https://openai.com/policies/privacy-policy">OpenAI Privacy Policy</a>, <a href="https://www.minimax.io/legal/privacy-policy">MiniMax Privacy Policy</a>.</li>
   <li><strong>Generated videos.</strong> URLs to your generated videos are stored on our servers under your account identifier so you can access them from the App's gallery. The video files themselves are hosted by the AI providers.</li>
 </ul>
 
