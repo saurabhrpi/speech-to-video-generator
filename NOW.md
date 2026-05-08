@@ -1,45 +1,78 @@
 # Session Log
 
-> **STICKY (do not remove):** Read Motto-and-Mantra.txt. ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
+> **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 54 — 2026-04-30 / 2026-05-02 — main + hotfix-build14 (closing)
-**Status:** Build #14 resubmitted to Apple after a second rejection on Build #13. Resubmission cited 5.1.1(i)/5.1.2(i) (third-party AI data disclosure) and 2.1(b) (IAP "authorization attempt failed" on iPad). Both targeted fixes shipped on a hotfix branch from Build #13's exact commit, plus a backend privacy-policy text update deployed to Replit. Apple's third review is now pending.
+## Current Session: 58 — 2026-05-04 / 2026-05-07 — home-screen-redesign (closing)
+
+**Status:** App V1 (S2V) APPROVED + LIVE on App Store. V2 vision locked: home-screen redesign with template carousels + motion-transfer wedge. Both motion-transfer outcomes verified end-to-end on a single-provider Kling architecture (Pollo dropped). Implementation plan saved at `docs/V2_motion_transfer_plan.md`. Backend Track 1 ready to start once 5 clarifying questions resolve.
 
 ## What happened this session
 
-- **ToDo #1 — server-side concurrent-submit credit gate (Yellow): SHIPPED on main.** New `try_create_credit_job` in `utils/job_manager.py` does an atomic in-memory check + create under `_lock`: rejects if uid already has an unsettled credit-bearing job. `/api/generate/speech-to-video` swapped to use it; returns 429 `concurrent_job_in_flight` on collision. Mobile `blockedByInFlight` tightened to "any in-flight job blocks" + a friendly 429 alert in `gallery-store` for the multi-device collision case. Verified by 6 unit tests covering the exact TOCTOU window. Closes the adversarial-curl revenue leak. (Commit `3a0b704`.)
-- **Gallery thumbnails (V2 polish, ex-NOW phantom #10): SHIPPED on main.** `expo-video-thumbnails` added; `lib/thumbnails.ts` extracts a 2-second frame on completion; `thumbnailUri` persisted on `GalleryJob`. Cards became pure-thumbnail (full-bleed image, no play-icon overlay, no save badge) — IG/TikTok pattern. `<Image onError>` clears stale URIs after rebuild-induced container UUID changes. (Commits `d449bcb` → `652f9b4`.)
-- **Auto-play VideoPlayer + dedicated playback screen: SHIPPED on main.** Tap a thumbnail → push `clip/[id]` route. New screen has S2V title with chevron-only back, video letterboxed in upper half (`flex: 2`), prompt card with Copy button (`flex: 1`), three white circular action buttons (Create New / Save / Share) at the bottom (`flex: 1`). VideoPlayer auto-plays via `onLoad` — single-tap-to-play, no overlay. Save/Share use `expo-sharing` + `expo-file-system`. (Commits `01cbd9d` → `e876a65`.)
-- **Apple App Review verdict on Build #13: REJECTED on 2.1(b) and 5.1.1(i)/5.1.2(i).** Apple tested on iPad Air 11-inch (M3) — `supportsTablet: false` doesn't actually prevent iPad review, only removes the Universal badge + iPad-screenshot requirement. The 2.1(b) error: "The authorization attempt failed for an unknown reason" — the same `ASAuthorizationError` first observed in S52 on a freshly-erased sim. Reviewer hits it every submission because their sandbox iCloud sign-in is always fresh and the auth daemon is always cold on first call.
-- **Hotfix branch strategy from rejected commit's SHA.** Looked up Build #13's commit via `eas build:list` (`6971edaf...`), branched `hotfix-build14` from it, applied ONLY the rejection-targeted fixes — kept the diff to ~5 files vs. 20+ files of S54 work safely held back on main.
-- **5.1.1(i)/5.1.2(i) fix.** New `DataSharingConsentModal.tsx` lists OpenAI Whisper + MiniMax Hailuo and the data each receives, with Decline / I understand. Speech tab gates BOTH mic-tap and text-Generate paths through it (audio goes to OpenAI even before the user taps Generate). Versioned AsyncStorage key `data_sharing_consent_v1`. Privacy Policy at `/privacy` extended with explicit per-provider data flow, links to each provider's policy, and Apple's required "equal or better protection" phrasing. Backend deployed on Replit; verified live with `curl -s https://speech-2-video.ai/privacy`.
-- **2.1(b) fix.** Reproduced on iPad Air 11" (M4) sim with full `xcrun simctl spawn log show` trace. First attempt: tried immediate retry — failed because the second `signInAsync` was queued WHILE the user was still in Settings signing into iCloud. Correct fix: `requestAppleCredential` in `lib/auth.ts` catches the first failure, awaits `waitForAppActive(5min timeout)` until the user returns from Settings, waits 1s for the auth daemon to settle, then retries. Verified end-to-end on iPad sim → cold iCloud → Settings sign-in → return → name dialog → sandbox account → RC purchase. No red error.
-- **Build #14 collision footgun discovered.** First EAS build from hotfix-build14 produced a duplicate Build #13: `eas.json` is `appVersionSource: "local"` + `autoIncrement: true`, hotfix branch had stale `app.json buildNumber: 12`, EAS bumped 12 → 13 (collision with the rejected Build #13 in ASC). Wasted one EAS credit. Recovery: app.json was now at 13 from the wasted build's local write, so re-running `eas build` bumped 13 → 14 cleanly. Memorialized.
-- **Build #14 submitted + reply attached.** "Add for Review" clicked. Resolution-center thread has the privacy + IAP explanation. App Review Information notes include "designed for iPhone, please test on iPhone if possible" — soft hint, reviewer may or may not honor. Now in "Waiting for Review."
-- **8 new memories captured.** RN v7 `headerBackButtonDisplayMode`, supportsTablet false doesn't block iPad review, Apple Sign In retry strategy (rewritten with the corrected fix), pattern-match the scenario not the prior fix (process feedback), FastAPI HEAD returns 404, Replit republish + curl race window, find git commit behind an EAS build, EAS local autoIncrement collides on hotfix branches.
+- **Apple approved Build #14 → app live on App Store.** Confirmed via "Welcome to App Store" email. App findable on Mac App Store via public link immediately; iPhone search indexing rolled in within 24h via developer-name search.
+- **Real-device install + smoke test (production stack):** anon free-gen ✓, paywall trigger on 2nd attempt ✓, Apple Sign In completed (with documented two-attempt picker quirk — first picker silent-fails, second succeeds; memory `reference_apple_signin_first_attempt_fresh_sim.md` extended to "fresh sim AND first install from live App Store on real iPhone"), IAP purchase confirmed declined at "double-click to confirm" — real-Apple receipt → backend grant path remains untested, deferred to first organic purchase.
+- **`hotfix-build14` → `main` merge complete + pushed.** New main HEAD `6aa2c2b` (merge commit). `home-screen-redesign` fast-forwarded to new main. Origin pushed. Three conflict resolutions: NOW.md (took theirs/stash for S57 body per "newest in body" convention), MEMORY.md + Apple-Sign-In memory (took ours/HEAD for S54 comprehensive content), `mobile/app.json` buildNumber → 14. **Conflict-resolution regression caught:** `--ours` on MEMORY.md silently dropped 6 S57 memory bullets — files survived as untracked, index entries vanished. Restored. New memory + CLAUDE.md Common Pitfalls rule: never blindly `--ours/--theirs` on index files.
+- **Kling Motion Control v2.6 client scaffolded** (`src/speech_to_video/clients/kling_motion_client.py`). Direct API at `https://api-singapore.klingai.com`, HS256 JWT regenerated per request from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`, retries on GET only. PyJWT pinned in `requirements.txt`. Smoke-tested offline (JWT round-trip) + verified live on `/account/costs` endpoint (84 cr remaining of 100 trial after 4 generations).
+- **Kling two-mode test (Outcome 2 verified, V1 plan locked for Outcome 2):**
+  - `image` orientation + selfie + dance video → **clean Outcome 2** (1424×1456, photo AR, $1.12 COGS, ~5-6 min). User verdict: "Way better than Swaptok."
+  - `video` orientation + headshot + full-body dance → Swaptok-grade fail. **Revised understanding (initially wrong):** both modes preserve photo background; canvas always matches photo AR. The `video` toggle is character-pose-within-photo-frame, not Outcome-1.
+- **Kling pricing locked:** $0.14/cr post-trial (user-confirmed). 8 cr/gen at 10s `pro` = **$1.12 / 10s gen**. Earlier klingmotion.com "3 cr/s" estimate was advertised time-cost, not actual deduction.
+- **Outcome-1 input-shaping spike — abandoned then unlocked:**
+  - **v1 face-swap:** structural Outcome 1 ✓ but face fidelity broken (sunglasses contortion, dancer's hands/skin tone visible).
+  - **v2 prompt:** introduced over-strip bug (would remove user's own accessories). Caught before run.
+  - **v3 prompt with accessories-follow-second-image rule:** clean swap but final video still paste-in (face lighting didn't match scene). I declared "model-class ceiling, switch to Pollo." (**Wrong.**)
+  - **`Match Video` digression:** retested video orientation with body-extended photo + scene-prompt → still Outcome 2 (confirms Kling is fundamentally Outcome-2 at structure level).
+  - **v4 holistic-regen reframing (user proposal):** instead of "preserve everything except face," reframed as "regenerate a coherent photo combining identity-from-image-2 with pose/scene/lighting-from-image-1, naturally imagine missing body parts in user's clothing style." Same Nano Banana Pro Edit endpoint. **Clean Outcome 1.** User verdict: "Wow, this is gold."
+- **V2 outcome strategy locked — single-provider Kling architecture.**
+  - Outcome 2: Kling `image` mode. $1.12, ~5-6 min.
+  - Outcome 1: Nano Banana Pro Edit (v4 regen prompt, ~$0.04) → Kling `video` mode ($1.12). Total **$1.16, ~7-8 min**.
+  - **Pollo `mix` officially DROPPED.** No $80 API top-up needed. Viggle still de-prioritized.
+- **V2 product vision laid out (user direction):** competitor-style home screen — top 1/3 hero carousel of viral trends (landscape), below = rows of theme-bucketed template carousels, no tabs, floating Create Video button → S2V (demoted), top-right profile icon → user gallery → gear → settings. Templates pulled from top-10 viral trends per theme on TikTok/IG. **Both outcomes ship day-one.**
+- **Plan doc created at `docs/V2_motion_transfer_plan.md`** with vision, 2 load-bearing risks (TikTok/IG content licensing — CRITICAL; variance scaling across templates × selfies), 5 clarifying questions to user, 4-track work breakdown, recommended starting sequence.
+- **Memory work this session:**
+  - 4 new feedback memories: `feedback_provider_mode_names_neq_outcomes.md`, `feedback_index_files_need_handmerge.md`, `feedback_localized_edits_cant_holistic_regen.md` (then amended after v4), `feedback_regen_vs_preserve_prompts.md`.
+  - 6 S57 memory bullets restored to MEMORY.md after the `--ours` conflict-resolution regression.
+  - CLAUDE.md Common Pitfalls section gained the index-files rule (loaded into every session's system prompt).
+  - `reference_apple_signin_first_attempt_fresh_sim.md` description+content broadened to cover real-iPhone-from-App-Store case.
 
-## Next step — Session 55 (on resume)
+## Next step — Session 59 (on resume)
 
-**Wait for Apple's verdict on Build #14.** Three branches:
+1. **User answers 5 clarifying questions** in `docs/V2_motion_transfer_plan.md`:
+   - Q1 (CRITICAL — legal): Trend ingestion strategy. Manual curation, paid trend-data provider, AI-generated approximations, or mix? Gates everything legal.
+   - Q2: V2 theme list (Dance / Comedy / Transformation / Sports / Couples / Reactions / etc.).
+   - Q3: Hero carousel content — same templates as below or distinct curated content?
+   - Q4: Per-template outcome-assignment process (who decides 1 vs 2 per template).
+   - Q5: Template asset hosting — S3 / Cloudinary / Bunny CDN / other?
 
-1. **Approved** → release v1.0 from ASC. Then **merge `hotfix-build14` → `main`**. Conflict risk in `mobile/app/(tabs)/index.tsx` (main has the S54 mobile-tighten for ToDo #1; hotfix has the consent-modal wiring) — both are additive in different parts of the file, should auto-merge but verify. After merge, **deploy backend from main to Replit** so the credit gate goes live. Pop any pending stash work (none currently — verified `git stash list` empty). Continue to v1.0.1 features (full prompt on dedicated playback screen — already shipped on main; ToDo #19 CustomerInfo listener; ToDo #27 verification logging).
-2. **Rejected on something new** → fix on `hotfix-build14`, bump buildNumber once (avoid the local-autoincrement collision per `reference_eas_local_autoincrement_collision.md`), build, submit.
-3. **Long delay (>72h)** → check ASC for reviewer messages.
+2. **Backend Track 1 work I can start without waiting on Q1-Q5:**
+   - `VideoService.generate_template_video()` — orchestration for both outcomes (Outcome-2 = direct Kling; Outcome-1 = Nano Banana regen → Kling).
+   - First-frame extraction utility (ffmpeg via `imageio-ffmpeg`).
+   - `POST /api/generate/template-video` endpoint (reuses existing job manager + concurrent-credit gate).
+   - Template registry schema design (`outcome`, `published_status` flag for QA gate, etc.).
+   - Variance-testing harness — extend `scripts/kling_outcome1_spike.py` to take input URLs as args so we can batch (template × selfie) tests.
 
-**Uncommitted on hotfix-build14 right now (intentional, not lost):**
-- `Memory/MEMORY.md` — index updates from S54
-- `Memory/reference_eas_build_commit_lookup.md`, `Memory/reference_eas_local_autoincrement_collision.md` — newest two memory files
-- `mobile/app.json` — buildNumber bumped to 14 by EAS during the actual Build #14 (don't manually change; will get committed organically)
+3. **Variance testing in parallel (Track 3):** v4 pipeline tested on ONE input pair only. Need to test across different selfies (full-body, women, glasses, low-light) and different reference videos (non-dance content) before declaring production-ready. Cheap on remaining 84 trial Kling credits.
 
-## Open questions (carryover + new)
+## Branch state at close
 
-- **(S54 result, pending) Apple's third-attempt verdict.** Awaiting. If approved, the App Transfer plan to dad becomes possible.
-- **(S54 new) When `hotfix-build14` merges back into main**, verify `mobile/app/(tabs)/index.tsx` merges cleanly (both branches edited it, in different blocks).
-- **(S53 carryover) Dad's Apple Developer enrollment** still blocked on "Your account cannot be created at this time" — diagnosed as corporate-WiFi fingerprint trip. Retry from home WiFi via iPhone-native flow when dad has time.
-- **(S53 carryover) M365/Entra tenant decision (ToDo #26)** — keep paying ~$6/mo for `support@speech-2-video.ai` or migrate to a free forwarder. Not urgent.
-- **(S52 carryover from #6)** TestFlight smoke test on a physical device never happened. iOS sim + EAS build is the bet. If Apple ever rejects on a device-specific issue, this is the obvious next step.
-- **(S48 follow-up B, still open) UX hole: home button shows action label only, balance only in Settings.** Decision needed post-launch.
-- **(ToDo #19, S49+S48)** CustomerInfo listener for offline-replay + RC ingestion-lag. With user-facing Restore removed (S53), edge cases route to support email — pre-launch acceptable, must land before scale.
-- **(ToDo #27, S54 new)** Pre-deploy `logger.info("concurrent_job_in_flight blocked uid=%s", ...)` line at the 429 raise site for prod visibility once Build #14 ships. Plus first-week prod log-grep for `"credits consume shortfall at completion"` (should never appear if the gate works).
-- **Backend Apple precheck + clip-merge (Yellow #10).** Haven't verified `/api/auth/apple/precheck` + `/api/clips/merge` exist in `server.py`. Clip-orphan risk on anon→Apple collision.
-- **(S43-era, future trigger)** RC `default` offering "Current" is implicit. Day a second offering is added, if `Purchases.getOfferings().current` returns null, check RC dashboard for explicit "Current" toggle.
+- On `home-screen-redesign` (now at `6aa2c2b` after fast-forward post-merge). Origin pushed for `main`; `home-screen-redesign` not pushed.
+- `main`: at `6aa2c2b` (merge commit `Merge branch 'hotfix-build14'`). Pushed to origin S58.
+- `hotfix-build14`: unchanged, points at `a432301`. Merged into main.
+- **Working tree dirty (S57+S58 work uncommitted, intentional — committing per-feature post-resume):** NOW.md (this), `Memory/MEMORY.md` (index updates), `requirements.txt` (PyJWT), `src/speech_to_video/utils/config.py` (Kling settings), `src/speech_to_video/clients/kling_motion_client.py` (new), `scripts/` (3 spike scripts), `REQUIREMENTS.md` (S56), `docs/` reorg + `V2_motion_transfer_plan.md` + research log updates, 10+ memory files (mix of S57 carryover + new S58 ones), `docs/Hailuo_*.txt` etc. deletions (moved to `docs/api-notes/` in S57 reorg).
+
+## Open questions
+
+- **(S58 new — V2 GATING)** Q1-Q5 clarifying questions in `docs/V2_motion_transfer_plan.md`. Q1 (TikTok/IG content licensing) is the critical one — could kill the wedge.
+- **(S58 new)** Variance testing across (template × selfie) combos before V2 production confidence.
+- **(S58 new)** Pricing tier for Outcome 1 vs Outcome 2 (post backend, pre-launch). $1.12 vs $1.16 COGS, plus Apple's 15% cut. ~12-18 credits per gen feels reasonable; needs decision.
+- **(S58 new)** Push-notification infrastructure — V2 has 7-8 min long-gens at the edge of "tap and wait" UX. Post-launch decision.
+- **(S58 carryover)** First organic Apple IAP purchase. Sandbox/TestFlight validated; production grant path untested. Watch RC dashboard + backend logs on first organic transaction.
+- **(S58 follow-up)** Real-device smoke test on physical iPhone — done ✓ (S52 carryover #6 closed). Identified the documented two-picker Apple Sign In quirk on production.
+- **(S55 carryover)** Viggle key still pending. **De-prioritized** — Kling delivers both outcomes, no urgency.
+- **(S53 carryover)** Dad's Apple Developer enrollment retry from home WiFi.
+- **(S53 carryover)** M365/Entra tenant decision (ToDo #26).
+- **(S48 follow-up B)** UX hole: home button shows action label only, balance only in Settings. V2 home-screen redesign may obviate or change this.
+- **(ToDo #19, S49+S48)** CustomerInfo listener for offline-replay + RC ingestion-lag.
+- **(ToDo #27, S54)** Verify concurrent-submit credit gate post-deploy.
+- **(Yellow #10)** Backend Apple precheck + clip-merge — `/api/auth/apple/precheck` + `/api/clips/merge` existence not yet verified in `server.py`.
+- **(S43-era, future trigger)** RC `default` offering "Current" implicit — flag if a second offering arrives and `getOfferings().current` returns null.
+- **(S57 deferred — now mostly moot for V2)** Pollodance 2.0 Ref quality; Pollo other Mimic models for outcome-2; deepfake/consent legal risk for arbitrary user photo uploads (still relevant for V2 motion-transfer launch — pre-launch must).

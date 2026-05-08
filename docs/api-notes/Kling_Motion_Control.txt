@@ -1,0 +1,242 @@
+Create Task
+  POST /v1/videos/motion-control
+
+Request Header
+  Content-Type 
+    string
+    Required
+    Default to application/json
+    Data Exchange Format
+
+  Authorization
+    string
+    Required
+    Authentication information, refer to API authentication
+
+  Request Body
+    model_name
+      string
+      Optional
+      Default to kling-v2-6
+      Model Name
+      Enum values：
+      kling-v2-6
+      kling-v3
+
+    prompt
+      string
+      Optional
+      Text prompt, can include positive and negative descriptions
+        Can add elements to the scene, achieve camera movement effects, etc. See Kling "Motion Control" User Guide
+        Cannot exceed 2500 characters
+      
+    image_url
+      string
+      Required
+      Reference image. Characters, background and other elements in generated video will follow this reference.
+      Video content requirements:
+        Character proportions should match the reference motion as much as possible; avoid driving half-body characters with full-body motions
+        Character should show clear upper body or full body including limbs and head, avoid occlusion
+        Avoid extreme orientations (upside down, lying flat, etc.). Character should occupy sufficient screen area
+        Supports realistic/stylized characters (including humans/humanoid animals/some pure animals/some humanoid body proportion characters)
+      Supports image Base64 encoding or image URL (ensure accessibility)
+      Important: When using Base64, do NOT add any prefix like data:image/png;base64,. Submit only the raw Base64 string.
+      Correct Base64 format:
+      iVBORw0KGgoAAAANSUhEUgAAAAUA...
+      Incorrect Base64 format (with data: prefix):
+      data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA...
+      Supported image formats: .jpg / .jpeg / .png
+      File size: ≤10MB, dimensions: 300px ~ 65536px, aspect ratio: 1:2.5 ~ 2.5:1
+
+    video_url
+      string
+      Required
+      URL of reference video. Character actions in generated video will follow this reference.
+      Video content requirements:
+        Character should show clear upper body or full body including all limbs and head, avoid occlusion
+        Recommend uploading single-person action video; for 2+ people, actions will be taken from the character with largest screen proportion
+        Recommend using real person actions; some stylized characters/humanoid body proportions may work
+        Video should be single continuous shot with character always visible, avoid cuts or camera movements (will be truncated otherwise)
+        Avoid overly fast actions; relatively stable actions produce better results
+      Supported formats: .mp4 / .mov, file size: ≤100MB, dimensions: 340px ~ 3850px. Validation failures will return error codes.
+      Duration limits: minimum 3 seconds, maximum depends on character_orientation:
+        When character_orientation is "video": maximum 30 seconds
+        When character_orientation is "image": maximum 10 seconds
+      The duration range of the uploaded motion reference is from 3 to 30 seconds, in which the generated video length will align with the duration of the uploaded video. If motions are complex or fast-paced, there is a chance that the output may be shorter than the uploaded video duration, as the model can only extract the valid action duration for generation. The minimum extractable continuous action duration is 3 seconds. Please note that in such cases, the consumed credits cannot be refunded. It is recommended to adjust the complexity and speed of the actions accordingly.
+      System will validate video content and return error codes if issues are found
+
+    element_list
+      array
+      Optional
+      Reference Element List based on element ID configuration
+
+      Load with key:value format as follows:
+      "element_list":[
+        { "element_id": 829836802793406551 }
+      ]
+      When referencing the element, the generated video can only temporarily refer to the orientation of the person in the video.
+      Currently, only one element can be introduced.
+      element_id
+      long
+      Required
+      Element ID from element library
+
+    keep_original_sound
+      string
+      Optional
+      Default to yes
+      Whether to keep the original sound of the video
+      Enum values：
+        yes
+        no
+
+    character_orientation
+      string
+      Required
+      Character orientation in generated video, can match image or video
+      Enum values：
+        image
+        video
+        image: Match character orientation in the image; reference video duration must not exceed 10 seconds
+        video: Match character orientation in the video; reference video duration must not exceed 30 seconds
+        When referencing the element, the generated video can only temporarily refer to the orientation of the person in the video.
+    
+    mode
+      string
+      Required
+      Video generation mode
+      Enum values：
+        std
+        pro
+        std: Standard Mode - basic mode, cost-effective
+        pro: Professional Mode (High Quality) - high performance mode, better video quality
+        Support varies by model version and video mode. See Capability Map for details.
+
+    watermark_info
+      object
+      Optional
+      Whether to generate watermarked results simultaneously
+        Defined by the enabled parameter, format:
+          "watermark_info": { "enabled": boolean } 
+        true: generate watermarked result, false: do not generate
+        Custom watermarks are not currently supported
+
+    callback_url
+      string
+      Optional
+      Callback notification URL for task result. If configured, server will notify when task status changes.
+        For specific message schema, see Callback Protocol
+
+    external_task_id
+      string
+      Optional
+      Customized Task ID
+        Will not overwrite system-generated task ID, but supports querying task by this ID
+        Must be unique within a single user account
+
+****************************************************************************************************************************************
+
+Query Task (Single)
+
+  GET /v1/videos/motion-control/{id}
+
+****************************************************************************************************************************************
+
+Request Header
+  Content-Type
+    string
+    Required
+    Default to application/json
+    Data Exchange Format
+
+  Authorization
+    string
+    Required
+    Authentication information, refer to API authentication
+
+  Query Parameters
+    pageNum
+      int
+      Optional
+      Default to 1
+      Page number
+        Value range: [1, 1000]
+
+    pageSize
+      int
+      Optional
+      Default to 30
+      Data volume per page
+      Value range: [1, 500]
+
+****************************************************************************************************************************************
+
+
+curl --request POST \
+  --url https://api-singapore.klingai.com/v1/videos/motion-control \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json; charset=utf-8' \
+  --data-raw '{
+    "model_name": "kling-v2-6",
+    "image_url": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/multi-3.ng.png",
+    "prompt": "The girl is wearing a loose gray T-shirt and denim shorts",
+    "video_url": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/dance.mp4",
+    "keep_original_sound": "yes",
+    "character_orientation": "image",
+    "mode": "pro",
+    "callback_url": "",
+    "external_task_id": "xxx"
+  }'
+
+  200 Response :
+  {
+  "code": 0, // Error codes; Specific definitions can be found in "Error Code"
+  "message": "string", // Error information
+  "request_id": "string", // Request ID, generated by the system, used to track requests and troubleshoot problems
+  "data": {
+    "task_id": "string", // Task ID, generated by the system
+    "task_info": { //Task creation parameters
+      "external_task_id": "string" //Customer-defined task ID
+    },
+    "task_status": "string", // Task status, Enum values: submitted, processing, succeed, failed
+    "created_at": 1722769557708, // Task creation time, Unix timestamp, unit: ms
+    "updated_at": 1722769557708 //Task update time, Unix timestamp, unit: ms
+  }
+}
+
+****************************************************************************************************************************************
+
+curl --request GET \
+  --url https://api-singapore.klingai.com/v1/videos/motion-control/{task_id} \
+  --header 'Authorization: Bearer <token>'
+
+ 200
+ {
+  "code": 0, // Error codes; Specific definitions can be found in "Error Code"
+  "message": "string", // Error information
+  "request_id": "string", // Request ID, generated by the system, used to track requests and troubleshoot problems
+  "data": {
+    "task_id": "string", // Task ID, generated by the system
+    "task_status": "string", // Task status, Enum values: submitted, processing, succeed, failed
+    "task_status_msg": "string", // Task status information, displaying the failure reason when the task fails (such as triggering the content risk control of the platform, etc.)
+    "task_info": { //Task creation parameters
+      "external_task_id": "string" //Customer-defined task ID
+    },
+    "task_result": {
+      "videos": [
+        {
+          "id": "string", // Generated video ID; globally unique
+          "url": "string", // URL for generating videos, anti-leech format (To ensure information security, generated images/videos will be cleared after 30 days. Please make sure to save them promptly.)
+          "watermark_url": "string", // Watermarked video download URL, anti-leech format
+          "duration": "string" //Total video duration, unit: s (seconds)
+        }
+      ]
+    },
+    "watermark_info": {
+      "enabled": boolean
+    },
+    "final_unit_deduction": "string", // The deduction units of task
+    "created_at": 1722769557708, // Task creation time, Unix timestamp, unit: ms
+    "updated_at": 1722769557708 //Task update time, Unix timestamp, unit: ms
+  }
+} 

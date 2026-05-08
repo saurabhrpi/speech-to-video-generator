@@ -1,0 +1,38 @@
+API Domain
+https://api-singapore.klingai.com
+💡
+Notice: The API endpoint for the new system has been updated from https://api.klingai.com to https://api-singapore.klingai.com. This API is suitable for users whose servers are located outside of China.
+
+************************************************************************************************************************************************
+
+API Authentication
+Step-1：Obtain AccessKey + SecretKey
+Step-2：Every time you request the API, you need to generate an API Token according to the fixed encryption method; put Authorization = Bearer <API Token> in the Request Header
+	Encryption Method：Follow JWT（Json Web Token, RFC 7519）standard
+	JWT consists of three parts：Header、Payload、Signature
+
+************************************************************************************************************************************************
+
+import time
+import jwt
+
+ak = "" # fill access key
+sk = "" # fill secret key
+
+def encode_jwt_token(ak, sk):
+    headers = {
+        "alg": "HS256",
+        "typ": "JWT"
+    }
+    payload = {
+        "iss": ak,
+        "exp": int(time.time()) + 1800, # The valid time, in this example, represents the current time+1800s(30min)
+        "nbf": int(time.time()) - 5 # The time when it starts to take effect, in this example, represents the current time -5s
+    }
+    token = jwt.encode(payload, sk, headers=headers)
+    return token
+
+authorization = encode_jwt_token(ak, sk)
+print(authorization) # Printing the generated API_TOKEN
+
+

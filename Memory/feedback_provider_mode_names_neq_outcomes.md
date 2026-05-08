@@ -1,0 +1,11 @@
+---
+name: Provider mode names don't equal UX outcomes
+description: When a provider exposes a multi-value mode field (e.g., "image"/"video"), don't assume mode names map to UX outcomes. Run all modes empirically with the same inputs and label outcome of each output.
+type: feedback
+---
+
+When evaluating a motion-transfer (or similar dual-mode) provider, **mode field values like `image` / `video` or `match-X` / `match-Y` do NOT necessarily map to UX outcomes** (e.g., Outcome-1 character-into-scene vs Outcome-2 motion-onto-character per `reference_motion_transfer_two_outcomes.md`). Run every mode with the SAME inputs and label the outcome by reading the output's *background source* and *framing*, not the mode's name or the provider's marketing copy.
+
+**Why:** S58 — Kling Motion Control's `character_orientation` field accepts `"image"` and `"video"`. I assumed `"image"` = Outcome-2 (motion-onto-character) and `"video"` = Outcome-1 (character-into-scene). The image-mode result confirmed Outcome-2 cleanly (photo's background preserved, character animated with reference motion). The video-mode result revealed BOTH modes produce Outcome-2 — same 1424×1456 photo-AR output, same photo background; the toggle is about *character pose orientation within a photo-AR frame*, not about which background wins. The video-mode run also produced a Swaptok-grade failure on a headshot+full-body-dance input mismatch (character half-out-of-frame). Two real-money generations were needed to discover that Kling Motion Control is fundamentally a single-outcome (Outcome-2) product, not the two-outcomes-from-one-API tool I'd hoped for. Recovering this finding cost ~16 Kling credits (~$2.24 post-trial pricing) and ~13 minutes of generation time.
+
+**How to apply:** At every new motion-transfer (or similar) provider spike, run every documented mode at least once with identical inputs. After each run, classify the outcome by visual inspection of the output, NOT by the mode name. Record the outcome label in the provider-comparison table. If two modes produce the same outcome, name that fact explicitly — it tells you the toggle is an internal quality knob, not a product-shape switch. Cross-reference: `reference_motion_transfer_two_outcomes.md` for the two-outcome taxonomy that the labels feed into.
