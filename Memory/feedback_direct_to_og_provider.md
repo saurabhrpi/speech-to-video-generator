@@ -1,0 +1,33 @@
+---
+name: Prefer direct-to-OG provider, but verify "middleman" claims first
+description: User prefers direct API to the original model provider over wrappers (AIMLAPI, OpenRouter). BUT some "enterprise SKUs" (Vertex AI) are the OG provider's own door, not middlemen — verify before applying the rule.
+type: feedback
+---
+
+User strongly prefers direct API access to the original model provider (Kling direct, Google direct) over thin-wrapper aggregators (AIMLAPI, OpenRouter, etc.). Locked S60 (2026-05-09).
+
+**Why:** Wrappers add cost (markup), latency (extra hop), opacity (less control over auth / retry / features), and license fog (you contract with the wrapper, not the model maker — relevant for IP indemnity).
+
+**How to apply:**
+- For new V2+ provider integrations, default to direct API to the OG model maker
+- For existing V1 integrations through wrappers, defer migration unless there's a forcing function
+- Cite this preference when challenged on integration cost: "user-locked S60, no middlemen / hit OG providers directly"
+
+**CRITICAL — verify what's actually a wrapper before applying the rule:**
+
+Some "platform" SKUs from the OG provider itself are NOT wrappers. They are the OG provider's own enterprise door:
+
+| Surface | What it actually is |
+|---|---|
+| AIMLAPI | Wrapper. Resells Kling, OpenAI, etc. SKIP for V2. |
+| OpenRouter | Wrapper. SKIP. |
+| **Vertex AI** | **Direct Google.** Same models as AI Studio. Enterprise SKU with IP indemnity (Generated Output Indemnity), GCP service account auth, data-residency controls. NOT a middleman. KEEP for V2. |
+| Google AI Studio (`generativelanguage.googleapis.com`) | Direct Google. Consumer SKU. Simpler auth (API key) but NO IP indemnity. |
+| Direct Kling API | Direct Kling. KEEP for V2. |
+
+If the user asks "can we skip [layer]?" — investigate what the layer actually IS before agreeing. The "no middlemen" rule applies to wrappers (AIMLAPI), not to the OG provider's own enterprise SKU (Vertex). Confirmed S60 when user asked to drop Vertex, then reversed after seeing it's direct Google with IP indemnity.
+
+**Reference:** `docs/V2_provider_license_audit.md` for the locked V2 provider stack:
+- T2V: Veo 3.1 via Vertex AI (primary), Hailuo 2.3 via direct MiniMax (backup)
+- T2I: Nano Banana Pro via Vertex AI (primary), GPT Image 1.5 (backup)
+- Motion Control: Kling direct API (S60 user override of original AIMLAPI plan)
