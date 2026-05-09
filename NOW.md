@@ -2,77 +2,91 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 58 — 2026-05-04 / 2026-05-07 — home-screen-redesign (closing)
+## Current Session: 59 — 2026-05-07 / 2026-05-08 — branch `v2`
 
-**Status:** App V1 (S2V) APPROVED + LIVE on App Store. V2 vision locked: home-screen redesign with template carousels + motion-transfer wedge. Both motion-transfer outcomes verified end-to-end on a single-provider Kling architecture (Pollo dropped). Implementation plan saved at `docs/V2_motion_transfer_plan.md`. Backend Track 1 ready to start once 5 clarifying questions resolve.
+**Status:** V2 strategic-decision phase mostly resolved. All 5 clarifying questions answered (Q4 deferred late). Both elephants tackled (pricing model + asset-creation path). License audit complete with locked providers. Versioning convention unified. Linear MCP registered (activates next session). Ready for tactical execution: template picks → backend Track 1 kickoff.
 
 ## What happened this session
 
-- **Apple approved Build #14 → app live on App Store.** Confirmed via "Welcome to App Store" email. App findable on Mac App Store via public link immediately; iPhone search indexing rolled in within 24h via developer-name search.
-- **Real-device install + smoke test (production stack):** anon free-gen ✓, paywall trigger on 2nd attempt ✓, Apple Sign In completed (with documented two-attempt picker quirk — first picker silent-fails, second succeeds; memory `reference_apple_signin_first_attempt_fresh_sim.md` extended to "fresh sim AND first install from live App Store on real iPhone"), IAP purchase confirmed declined at "double-click to confirm" — real-Apple receipt → backend grant path remains untested, deferred to first organic purchase.
-- **`hotfix-build14` → `main` merge complete + pushed.** New main HEAD `6aa2c2b` (merge commit). `home-screen-redesign` fast-forwarded to new main. Origin pushed. Three conflict resolutions: NOW.md (took theirs/stash for S57 body per "newest in body" convention), MEMORY.md + Apple-Sign-In memory (took ours/HEAD for S54 comprehensive content), `mobile/app.json` buildNumber → 14. **Conflict-resolution regression caught:** `--ours` on MEMORY.md silently dropped 6 S57 memory bullets — files survived as untracked, index entries vanished. Restored. New memory + CLAUDE.md Common Pitfalls rule: never blindly `--ours/--theirs` on index files.
-- **Kling Motion Control v2.6 client scaffolded** (`src/speech_to_video/clients/kling_motion_client.py`). Direct API at `https://api-singapore.klingai.com`, HS256 JWT regenerated per request from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`, retries on GET only. PyJWT pinned in `requirements.txt`. Smoke-tested offline (JWT round-trip) + verified live on `/account/costs` endpoint (84 cr remaining of 100 trial after 4 generations).
-- **Kling two-mode test (Outcome 2 verified, V1 plan locked for Outcome 2):**
-  - `image` orientation + selfie + dance video → **clean Outcome 2** (1424×1456, photo AR, $1.12 COGS, ~5-6 min). User verdict: "Way better than Swaptok."
-  - `video` orientation + headshot + full-body dance → Swaptok-grade fail. **Revised understanding (initially wrong):** both modes preserve photo background; canvas always matches photo AR. The `video` toggle is character-pose-within-photo-frame, not Outcome-1.
-- **Kling pricing locked:** $0.14/cr post-trial (user-confirmed). 8 cr/gen at 10s `pro` = **$1.12 / 10s gen**. Earlier klingmotion.com "3 cr/s" estimate was advertised time-cost, not actual deduction.
-- **Outcome-1 input-shaping spike — abandoned then unlocked:**
-  - **v1 face-swap:** structural Outcome 1 ✓ but face fidelity broken (sunglasses contortion, dancer's hands/skin tone visible).
-  - **v2 prompt:** introduced over-strip bug (would remove user's own accessories). Caught before run.
-  - **v3 prompt with accessories-follow-second-image rule:** clean swap but final video still paste-in (face lighting didn't match scene). I declared "model-class ceiling, switch to Pollo." (**Wrong.**)
-  - **`Match Video` digression:** retested video orientation with body-extended photo + scene-prompt → still Outcome 2 (confirms Kling is fundamentally Outcome-2 at structure level).
-  - **v4 holistic-regen reframing (user proposal):** instead of "preserve everything except face," reframed as "regenerate a coherent photo combining identity-from-image-2 with pose/scene/lighting-from-image-1, naturally imagine missing body parts in user's clothing style." Same Nano Banana Pro Edit endpoint. **Clean Outcome 1.** User verdict: "Wow, this is gold."
-- **V2 outcome strategy locked — single-provider Kling architecture.**
-  - Outcome 2: Kling `image` mode. $1.12, ~5-6 min.
-  - Outcome 1: Nano Banana Pro Edit (v4 regen prompt, ~$0.04) → Kling `video` mode ($1.12). Total **$1.16, ~7-8 min**.
-  - **Pollo `mix` officially DROPPED.** No $80 API top-up needed. Viggle still de-prioritized.
-- **V2 product vision laid out (user direction):** competitor-style home screen — top 1/3 hero carousel of viral trends (landscape), below = rows of theme-bucketed template carousels, no tabs, floating Create Video button → S2V (demoted), top-right profile icon → user gallery → gear → settings. Templates pulled from top-10 viral trends per theme on TikTok/IG. **Both outcomes ship day-one.**
-- **Plan doc created at `docs/V2_motion_transfer_plan.md`** with vision, 2 load-bearing risks (TikTok/IG content licensing — CRITICAL; variance scaling across templates × selfies), 5 clarifying questions to user, 4-track work breakdown, recommended starting sequence.
-- **Memory work this session:**
-  - 4 new feedback memories: `feedback_provider_mode_names_neq_outcomes.md`, `feedback_index_files_need_handmerge.md`, `feedback_localized_edits_cant_holistic_regen.md` (then amended after v4), `feedback_regen_vs_preserve_prompts.md`.
-  - 6 S57 memory bullets restored to MEMORY.md after the `--ours` conflict-resolution regression.
-  - CLAUDE.md Common Pitfalls section gained the index-files rule (loaded into every session's system prompt).
-  - `reference_apple_signin_first_attempt_fresh_sim.md` description+content broadened to cover real-iPhone-from-App-Store case.
+- **Branch renamed** `home-screen-redesign` → `v2` (origin pushed, old remote deleted, NOW.md updated).
+- **Q1, Q3, Q5 of V2 plan answered.**
+  - Q1 (CRITICAL/legal): **discovery-only** trend ingestion. Paid trend-data feeds tell us what's hot; we recreate templates ourselves (AI-generated). Solves the TikTok/IG hosting legal risk; introduces asset-creation work as the long pole.
+  - Q3: **recreated approximations** for hero carousel — top-10 hottest TikTok/IG videos rendered via our own AI-gen, not actual viral videos.
+  - Q5: **Cloudflare R2** for template asset hosting ($0 egress).
+- **Theme list captured.** User shared 24 categories / ~150 templates. Saved verbatim at `docs/V2_template_catalog.md`. (j) Product Showcase + (p) Text to video explicitly **deferred** to end of V2 build.
+- **Pipeline-class realization.** V2 catalog spans multiple pipeline classes, not just motion-transfer. V2 launch ships **2 pipelines**:
+  - Pipeline A — motion-transfer (Outcome 2, Kling 2.6 Motion Control image mode)
+  - Pipeline B — scene-insertion (Outcome 1, Nano Banana Pro Edit → Kling Motion Control video mode)
+  Backend implication: `generate_template_video()` is a dispatch layer routing by `template.pipeline_class`, not a single handler.
+- **V2 launch subset locked.** "Dances + Scenes (~25)": 9 from (a) Viral Dances + 5 from (f) Trends + 4 from (l) Birthday + 4 from (i+k) Awards/Olympics + 3 from (r) Flying. 16 specific picks within scene-insertion pools still TBD. Other categories shift to V2.1+.
+- **Versioning convention unified across all docs.** V1 = shipping S2V app. V2 = next release (motion-transfer + home redesign). V2.1+ = post-V2-launch phases. **Timelapse-Phase-2** = the (paused) renovation pipeline (renamed from "Timelapse V2" to remove collision with project-release V2). CLAUDE.md gained a new Versioning convention block at the top; all V2 docs updated for consistency.
+- **Pipeline B I2V cost-optimization spike deferred.** V2 launch uses Kling Motion Control video mode for both pipelines ($1.16 COGS for Pipeline B). Cheap-I2V spike (Hailuo / Kling 2.1 standard) captured at end of plan doc as post-launch margin lever, not a launch blocker.
+- **Elephants tackled.**
+  - **#1 Pricing math.** S2V economics ($0.50 COGS, 10cr/$1) don't survive V2's $1.12-1.16 COGS at current credit-pack prices (would be net-negative after Apple's 15%). **Decision: pay-as-you-go credits at flat $0.10/cr, retail = 2× COGS** (≈22-23cr per V2 gen). No more bulk-discount packs. Existing IAPs (`pro_pack_50/120/250`) replaced with flat-rate products. Free-tier credit count TBD-end.
+  - **#2 Asset creation.** **Decision: AI-generated (Path 1)** — T2V for dance refs, T2I for scene refs. Faster + cheaper than stock licensing or in-house filming.
+- **Tier 2 risks documented as Risks 3-5 in plan doc.**
+  - Risk 3 — Apple App Store review surface (privacy/4.8/4.3, deepfake concerns, consent UX).
+  - Risk 4 — Latency UX at 7-8 min (push notifications + in-app distraction loop needed).
+  - Risk 5 — Variance failure rate at production load (per-template QA before publish, user-flag path, dashboard).
+- **App rename deferred to end-of-build.** Scope = display name only (App Store name + `mobile/app.json` `name` + UI brand strings). Slug, scheme, bundle ID, domain, repo, Firebase, RC all stay. Naming brainstorm at end of build, after V2 UX is real.
+- **License audit run + complete** (subagent did the research). Saved at `docs/V2_provider_license_audit.md`.
+  - **T2V locked: Veo 3.1 primary, Hailuo 2.3 backup.** Veo is the only T2V provider in the audit offering IP indemnification (Google Generated Output Indemnity). Mandatory SynthID watermark — invisible.
+  - **T2I locked: Nano Banana Pro primary, GPT Image 1.5 backup.** Same Vertex AI license stack as Veo. DALL-E 3 retires from API May 12 2026 — migration to GPT Image 1.5 needed.
+  - **Rejected:** Kling T2V (brand-display req breaks UX), Sora 2 (C2PA + opt-in IP restrictive), Pixverse (no upside), Seedance (active Hollywood Disney/Netflix/Paramount C&D Feb 2026), FLUX (input-training clause + no indemnity).
+- **Pre-launch unblockers reduced 2 → 1.** Only hard gate remaining: per-asset IP/likeness audit before R2 upload. Google written-confirmation request deprioritized; self-interpretation memo added to license audit doc as evidentiary trail for future legal/audit.
+- **Linear MCP server registered** via `claude mcp add --transport http linear-server https://mcp.linear.app/mcp`. Tools activate on next session start.
 
-## Next step — Session 59 (on resume)
+## Next step — Session 60 (on resume)
 
-1. **User answers 5 clarifying questions** in `docs/V2_motion_transfer_plan.md`:
-   - Q1 (CRITICAL — legal): Trend ingestion strategy. Manual curation, paid trend-data provider, AI-generated approximations, or mix? Gates everything legal.
-   - Q2: V2 theme list (Dance / Comedy / Transformation / Sports / Couples / Reactions / etc.).
-   - Q3: Hero carousel content — same templates as below or distinct curated content?
-   - Q4: Per-template outcome-assignment process (who decides 1 vs 2 per template).
-   - Q5: Template asset hosting — S3 / Cloudinary / Bunny CDN / other?
-
-2. **Backend Track 1 work I can start without waiting on Q1-Q5:**
-   - `VideoService.generate_template_video()` — orchestration for both outcomes (Outcome-2 = direct Kling; Outcome-1 = Nano Banana regen → Kling).
+1. **Restart Claude Code session** to activate Linear MCP tools. First Linear tool call triggers OAuth flow.
+2. **Organize V2 work into Linear:**
+   - Pick a team/project (existing, or create new "V2" project).
+   - Decide structure (Project + Cycle + Issues, or Issues with labels).
+   - Import sources: V2 launch subset templates (25 work items), open questions list below, ToDo.md carryover, launch checklist (per-asset audit, pricing IAP setup, Apple consent UX, push notif infra, etc.).
+3. **Specific template picks (16 from scene-insertion pools).** I propose with reasoning per template; user OKs/overrides. Pools: 5 from (f) Trends, 4 from (l) Birthday, 4 from (i+k) Awards+Olympics, 3 from (r) Flying.
+4. **Backend Track 1 kickoff** (parallel-able with #3):
+   - Template registry schema (`pipeline_class`, `outcome`, `published_status`, asset URLs, title, description, theme).
+   - Vertex AI client scaffolding (Veo + Nano Banana Pro — already partially exist via paused Timelapse path).
+   - Cloudflare R2 wiring (bucket, signed-URL flow, asset upload).
    - First-frame extraction utility (ffmpeg via `imageio-ffmpeg`).
-   - `POST /api/generate/template-video` endpoint (reuses existing job manager + concurrent-credit gate).
-   - Template registry schema design (`outcome`, `published_status` flag for QA gate, etc.).
-   - Variance-testing harness — extend `scripts/kling_outcome1_spike.py` to take input URLs as args so we can batch (template × selfie) tests.
-
-3. **Variance testing in parallel (Track 3):** v4 pipeline tested on ONE input pair only. Need to test across different selfies (full-body, women, glasses, low-light) and different reference videos (non-dance content) before declaring production-ready. Cheap on remaining 84 trial Kling credits.
+   - `generate_template_video()` dispatch shell + `POST /api/generate/template-video` endpoint scaffolding.
+   - Variance-testing harness (extend `scripts/kling_outcome1_spike.py`).
+5. **Asset generation pipeline / batch script** — once template picks are locked, drive bulk Veo/Nano Banana generation, capture to local `assets/templates/`, manual per-asset IP/likeness audit, then R2 upload + `published_status: true`.
 
 ## Branch state at close
 
-- On `home-screen-redesign` (now at `6aa2c2b` after fast-forward post-merge). Origin pushed for `main`; `home-screen-redesign` not pushed.
-- `main`: at `6aa2c2b` (merge commit `Merge branch 'hotfix-build14'`). Pushed to origin S58.
-- `hotfix-build14`: unchanged, points at `a432301`. Merged into main.
-- **Working tree dirty (S57+S58 work uncommitted, intentional — committing per-feature post-resume):** NOW.md (this), `Memory/MEMORY.md` (index updates), `requirements.txt` (PyJWT), `src/speech_to_video/utils/config.py` (Kling settings), `src/speech_to_video/clients/kling_motion_client.py` (new), `scripts/` (3 spike scripts), `REQUIREMENTS.md` (S56), `docs/` reorg + `V2_motion_transfer_plan.md` + research log updates, 10+ memory files (mix of S57 carryover + new S58 ones), `docs/Hailuo_*.txt` etc. deletions (moved to `docs/api-notes/` in S57 reorg).
+- On `v2` (S59 rename from `home-screen-redesign`). HEAD `3af5d6c` (last push S58: "Adding docs, memories and test scripts").
+- **Working tree dirty (S59 strategic work uncommitted, intentional — to be committed next session):**
+  - `M NOW.md` (this file)
+  - `M docs/V2_motion_transfer_plan.md` (S59 updates: Q1/Q3/Q5 answered, V2 launch subset locked, pipeline-class realization, V2 launch economics section, asset creation path, Tier 2 risks, app rename, deferred spikes, license audit results)
+  - `?? docs/V2_template_catalog.md` (NEW S59 — full theme list, pipeline-class hypothesis, V2 launch subset, deferral notes)
+  - `?? docs/V2_provider_license_audit.md` (NEW S59 — full provider audit, locked recommendations, vendor indemnity self-interpretation memo)
+- `main` at `6aa2c2b`. `hotfix-build14` at `a432301`.
 
 ## Open questions
 
-- **(S58 new — V2 GATING)** Q1-Q5 clarifying questions in `docs/V2_motion_transfer_plan.md`. Q1 (TikTok/IG content licensing) is the critical one — could kill the wedge.
-- **(S58 new)** Variance testing across (template × selfie) combos before V2 production confidence.
-- **(S58 new)** Pricing tier for Outcome 1 vs Outcome 2 (post backend, pre-launch). $1.12 vs $1.16 COGS, plus Apple's 15% cut. ~12-18 credits per gen feels reasonable; needs decision.
-- **(S58 new)** Push-notification infrastructure — V2 has 7-8 min long-gens at the edge of "tap and wait" UX. Post-launch decision.
-- **(S58 carryover)** First organic Apple IAP purchase. Sandbox/TestFlight validated; production grant path untested. Watch RC dashboard + backend logs on first organic transaction.
-- **(S58 follow-up)** Real-device smoke test on physical iPhone — done ✓ (S52 carryover #6 closed). Identified the documented two-picker Apple Sign In quirk on production.
-- **(S55 carryover)** Viggle key still pending. **De-prioritized** — Kling delivers both outcomes, no urgency.
-- **(S53 carryover)** Dad's Apple Developer enrollment retry from home WiFi.
-- **(S53 carryover)** M365/Entra tenant decision (ToDo #26).
+### S59 new — V2 STRATEGIC
+
+- **(S59 new — TACTICAL)** Specific 16 template picks from scene-insertion pools (5 trends + 4 birthday + 4 awards/olympics + 3 flying). Gates asset generation.
+- **(S59 new — TACTICAL)** V2 anon free-tier credit count. Current 10cr starter doesn't cover one V2 gen (~22-23cr). Decisions: bump to 25cr, separate "first V2 gen free" grant, or keep 10cr and force paywall on first V2 attempt? TBD-end.
+- **(S59 new — TACTICAL)** Final retail credit cost per pipeline. 22cr (Pipeline A, $2.20 retail) vs 23cr (Pipeline B, $2.30 retail), or unify at one number for UX simplicity? Lock before Track 1 backend `CREDIT_COSTS` pass.
+- **(S59 new — TACTICAL)** New IAP product set creation in ASC for pay-as-you-go credits at flat $0.10/cr (10/50/100/250cr products), and matching RC offering.
+- **(S59 new — DEFERRED)** App rename. End-of-V2-build, display-name only.
+- **(S59 new — DEFERRED)** (j) Product Showcase + (p) Text to video disposition (defer to end).
+- **(S59 new — DEFERRED)** Pipeline B I2V cost-optimization spike (Hailuo I2V vs Kling 2.1 standard). Post-launch margin lever.
+- **(S59 new — TIER 2)** Apple App Store review prep: privacy policy rewrite for photo upload + retention; user-photo consent UX; deepfake/4.3 review strategy; per-template thumbnail review.
+- **(S59 new — TIER 2)** Latency UX at 7-8 min: push notification infra (FCM via Firebase since auth is already there); in-app browse-while-waiting affordance; generation-progress phase copy.
+- **(S59 new — TIER 2)** Variance testing at scale before launch: batch test v4 pipeline across (template × selfie) combos; per-template QA gate at 3-5 photos before `published_status: true`; user-reported quality flag path; quality-flag dashboard.
+- **(S59 new — LINEAR)** Linear workspace structure: existing project vs new "V2" project; what to import from `ToDo.md` + `NOW.md` open questions; Project/Cycle/Issues vs Issues-with-labels.
+
+### S58 carryover — STILL OPEN
+
+- **(S58)** First organic Apple IAP purchase. Sandbox/TestFlight validated; production grant path untested. Watch RC dashboard + backend logs on first organic transaction.
+- **(S55 / de-prioritized)** Viggle key still pending. Kling delivers both V2 outcomes; no urgency.
+- **(S53)** Dad's Apple Developer enrollment retry from home WiFi.
+- **(S53)** M365/Entra tenant decision (ToDo #26).
 - **(S48 follow-up B)** UX hole: home button shows action label only, balance only in Settings. V2 home-screen redesign may obviate or change this.
 - **(ToDo #19, S49+S48)** CustomerInfo listener for offline-replay + RC ingestion-lag.
 - **(ToDo #27, S54)** Verify concurrent-submit credit gate post-deploy.
 - **(Yellow #10)** Backend Apple precheck + clip-merge — `/api/auth/apple/precheck` + `/api/clips/merge` existence not yet verified in `server.py`.
 - **(S43-era, future trigger)** RC `default` offering "Current" implicit — flag if a second offering arrives and `getOfferings().current` returns null.
-- **(S57 deferred — now mostly moot for V2)** Pollodance 2.0 Ref quality; Pollo other Mimic models for outcome-2; deepfake/consent legal risk for arbitrary user photo uploads (still relevant for V2 motion-transfer launch — pre-launch must).
