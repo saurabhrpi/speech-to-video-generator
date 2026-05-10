@@ -1,7 +1,7 @@
 """Firestore-backed template registry for V2 generate_template_video().
 
 Each template lives at `templates/{template_id}` (e.g. `templates/viral-dances-bombale`).
-Templates drive the V2 dispatch layer (SPE-14) + mobile carousel (SPE-30 / SPE-83).
+Templates drive the V2 dispatch layer (AIV-14) + mobile carousel (AIV-30 / AIV-83).
 
 Document shape:
     {
@@ -18,13 +18,13 @@ Document shape:
         "preview_video_url": str | None,       # short hover loop, optional
       },
       "model": str,                            # e.g. "kling-2.6-motion-control-image"
-      "credit_cost": int,                      # locked at 23 per SPE-36
+      "credit_cost": int,                      # locked at 23 per AIV-36
       "prompt_template": str | None,           # Pipeline B Nano Banana Edit input
       "created_at": server timestamp,
       "updated_at": server timestamp,
     }
 
-Schema locked S60 (2026-05-09); see SPE-10. No i18n at V2 launch. No version
+Schema locked S60 (2026-05-09); see AIV-10. No i18n at V2 launch. No version
 history at the registry layer — create new template entries (e.g. `bombale-v2`)
 when assets change.
 """
@@ -132,7 +132,7 @@ def upsert_template(template_id: str, data: Dict) -> Dict:
 
 
 def set_status(template_id: str, status: str) -> Dict:
-    """Update only `published_status`. Used by SPE-47 quality auto-pause + admin."""
+    """Update only `published_status`. Used by AIV-47 quality auto-pause + admin."""
     from firebase_admin import firestore as fb_firestore
 
     if status not in _VALID_STATUSES:

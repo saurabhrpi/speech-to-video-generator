@@ -1,8 +1,8 @@
-"""Seed the template registry with the Bombale fixture (SPE-10 acceptance test).
+"""Seed the template registry with the Bombale fixture (AIV-10 acceptance test).
 
 One-shot dev script — re-running overwrites the Bombale doc. Does NOT create
 assets; only writes the registry entry pointing at placeholder URLs. Real
-assets land later via SPE-17 + R2 upload (SPE-12).
+assets land later via AIV-17 + R2 upload (AIV-12).
 
 Usage:
     python scripts/seed_template_registry.py

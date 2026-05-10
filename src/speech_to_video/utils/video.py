@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Tuple, Union
 
 import requests
 
@@ -472,3 +472,61 @@ def stitch_timelapse_clips(
         except Exception:
             pass
 
+
+def extract_first_frame(
+    video_path_or_url: str,
+    out_path: str,
+    thumbnail_size: Optional[Tuple[int, int]] = None,
+) -> str:
+    """Extract video first frame to PNG. Accepts local path or http(s) URL; returns out_path. Raises RuntimeError on ffmpeg failure."""
+    from imageio_ffmpeg import get_ffmpeg_exe
+    ffmpeg_bin = get_ffmpeg_exe()
+
+    is_url = video_path_or_url.startswith(("http://", "https://"))
+    temp_dir: Optional[str] = None
+    try:
+        if is_url:
+            temp_dir = tempfile.mkdtemp(prefix="extract_frame_")
+            source = os.path.join(temp_dir, "source")
+            with requests.get(video_path_or_url, stream=True, timeout=120) as r:
+                r.raise_for_status()
+                with open(source, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+        else:
+            source = video_path_or_url
+
+        out_dir = os.path.dirname(os.path.abspath(out_path))
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        cmd: List[str] = [
+            ffmpeg_bin, "-y",
+            "-i", source,
+            "-frames:v", "1",
+        ]
+        if thumbnail_size is not None:
+            w, h = thumbnail_size
+            cmd.extend(["-vf", f"scale={w}:{h}"])
+        cmd.append(out_path)
+
+        proc = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+        )
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+            tail = "\n".join(stderr.strip().splitlines()[-20:])
+            raise RuntimeError(f"ffmpeg failed:\n{tail}")
+
+        src_label = "(url)" if is_url else os.path.basename(video_path_or_url)
+        logger.info(
+            "Extracted first frame: %s -> %s", src_label, os.path.basename(out_path)
+        )
+        return out_path
+    finally:
+        if temp_dir is not None:
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass

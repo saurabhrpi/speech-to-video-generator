@@ -94,3 +94,4 @@
 - [Elephants first, before small spikes](feedback_elephants_first.md) -- At decision points, identify load-bearing risks first; defer spikes/sub-decisions that don't change launch math.
 - [Lock-then-track planning pattern](feedback_lock_then_track.md) -- Don't ask on non-blockers; lock with reasonable assumption + note it, move on. Speed > clarity during build-out.
 - [Prefer direct-to-OG provider, verify middleman claims](feedback_direct_to_og_provider.md) -- No wrappers (AIMLAPI). But Vertex AI is direct Google, not a middleman — verify before applying the rule.
+- [Linear save_issue auto-links team tokens](reference_linear_save_issue_autolinks_tokens.md) -- Plain `AIV-12`-style text in description gets server-side auto-resolved to `<issue id="…">AIV-12</issue>`; bulk text-substitution rewrites land cleanly without constructing markup

@@ -61,7 +61,6 @@ web/*.log
 
 #Cursor
 .cursor/
-CLAUDE.md
 
 debug/MacSetup.txt
 env

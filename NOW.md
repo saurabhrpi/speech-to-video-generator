@@ -2,91 +2,79 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 59 — 2026-05-07 / 2026-05-08 — branch `v2`
+## Current Session: 60 — 2026-05-08 / 2026-05-09 — branch `v2`
 
-**Status:** V2 strategic-decision phase mostly resolved. All 5 clarifying questions answered (Q4 deferred late). Both elephants tackled (pricing model + asset-creation path). License audit complete with locked providers. Versioning convention unified. Linear MCP registered (activates next session). Ready for tactical execution: template picks → backend Track 1 kickoff.
+**Status:** V2 organized end-to-end in Linear. All planning blockers locked. Backend Track 1 kickoff: AIV-10 template registry implemented + verified live in Firestore. Working tree dirty with the registry code + 2 new feedback memories — to be committed next session.
 
 ## What happened this session
 
-- **Branch renamed** `home-screen-redesign` → `v2` (origin pushed, old remote deleted, NOW.md updated).
-- **Q1, Q3, Q5 of V2 plan answered.**
-  - Q1 (CRITICAL/legal): **discovery-only** trend ingestion. Paid trend-data feeds tell us what's hot; we recreate templates ourselves (AI-generated). Solves the TikTok/IG hosting legal risk; introduces asset-creation work as the long pole.
-  - Q3: **recreated approximations** for hero carousel — top-10 hottest TikTok/IG videos rendered via our own AI-gen, not actual viral videos.
-  - Q5: **Cloudflare R2** for template asset hosting ($0 egress).
-- **Theme list captured.** User shared 24 categories / ~150 templates. Saved verbatim at `docs/V2_template_catalog.md`. (j) Product Showcase + (p) Text to video explicitly **deferred** to end of V2 build.
-- **Pipeline-class realization.** V2 catalog spans multiple pipeline classes, not just motion-transfer. V2 launch ships **2 pipelines**:
-  - Pipeline A — motion-transfer (Outcome 2, Kling 2.6 Motion Control image mode)
-  - Pipeline B — scene-insertion (Outcome 1, Nano Banana Pro Edit → Kling Motion Control video mode)
-  Backend implication: `generate_template_video()` is a dispatch layer routing by `template.pipeline_class`, not a single handler.
-- **V2 launch subset locked.** "Dances + Scenes (~25)": 9 from (a) Viral Dances + 5 from (f) Trends + 4 from (l) Birthday + 4 from (i+k) Awards/Olympics + 3 from (r) Flying. 16 specific picks within scene-insertion pools still TBD. Other categories shift to V2.1+.
-- **Versioning convention unified across all docs.** V1 = shipping S2V app. V2 = next release (motion-transfer + home redesign). V2.1+ = post-V2-launch phases. **Timelapse-Phase-2** = the (paused) renovation pipeline (renamed from "Timelapse V2" to remove collision with project-release V2). CLAUDE.md gained a new Versioning convention block at the top; all V2 docs updated for consistency.
-- **Pipeline B I2V cost-optimization spike deferred.** V2 launch uses Kling Motion Control video mode for both pipelines ($1.16 COGS for Pipeline B). Cheap-I2V spike (Hailuo / Kling 2.1 standard) captured at end of plan doc as post-launch margin lever, not a launch blocker.
-- **Elephants tackled.**
-  - **#1 Pricing math.** S2V economics ($0.50 COGS, 10cr/$1) don't survive V2's $1.12-1.16 COGS at current credit-pack prices (would be net-negative after Apple's 15%). **Decision: pay-as-you-go credits at flat $0.10/cr, retail = 2× COGS** (≈22-23cr per V2 gen). No more bulk-discount packs. Existing IAPs (`pro_pack_50/120/250`) replaced with flat-rate products. Free-tier credit count TBD-end.
-  - **#2 Asset creation.** **Decision: AI-generated (Path 1)** — T2V for dance refs, T2I for scene refs. Faster + cheaper than stock licensing or in-house filming.
-- **Tier 2 risks documented as Risks 3-5 in plan doc.**
-  - Risk 3 — Apple App Store review surface (privacy/4.8/4.3, deepfake concerns, consent UX).
-  - Risk 4 — Latency UX at 7-8 min (push notifications + in-app distraction loop needed).
-  - Risk 5 — Variance failure rate at production load (per-template QA before publish, user-flag path, dashboard).
-- **App rename deferred to end-of-build.** Scope = display name only (App Store name + `mobile/app.json` `name` + UI brand strings). Slug, scheme, bundle ID, domain, repo, Firebase, RC all stay. Naming brainstorm at end of build, after V2 UX is real.
-- **License audit run + complete** (subagent did the research). Saved at `docs/V2_provider_license_audit.md`.
-  - **T2V locked: Veo 3.1 primary, Hailuo 2.3 backup.** Veo is the only T2V provider in the audit offering IP indemnification (Google Generated Output Indemnity). Mandatory SynthID watermark — invisible.
-  - **T2I locked: Nano Banana Pro primary, GPT Image 1.5 backup.** Same Vertex AI license stack as Veo. DALL-E 3 retires from API May 12 2026 — migration to GPT Image 1.5 needed.
-  - **Rejected:** Kling T2V (brand-display req breaks UX), Sora 2 (C2PA + opt-in IP restrictive), Pixverse (no upside), Seedance (active Hollywood Disney/Netflix/Paramount C&D Feb 2026), FLUX (input-training clause + no indemnity).
-- **Pre-launch unblockers reduced 2 → 1.** Only hard gate remaining: per-asset IP/likeness audit before R2 upload. Google written-confirmation request deprioritized; self-interpretation memo added to license audit doc as evidentiary trail for future legal/audit.
-- **Linear MCP server registered** via `claude mcp add --transport http linear-server https://mcp.linear.app/mcp`. Tools activate on next session start.
+- **Linear MCP activated, V2 project organized.** Renamed "V2 : Replica of AI Video" → "V2 — Motion Transfer + Home Redesign". Created 4 milestones (Track 1 Backend, Track 2 Asset Gen, Track 3 Mobile UX, Launch Prep), 10 labels (pipeline-A/B, infra, template, mobile, legal, decision, risk, iap, v1-carryover), and ~75 issues (AIV-10–84).
+- **All 25 V2 launch templates locked.**
+  - 9 Pipeline A (Viral Dances) — AIV-17–25.
+  - 16 Pipeline B (scene-insertion) picked from pools + drafted with scene concepts at AIV-60–75 (5 Trends, 4 Birthday, 4 Awards/Olympics, 3 Flying). The 4 pool-pick decision AIVs (AIV-26–29) carry the locked picks + skip reasoning.
+- **Backend planning decisions all locked** (per new "lock-then-track" pattern — no Done until end-state; just status note "Only assumption confirmation pending"):
+  - AIV-10 schema → Firestore, no versioning, English-only
+  - AIV-12 R2 → public-read + custom domain `assets.speech-2-video.ai`
+  - AIV-14 dispatch → **direct Kling API** (user override, NOT AIMLAPI). Vertex AI for Nano Banana Pro (Vertex isn't a middleman — IP indemnity matters).
+  - AIV-15 endpoint → separate `POST /api/upload/selfie` (selfie reuse across gens)
+  - AIV-35 anon credits → 25cr V2 starter
+  - AIV-36 retail → unified 23cr per gen (both pipelines same retail)
+  - AIV-37 IAPs → planned product IDs assumed (`credits_10/50/100/250`)
+- **7 new backend gap AIVs created** (Track 1 / Launch Prep): AIV-76 direct Kling client, AIV-77 selfie storage policy, AIV-78 job manager durability, AIV-79 Vertex AI auth on Replit, AIV-80 Replit thread verification, AIV-81 per-UID spend cap, AIV-82 template publishing workflow, AIV-83 GET /api/templates endpoint.
+- **AIV-7 moved** from Vanilla T2V project to V2 / Track 3 Mobile UX milestone (it's V2-relevant gallery UX, not V1-only). Vanilla T2V project is now empty.
+- **AIV-84 "Tough but CRITICAL open problems"** created — living tracker for hard problems needing user input. First entry: user to provide reference images for all 25 launch templates (gates Track 2 asset gen meaningfully).
+- **AIV-10 SHIPPED — first Track 1 deliverable.** Two new files:
+  - `src/speech_to_video/utils/template_registry.py` (192 lines) — Firestore-backed registry with `get_template` / `list_templates` / `upsert_template` / `set_status` / `delete_template` / `_validate`. Schema constants (PIPELINE_*, OUTCOME_*, STATUS_*) match locked enums. Lazy-init Firestore client matching credit_store.py convention.
+  - `scripts/seed_template_registry.py` — Bombale fixture seeder. Ran clean; user confirmed `templates/viral-dances-bombale` doc visible in Firestore.
+- **Two new feedback memories saved** (still in working tree, untracked):
+  - `Memory/feedback_lock_then_track.md` — at non-blocker decisions, lock with assumption + status note, do NOT mark Done until full implementation + validation; user phrased it: "we can't be blocked while the whole city is waiting to be built."
+  - `Memory/feedback_direct_to_og_provider.md` — prefer direct API to OG provider (no wrappers like AIMLAPI). But verify what's actually a wrapper: Vertex AI is direct Google, not a middleman.
+- **Side task — friend's dad's company.** Indian AI-video-app shop needs CPA paperwork. Proposed 5 brand names + detailed description covering provider-vs-developer classification, export-of-service status (Apple/Google as merchant of record), and software type detail per Indian GST/MCA expectations. Awaiting his pick.
 
-## Next step — Session 60 (on resume)
+## Next step — Session 61 (on resume)
 
-1. **Restart Claude Code session** to activate Linear MCP tools. First Linear tool call triggers OAuth flow.
-2. **Organize V2 work into Linear:**
-   - Pick a team/project (existing, or create new "V2" project).
-   - Decide structure (Project + Cycle + Issues, or Issues with labels).
-   - Import sources: V2 launch subset templates (25 work items), open questions list below, ToDo.md carryover, launch checklist (per-asset audit, pricing IAP setup, Apple consent UX, push notif infra, etc.).
-3. **Specific template picks (16 from scene-insertion pools).** I propose with reasoning per template; user OKs/overrides. Pools: 5 from (f) Trends, 4 from (l) Birthday, 4 from (i+k) Awards+Olympics, 3 from (r) Flying.
-4. **Backend Track 1 kickoff** (parallel-able with #3):
-   - Template registry schema (`pipeline_class`, `outcome`, `published_status`, asset URLs, title, description, theme).
-   - Vertex AI client scaffolding (Veo + Nano Banana Pro — already partially exist via paused Timelapse path).
-   - Cloudflare R2 wiring (bucket, signed-URL flow, asset upload).
-   - First-frame extraction utility (ffmpeg via `imageio-ffmpeg`).
-   - `generate_template_video()` dispatch shell + `POST /api/generate/template-video` endpoint scaffolding.
-   - Variance-testing harness (extend `scripts/kling_outcome1_spike.py`).
-5. **Asset generation pipeline / batch script** — once template picks are locked, drive bulk Veo/Nano Banana generation, capture to local `assets/templates/`, manual per-asset IP/likeness audit, then R2 upload + `published_status: true`.
+1. **Commit the dirty tree** — registry module + seed script + 2 memories + MEMORY.md update. Single commit "Adding V2 template registry + S60 planning memories" or similar.
+2. **Continue Sprint 1 backend** in dependency-friendly order:
+   - **AIV-13** first-frame ffmpeg extraction (smallest, fully standalone, no external deps) ← recommended next
+   - **AIV-77** selfie storage policy (design-only, lock the decision so AIV-15 can move)
+   - **AIV-79** Vertex AI auth on Replit (manual GCP project + service account work)
+   - **AIV-12** R2 wiring (manual Cloudflare account setup) — parallel-able with #79
+3. **Sprint 2 (after Sprint 1's design pieces):** AIV-11 Vertex AI client, AIV-76 direct Kling client.
+4. **Sprint 3:** AIV-14 dispatch, AIV-83 GET endpoint, AIV-82 publishing workflow.
+5. **Sprint 4:** AIV-15 endpoint, AIV-16 variance harness.
 
 ## Branch state at close
 
-- On `v2` (S59 rename from `home-screen-redesign`). HEAD `3af5d6c` (last push S58: "Adding docs, memories and test scripts").
-- **Working tree dirty (S59 strategic work uncommitted, intentional — to be committed next session):**
-  - `M NOW.md` (this file)
-  - `M docs/V2_motion_transfer_plan.md` (S59 updates: Q1/Q3/Q5 answered, V2 launch subset locked, pipeline-class realization, V2 launch economics section, asset creation path, Tier 2 risks, app rename, deferred spikes, license audit results)
-  - `?? docs/V2_template_catalog.md` (NEW S59 — full theme list, pipeline-class hypothesis, V2 launch subset, deferral notes)
-  - `?? docs/V2_provider_license_audit.md` (NEW S59 — full provider audit, locked recommendations, vendor indemnity self-interpretation memo)
+- On `v2`. HEAD `3af5d6c` ("Adding docs, memories and test scripts" — last S58 push).
+- **Working tree dirty (S60 work uncommitted, intentional — to be committed S61):**
+  - `M Memory/MEMORY.md` (2 new index entries for the new feedback memories)
+  - `?? Memory/feedback_lock_then_track.md` (new memory)
+  - `?? Memory/feedback_direct_to_og_provider.md` (new memory)
+  - `?? src/speech_to_video/utils/template_registry.py` (AIV-10 implementation)
+  - `?? scripts/seed_template_registry.py` (Bombale fixture seeder)
 - `main` at `6aa2c2b`. `hotfix-build14` at `a432301`.
 
 ## Open questions
 
-### S59 new — V2 STRATEGIC
+### S60 new
 
-- **(S59 new — TACTICAL)** Specific 16 template picks from scene-insertion pools (5 trends + 4 birthday + 4 awards/olympics + 3 flying). Gates asset generation.
-- **(S59 new — TACTICAL)** V2 anon free-tier credit count. Current 10cr starter doesn't cover one V2 gen (~22-23cr). Decisions: bump to 25cr, separate "first V2 gen free" grant, or keep 10cr and force paywall on first V2 attempt? TBD-end.
-- **(S59 new — TACTICAL)** Final retail credit cost per pipeline. 22cr (Pipeline A, $2.20 retail) vs 23cr (Pipeline B, $2.30 retail), or unify at one number for UX simplicity? Lock before Track 1 backend `CREDIT_COSTS` pass.
-- **(S59 new — TACTICAL)** New IAP product set creation in ASC for pay-as-you-go credits at flat $0.10/cr (10/50/100/250cr products), and matching RC offering.
-- **(S59 new — DEFERRED)** App rename. End-of-V2-build, display-name only.
-- **(S59 new — DEFERRED)** (j) Product Showcase + (p) Text to video disposition (defer to end).
-- **(S59 new — DEFERRED)** Pipeline B I2V cost-optimization spike (Hailuo I2V vs Kling 2.1 standard). Post-launch margin lever.
-- **(S59 new — TIER 2)** Apple App Store review prep: privacy policy rewrite for photo upload + retention; user-photo consent UX; deepfake/4.3 review strategy; per-template thumbnail review.
-- **(S59 new — TIER 2)** Latency UX at 7-8 min: push notification infra (FCM via Firebase since auth is already there); in-app browse-while-waiting affordance; generation-progress phase copy.
-- **(S59 new — TIER 2)** Variance testing at scale before launch: batch test v4 pipeline across (template × selfie) combos; per-template QA gate at 3-5 photos before `published_status: true`; user-reported quality flag path; quality-flag dashboard.
-- **(S59 new — LINEAR)** Linear workspace structure: existing project vs new "V2" project; what to import from `ToDo.md` + `NOW.md` open questions; Project/Cycle/Issues vs Issues-with-labels.
+- **(AIV-84 #1 — TACTICAL/BLOCKING for Track 2)** User to provide reference images for all 25 launch templates. Without these, per-template prompt drafting is guess-and-check and asset gen is much slower / more variance-prone. Drop into chat or `docs/research/template_refs/`.
+- **(S60 — assumption-locked, awaiting validation)** AIV-10/12/14/15/26–29/35–37 — all carry "ASSUMPTION LOCKED" or "OPTIONS LOCKED" remarks. Status notes describe the trigger to close (downstream usage, post-launch data validation, etc.). Per `Memory/feedback_lock_then_track.md`: do NOT pre-emptively close.
+- **(S60 — friend's dad)** Awaiting his pick on company name (proposed: Lumara Studios / Cinder Apps / Reelform / Vimara / Frameloop) + structure choice (Pvt Ltd vs LLP vs OPC).
 
-### S58 carryover — STILL OPEN
+### S59 carryover — STILL OPEN
 
-- **(S58)** First organic Apple IAP purchase. Sandbox/TestFlight validated; production grant path untested. Watch RC dashboard + backend logs on first organic transaction.
-- **(S55 / de-prioritized)** Viggle key still pending. Kling delivers both V2 outcomes; no urgency.
-- **(S53)** Dad's Apple Developer enrollment retry from home WiFi.
-- **(S53)** M365/Entra tenant decision (ToDo #26).
-- **(S48 follow-up B)** UX hole: home button shows action label only, balance only in Settings. V2 home-screen redesign may obviate or change this.
-- **(ToDo #19, S49+S48)** CustomerInfo listener for offline-replay + RC ingestion-lag.
-- **(ToDo #27, S54)** Verify concurrent-submit credit gate post-deploy.
-- **(Yellow #10)** Backend Apple precheck + clip-merge — `/api/auth/apple/precheck` + `/api/clips/merge` existence not yet verified in `server.py`.
-- **(S43-era, future trigger)** RC `default` offering "Current" implicit — flag if a second offering arrives and `getOfferings().current` returns null.
+- **(S58 / AIV-49)** First organic Apple IAP purchase. Sandbox/TestFlight validated; production grant path untested. Watch RC dashboard + backend logs on first organic transaction.
+- **(S53)** Dad's Apple Developer enrollment retry from home WiFi. Tracked in separate `Mom_Apple_Setup` Linear project (NOT in V2 — different person/scope).
+- **(S53 / AIV-X — separate)** M365/Entra tenant decision. User said "low-priority, skip" S60 — covered in another Linear project per their direction.
+- **(AIV-50)** UX hole: home button shows action label only, balance only in Settings. V2 home redesign (AIV-30) likely obviates.
+- **(AIV-51 / ToDo #19)** CustomerInfo listener for offline-replay + RC ingestion-lag.
+- **(AIV-52 / ToDo #27)** Verify concurrent-submit credit gate post-deploy.
+- **(AIV-53 / Yellow #10)** Backend Apple precheck + clip-merge — verify endpoints exist in `server.py`.
+- **(AIV-54)** RC `default` offering "Current" implicit — flag if 2nd offering arrives. Triggered by AIV-37 V2 IAP creation.
+
+### S59 deferred
+
+- **(AIV-38)** App rename — end-of-V2-build, display-name only.
+- **(AIV-39)** (j) Product Showcase + (p) Text to video disposition — defer to end.
+- **(AIV-40)** Pipeline B I2V cost-optimization spike (Hailuo I2V vs Kling 2.1 standard) — post-launch margin lever.
