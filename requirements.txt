@@ -23,4 +23,7 @@ PyJWT>=2.0.0
 # Cloudflare R2 (S3-compatible) — V2 template asset hosting
 boto3>=1.34
 
+# Vertex AI (Veo T2V + Nano Banana / Gemini-image) — V2 Pipeline B
+google-genai>=1.40.0
+
 

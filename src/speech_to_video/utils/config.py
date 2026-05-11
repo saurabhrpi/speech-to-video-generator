@@ -57,6 +57,10 @@ class Settings:
     r2_secret_access_key: str = os.environ.get("R2_SECRET_ACCESS_KEY", "")
     r2_bucket: str = os.environ.get("R2_BUCKET", "speech-to-video-templates")
     r2_public_base_url: str = os.environ.get("R2_PUBLIC_BASE_URL", "https://assets.speech-2-video.ai")
+    google_cloud_project: str = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+    vertex_location: str = os.environ.get("VERTEX_LOCATION", "us-central1")
+    vertex_service_account_json: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_JSON", "")
+    vertex_service_account_path: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_PATH", "")
 
 
 def get_settings() -> Settings:
