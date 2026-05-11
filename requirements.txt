@@ -20,4 +20,7 @@ firebase-admin>=6.5.0
 # Kling API auth (HS256 JWT generated per-request)
 PyJWT>=2.0.0
 
+# Cloudflare R2 (S3-compatible) — V2 template asset hosting
+boto3>=1.34
+
 

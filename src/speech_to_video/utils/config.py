@@ -52,6 +52,11 @@ class Settings:
     firebase_service_account_path: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "")
     firebase_service_account_json: str = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     revenuecat_rest_api_key: str = os.environ.get("REVENUECAT_REST_API_KEY", "")
+    r2_account_id: str = os.environ.get("R2_ACCOUNT_ID", "")
+    r2_access_key_id: str = os.environ.get("R2_ACCESS_KEY_ID", "")
+    r2_secret_access_key: str = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+    r2_bucket: str = os.environ.get("R2_BUCKET", "speech-to-video-templates")
+    r2_public_base_url: str = os.environ.get("R2_PUBLIC_BASE_URL", "https://assets.speech-2-video.ai")
 
 
 def get_settings() -> Settings:

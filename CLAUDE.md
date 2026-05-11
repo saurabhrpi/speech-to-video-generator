@@ -289,6 +289,11 @@ User Input (room_type, style, features)
 - `stitch_timelapse_clips()`: Speed scaling + hold_first_frame + optional dissolve (for timelapses)
 - `extract_first_frame()`: Extract video first frame to PNG. Accepts local path or http(s) URL. Optional thumbnail resize. Used by Pipeline A (driving-video preview tile) and Track 2 asset upload (auto-thumbnail).
 
+**R2 Client** (`src/speech_to_video/utils/r2_client.py`) — V2 template asset hosting on Cloudflare R2 (S3-compatible). Public-read bucket served via custom domain `https://assets.speech-2-video.ai`, long-TTL cache (1y immutable), CF edge caching via the `Cache R2 assets` Cache Rule. Lazy `boto3` client, env-driven (raises `R2NotConfigured` if unset).
+- `upload_file(local_path, key, content_type=None, cache_control=...)`: Upload file. Returns public URL.
+- `public_url(key)`: Construct public URL under custom domain.
+- `head_object(key)`, `delete_object(key)`: Metadata + delete.
+
 **Timelapse Models** (`src/speech_to_video/models/timelapse.py`)
 - `TimelapseRequest` dataclass: room_type, style, features, materials, lighting, camera_motion, progression, freeform_description
 - `compose_timelapse_prompt()`: Builds prompt from request + narrative templates
@@ -358,6 +363,8 @@ All configuration via environment variables (`.env` file). Settings loaded via `
 **Auth:** `FIREBASE_SERVICE_ACCOUNT_PATH` (path to Firebase admin SDK JSON — supports `~` expansion). Anon free tier is now controlled by `_ANON_STARTER_CREDITS = 10` constant in `api/server.py` (not env-driven). Legacy `UNAUTH_GEN_LIMIT` env var and Google OAuth vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, `POST_LOGIN_REDIRECT`, `SESSION_SECRET`) are removed.
 
 **Storage:** `CLIPS_NAMESPACE`, `CLIPS_DIR` (./clips/)
+
+**R2 (V2 template asset hosting):** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` (default `speech-to-video-templates`), `R2_PUBLIC_BASE_URL` (default `https://assets.speech-2-video.ai`). All four credentials required for `r2_client._s3()` to initialize; missing any raises `R2NotConfigured`. DNS hosted on Cloudflare (migrated from GoDaddy S61); Cache Rule `Cache R2 assets` ensures edge caching for the custom-domain hostname.
 
 ## API Endpoint Reference
 
