@@ -1067,6 +1067,85 @@ async def create_speech_to_video(
     return JSONResponse({"job_id": job_id})
 
 # ----------------------------------------------------------------------
+# V2 generate template-video endpoint (AIV-15). Dispatcher in AIV-14.
+# ----------------------------------------------------------------------
+# JSON body, not Form, since the payload is structured. Selfie was uploaded
+# via /api/upload/selfie ahead of this call (AIV-89). credit_cost lives in
+# the template registry doc per AIV-36 — not in CREDIT_COSTS table.
+
+from pydantic import BaseModel
+
+
+class TemplateVideoRequest(BaseModel):
+    template_id: str
+    selfie_key: str
+    prompt_overrides: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/generate/template-video")
+def create_template_video(
+    req: TemplateVideoRequest,
+    user: Dict = Depends(verify_firebase_token),
+):
+    from ..utils import template_registry
+    from ..utils.job_manager import try_create_credit_job, update_job, start_job
+
+    # 1. Pre-load template — 404 fast if missing (don't burn a job slot for typos).
+    try:
+        template = template_registry.get_template(req.template_id)
+    except template_registry.TemplateNotFound:
+        raise HTTPException(status_code=404, detail=f"template_not_found: {req.template_id}")
+
+    credit_cost = template.get("credit_cost")
+    if not isinstance(credit_cost, int) or credit_cost <= 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"template_missing_credit_cost: {req.template_id}",
+        )
+
+    # 2. Validate selfie_key belongs to the caller. Rejects cross-uid attempts
+    # without ever touching R2.
+    expected_prefix = f"selfies/{user['uid']}/"
+    if not req.selfie_key.startswith(expected_prefix):
+        raise HTTPException(status_code=403, detail="selfie_key does not belong to current user")
+
+    # 3. Eager 402 — fast surface to mobile so the paywall can open before we
+    # bother creating an atomic job slot.
+    _check_credits_or_402(user, credit_cost)
+
+    # 4. Atomic concurrent-submit gate (TOCTOU close vs the eager check above).
+    job_id = try_create_credit_job(
+        uid=user["uid"],
+        credit_cost=int(credit_cost),
+        is_anonymous=bool(user["is_anonymous"]),
+    )
+    if not job_id:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "concurrent_job_in_flight",
+                "message": "A generation is already in progress for this account.",
+            },
+        )
+
+    # 5. Worker. Adapter normalizes the dispatcher's (phase, template_id)
+    # callback shape to job_manager's (phase, message, ...) shape.
+    def on_progress(phase=None, template_id=None, **_extra):
+        update_job(job_id, phase=phase or "running", message=phase or "")
+
+    def run():
+        return service.generate_template_video(
+            template_id=req.template_id,
+            selfie_key=req.selfie_key,
+            prompt_overrides=req.prompt_overrides,
+            on_progress=on_progress,
+        )
+
+    start_job(job_id, run)
+    return JSONResponse({"job_id": job_id})
+
+
+# ----------------------------------------------------------------------
 # V2 selfie endpoints (AIV-89). Policy locked in AIV-77.
 # ----------------------------------------------------------------------
 # Selfies live in the private R2 selfies bucket under `selfies/{uid}/`.
