@@ -4,9 +4,15 @@ description: User prefers direct API to the original model provider over wrapper
 type: feedback
 ---
 
-User strongly prefers direct API access to the original model provider (Kling direct, Google direct) over thin-wrapper aggregators (AIMLAPI, OpenRouter, etc.). Locked S60 (2026-05-09).
+User strongly prefers direct API access to the original model provider (Kling direct, Google direct) over thin-wrapper aggregators (AIMLAPI, OpenRouter, etc.). Locked S60 (2026-05-09); reasons clarified S62 (2026-05-11).
 
-**Why:** Wrappers add cost (markup), latency (extra hop), opacity (less control over auth / retry / features), and license fog (you contract with the wrapper, not the model maker — relevant for IP indemnity).
+**Why — three roughly equal drivers, NOT just IP indemnity:**
+
+1. **Cost.** Wrappers add markup on every call (often 10–30% over the OG provider's list price). At V2 launch volume this materially affects per-gen margin.
+2. **Reliability of service.** Wrappers share rate limits, shared infrastructure, and a single point of failure across all their customers. OG providers give us our own quota lane and a more direct support escalation path. Past V1 incidents with AIMLAPI (intermittent timeouts, opaque error responses, no SLA) shaped this view.
+3. **IP indemnity / license clarity.** You contract with the wrapper, not the model maker. For a consumer-facing V2 product where outputs may include recognizable people, scenes, or styles, enterprise IP indemnification (Vertex's Generated Output Indemnity, Kling's enterprise terms) is what stops a takedown / legal claim from landing on us.
+
+Plus secondary factors: latency (extra hop), opacity (less control over auth / retry / features), and feature lag (wrappers expose a subset of the OG provider's capabilities, often months behind).
 
 **How to apply:**
 - For new V2+ provider integrations, default to direct API to the OG model maker

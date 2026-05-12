@@ -28,11 +28,6 @@ class Settings:
     default_resolution_medium: str = os.environ.get("DEFAULT_RES_MEDIUM", "720p")
     default_clip_seconds: int = int(os.environ.get("DEFAULT_CLIP_SECONDS", "10"))
     debug_transcript: bool = os.environ.get("DEBUG_TRANSCRIPT", "0").lower() in {"1", "true", "yes", "on"}
-    dzine_api_key: str = os.environ.get("DZINE_API_KEY", "")
-    dzine_base_url: str = os.environ.get("DZINE_BASE_URL", "https://papi.dzine.ai/openapi/v1")
-    dzine_style_code: str = os.environ.get("DZINE_STYLE_CODE", "Style-7feccf2b-f2ad-43a6-89cb-354fb5d928d2")
-    dzine_structure_match: float = float(os.environ.get("DZINE_STRUCTURE_MATCH", "0.85"))
-    dzine_color_match: int = int(os.environ.get("DZINE_COLOR_MATCH", "1"))
     kling_i2v_model: str = os.environ.get("KLING_I2V_MODEL", "klingai/video-v3-pro-image-to-video")
     kling_t2v_model: str = os.environ.get("KLING_T2V_MODEL", "klingai/video-v3-standard-text-to-video")
     seedance_i2v_model: str = os.environ.get("SEEDANCE_I2V_MODEL", "bytedance/seedance-1-0-pro-i2v")
@@ -56,11 +51,13 @@ class Settings:
     r2_access_key_id: str = os.environ.get("R2_ACCESS_KEY_ID", "")
     r2_secret_access_key: str = os.environ.get("R2_SECRET_ACCESS_KEY", "")
     r2_bucket: str = os.environ.get("R2_BUCKET", "speech-to-video-templates")
+    r2_selfies_bucket: str = os.environ.get("R2_SELFIES_BUCKET", "speech-to-video-selfies")
     r2_public_base_url: str = os.environ.get("R2_PUBLIC_BASE_URL", "https://assets.speech-2-video.ai")
     google_cloud_project: str = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     vertex_location: str = os.environ.get("VERTEX_LOCATION", "us-central1")
     vertex_service_account_json: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_JSON", "")
     vertex_service_account_path: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_PATH", "")
+    vertex_nb_model: str = os.environ.get("VERTEX_NB_MODEL", "gemini-2.5-flash-image")
 
 
 def get_settings() -> Settings:

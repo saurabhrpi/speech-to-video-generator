@@ -881,4 +881,217 @@ class VideoService:
             resolution=self.settings.i2v_resolution or "768P",
         )
 
+    # ------------------------------------------------------------------
+    # V2 dispatch (AIV-14): generate_template_video
+    # ------------------------------------------------------------------
+    # Design constraint: ALL provider-specific routing lives in this method
+    # and the helpers it owns. NEVER push provider conditionals into clients
+    # themselves or into the API layer. The clients are drop-in replacements
+    # behind the resolver methods. See AIV-14 for the why.
+
+    def generate_template_video(
+        self,
+        template_id: str,
+        selfie_key: str,
+        prompt_overrides: Optional[Dict] = None,
+        on_progress: Optional[Callable] = None,
+    ) -> Dict:
+        """V2 dispatcher. Loads a template by id and routes by `pipeline_class` to
+        either the motion-transfer (Pipeline A) or scene-insertion (Pipeline B) flow.
+
+        Returns a dict with at minimum `{success: bool, ...}`. On success: `video_url`,
+        `task_id`, `duration`, `pipeline`. On failure: `phase`, `error`, plus any
+        partial-state fields (e.g. `intermediate_image_key` for Pipeline B mid-flow
+        failures so the caller can recover the composite).
+        """
+        from ..utils import template_registry
+
+        progress = on_progress or (lambda **_: None)
+        progress(phase="load_template", template_id=template_id)
+
+        try:
+            template = template_registry.get_template(template_id)
+        except template_registry.TemplateNotFound:
+            return {"success": False, "phase": "load_template", "error": f"template_not_found: {template_id}"}
+
+        pipeline = template.get("pipeline_class")
+        if pipeline == template_registry.PIPELINE_MOTION_TRANSFER:
+            return self._dispatch_motion_transfer(template, selfie_key, prompt_overrides, progress)
+        if pipeline == template_registry.PIPELINE_SCENE_INSERTION:
+            return self._dispatch_scene_insertion(template, selfie_key, prompt_overrides, progress)
+        return {"success": False, "phase": "route", "error": f"unknown pipeline_class: {pipeline!r}"}
+
+    def _dispatch_motion_transfer(
+        self,
+        template: Dict,
+        selfie_key: str,
+        overrides: Optional[Dict],
+        progress: Callable,
+    ) -> Dict:
+        """Pipeline A: motion-transfer. Selfie + driving_video → animated character."""
+        from ..utils import r2_client
+
+        assets = template.get("assets") or {}
+        driving_video = assets.get("driving_video_url")
+        if not driving_video:
+            return {"success": False, "phase": "load_template", "error": "missing assets.driving_video_url"}
+
+        progress(phase="presign_selfie", template_id=template["id"])
+        selfie_url = r2_client.generate_presigned_get_url(
+            selfie_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
+        )
+
+        progress(phase="kling_motion_control", template_id=template["id"])
+        client = self._resolve_motion_client(template["id"])
+        result = client.generate_and_poll(
+            image_url=selfie_url,
+            video_url=driving_video,
+            character_orientation="image",  # Outcome 2: motion-onto-character
+            prompt=(overrides or {}).get("prompt"),
+        )
+        if not result.get("success"):
+            return {
+                "success": False,
+                "phase": "kling_motion_control",
+                "error": result.get("error"),
+                "task_id": result.get("task_id"),
+            }
+
+        return {
+            "success": True,
+            "video_url": result["video_url"],
+            "task_id": result["task_id"],
+            "duration": result.get("duration"),
+            "pipeline": "motion-transfer",
+        }
+
+    def _dispatch_scene_insertion(
+        self,
+        template: Dict,
+        selfie_key: str,
+        overrides: Optional[Dict],
+        progress: Callable,
+    ) -> Dict:
+        """Pipeline B: scene-insertion. Selfie + scene → composite (Vertex Nano Banana
+        Edit) → animated composite (Kling Motion Control video mode)."""
+        import time
+        import uuid
+        from ..utils import r2_client
+
+        assets = template.get("assets") or {}
+        scene_url = assets.get("scene_image_url")
+        motion_video = assets.get("driving_video_url")  # reused for B as motion reference
+        prompt = template.get("prompt_template")
+
+        if not scene_url:
+            return {"success": False, "phase": "load_template", "error": "missing assets.scene_image_url"}
+        if not motion_video:
+            return {"success": False, "phase": "load_template", "error": "missing assets.driving_video_url (motion reference)"}
+        if not prompt:
+            return {"success": False, "phase": "load_template", "error": "missing prompt_template"}
+
+        progress(phase="resolve_inputs", template_id=template["id"])
+        try:
+            selfie_path = self._download_r2_to_tmp(
+                selfie_key, self.settings.r2_selfies_bucket, suffix=".jpg",
+            )
+            scene_path = self._download_url_to_tmp(scene_url, suffix=".jpg")
+        except Exception as e:
+            return {"success": False, "phase": "resolve_inputs", "error": f"{type(e).__name__}: {e}"}
+
+        progress(phase="nb_edit", template_id=template["id"])
+        edit_client = self._resolve_image_edit_client(template["id"])
+        edit = edit_client.edit_image_nano_banana(
+            prompt=(overrides or {}).get("prompt") or prompt,
+            image_paths=[selfie_path, scene_path],
+        )
+        if not edit.get("success"):
+            return {"success": False, "phase": "nb_edit", "error": edit.get("error")}
+
+        progress(phase="upload_composite", template_id=template["id"])
+        uid = self._uid_from_selfie_key(selfie_key)
+        composite_key = f"composites/{uid}/{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.png"
+        r2_client.upload_file(
+            edit["local_path"], composite_key,
+            bucket=self.settings.r2_selfies_bucket,
+            content_type="image/png",
+            cache_control="private, max-age=86400",
+        )
+        composite_url = r2_client.generate_presigned_get_url(
+            composite_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
+        )
+
+        progress(phase="kling_motion_control", template_id=template["id"])
+        motion_client = self._resolve_motion_client(template["id"])
+        result = motion_client.generate_and_poll(
+            image_url=composite_url,
+            video_url=motion_video,
+            character_orientation="video",  # Outcome 1: character-into-scene
+            prompt=(overrides or {}).get("motion_prompt"),
+        )
+        if not result.get("success"):
+            return {
+                "success": False,
+                "phase": "kling_motion_control",
+                "error": result.get("error"),
+                "task_id": result.get("task_id"),
+                "intermediate_image_key": composite_key,
+            }
+
+        return {
+            "success": True,
+            "video_url": result["video_url"],
+            "task_id": result["task_id"],
+            "duration": result.get("duration"),
+            "intermediate_image_key": composite_key,
+            "pipeline": "scene-insertion",
+        }
+
+    # Pluggability points — swap providers here, NOT in the dispatch helpers above.
+
+    def _resolve_image_edit_client(self, template_id: str):
+        """Pluggability: VertexAIClient today. Future swap point for AIMLAPI fallback
+        (e.g. while Nano Banana Pro allowlist is pending — see AIV-84 #2). All image-edit
+        clients must expose `edit_image_nano_banana(prompt, image_paths)` returning
+        `{success, local_path, ...}`."""
+        from ..clients.vertex_ai_client import VertexAIClient
+        return VertexAIClient(self.settings)
+
+    def _resolve_motion_client(self, template_id: str):
+        """Pluggability: KlingMotionClient today. All motion-control clients must expose
+        `generate_and_poll(image_url, video_url, character_orientation, ...)` returning
+        `{success, video_url, task_id, duration}`."""
+        from ..clients.kling_motion_client import KlingMotionClient
+        return KlingMotionClient(self.settings)
+
+    @staticmethod
+    def _uid_from_selfie_key(selfie_key: str) -> str:
+        """Extract uid from `selfies/{uid}/{filename}`. Returns 'unknown' if the key
+        doesn't match that shape (e.g. test fixtures uploaded to bucket root)."""
+        parts = selfie_key.split("/")
+        if len(parts) >= 3 and parts[0] == "selfies":
+            return parts[1]
+        return "unknown"
+
+    @staticmethod
+    def _download_url_to_tmp(url: str, suffix: str = ".bin") -> str:
+        import tempfile
+        import requests
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            path = f.name
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            f.write(r.content)
+        return path
+
+    @staticmethod
+    def _download_r2_to_tmp(key: str, bucket: str, suffix: str = ".bin") -> str:
+        import tempfile
+        from ..utils import r2_client
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            path = f.name
+        r2_client.download_to_path(key, path, bucket=bucket)
+        return path
+
 

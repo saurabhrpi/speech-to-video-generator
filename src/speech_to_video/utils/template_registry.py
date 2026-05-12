@@ -12,7 +12,8 @@ Document shape:
       "description": str,                      # carousel sub-copy, English only at V2
       "published_status": "draft" | "qa-pending" | "published",
       "assets": {
-        "driving_video_url": str | None,       # Pipeline A
+        "driving_video_url": str | None,       # Pipeline A: drives motion onto selfie.
+                                               # Pipeline B: motion reference applied to composite.
         "scene_image_url": str | None,         # Pipeline B
         "thumbnail_url": str | None,           # carousel tile
         "preview_video_url": str | None,       # short hover loop, optional

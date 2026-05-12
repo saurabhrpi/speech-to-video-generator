@@ -250,6 +250,20 @@ User Input (room_type, style, features)
 - Direct MiniMax API for Hailuo T2V (bypasses AIMLAPI). Activated when `MINIMAX_API_KEY` is set.
 - `generate_and_poll(prompt, model, duration, resolution)`: submit + poll until clip ready. This is the path the shipping product takes for Hailuo.
 
+**KlingMotionClient** (`src/speech_to_video/clients/kling_motion_client.py`) — V2 Pipeline A + B
+- Direct Kling API for Motion Control endpoint (bypasses AIMLAPI). Auth via HS256 JWT regenerated per request from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`.
+- `generate_and_poll(image_url, video_url, character_orientation, mode, model_name, prompt, ...)`: submit + poll until clip ready. Returns `{success, video_url, task_id, duration}`.
+- `character_orientation` selects mode:
+  - `"image"` → Outcome 2 (motion-onto-character) — Pipeline A (viral dances). Driving video ≤10s.
+  - `"video"` → Outcome 1 (character-into-scene) — Pipeline B (composite-into-scene I2V). Driving video ≤30s.
+- GET polls retry on 502/503/504 via urllib3; POST submit intentionally no-retry (avoids double-charge / duplicate moderation rejection).
+- Output URL expires 30 days after generation — caller must rehost for longer retention.
+
+**VertexAIClient** (`src/speech_to_video/clients/vertex_ai_client.py`) — V2 Pipeline B
+- Vertex AI access for Nano Banana / Gemini-image (T2I + Edit). Lazy `genai.Client(vertexai=True, project, location, credentials)`. Auth precedence: `VERTEX_SERVICE_ACCOUNT_JSON` → `VERTEX_SERVICE_ACCOUNT_PATH`. Default model `gemini-2.5-flash-image` (GA Nano Banana, non-Pro) per `VERTEX_NB_MODEL`; flip to `gemini-3-pro-image-preview` (Nano Banana Pro) one-line via env once allowlist clears.
+- `generate_image_nano_banana(prompt, output_dir="/tmp")`: T2I. Returns `{success, local_path, model, mime_type}`.
+- `edit_image_nano_banana(prompt, image_paths, output_dir="/tmp")`: Edit (selfie + scene → composite). Same return shape. Image inputs go inline as `Part.from_bytes`.
+
 **OpenAIClient** (`src/speech_to_video/clients/openai_client.py`)
 - `transcribe()`: Whisper with 3x retry (h11 errors, connection resets)
 - `generate_scene_bible_only()`: Room analysis -> scene bible + elements + stage 1

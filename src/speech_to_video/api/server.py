@@ -1066,6 +1066,126 @@ async def create_speech_to_video(
 
     return JSONResponse({"job_id": job_id})
 
+# ----------------------------------------------------------------------
+# V2 selfie endpoints (AIV-89). Policy locked in AIV-77.
+# ----------------------------------------------------------------------
+# Selfies live in the private R2 selfies bucket under `selfies/{uid}/`.
+# Server enforces uid prefix on every read/delete. R2 lifecycle rule
+# (30d auto-delete on `selfies/` prefix) is configured manually in the
+# R2 dashboard — see AIV-89 / AIV-84 #4.
+
+import secrets as _secrets
+from datetime import datetime as _dt, timedelta as _td
+
+from ..utils import r2_client as _r2
+
+_SELFIE_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_SELFIE_EXT_MAP = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
+}
+
+
+def _selfie_ext_for(content_type: str) -> str:
+    return _SELFIE_EXT_MAP.get((content_type or "").lower(), ".bin")
+
+
+def _selfies_prefix(uid: str) -> str:
+    return f"selfies/{uid}/"
+
+
+@app.post("/api/upload/selfie")
+async def upload_selfie(
+    file: UploadFile = File(...),
+    user: Dict = Depends(verify_firebase_token),
+):
+    ct = file.content_type or ""
+    if not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail=f"content_type must be image/*; got {ct!r}")
+
+    body = await file.read()
+    try:
+        await file.close()
+    except Exception:
+        pass
+
+    if len(body) > _SELFIE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"selfie size {len(body)} exceeds limit {_SELFIE_MAX_BYTES}")
+    if not body:
+        raise HTTPException(status_code=400, detail="empty file")
+
+    uid = user["uid"]
+    epoch_ms = int(time.time() * 1000)
+    rand6 = _secrets.token_hex(3)
+    key = f"{_selfies_prefix(uid)}{epoch_ms}_{rand6}{_selfie_ext_for(ct)}"
+
+    try:
+        _r2.upload_bytes(
+            body, key,
+            content_type=ct,
+            bucket=settings.r2_selfies_bucket,
+            cache_control="private, max-age=86400",
+        )
+    except _r2.R2NotConfigured as exc:
+        raise HTTPException(status_code=500, detail=f"r2_not_configured: {exc}")
+    except Exception as exc:
+        logger.exception("Selfie upload to R2 failed")
+        raise HTTPException(status_code=500, detail=f"upload_failed: {exc}")
+
+    expires_at = (_dt.utcnow() + _td(days=30)).replace(microsecond=0).isoformat() + "Z"
+    return {"key": key, "expires_at": expires_at, "size_bytes": len(body)}
+
+
+@app.get("/api/selfies")
+def list_selfies(user: Dict = Depends(verify_firebase_token)):
+    uid = user["uid"]
+    try:
+        objects = _r2.list_objects(_selfies_prefix(uid), bucket=settings.r2_selfies_bucket)
+    except _r2.R2NotConfigured as exc:
+        raise HTTPException(status_code=500, detail=f"r2_not_configured: {exc}")
+
+    out = []
+    for obj in objects:
+        last_mod = obj.get("LastModified")
+        out.append({
+            "key": obj["Key"],
+            "uploaded_at": last_mod.isoformat() if hasattr(last_mod, "isoformat") else None,
+            "size_bytes": obj.get("Size"),
+        })
+    return out
+
+
+@app.delete("/api/selfies")
+def delete_all_or_one_selfie(
+    key: Optional[str] = None,
+    user: Dict = Depends(verify_firebase_token),
+):
+    """Delete either one selfie (when ?key=... is provided) or all selfies for the
+    current uid (when no key). Server enforces `selfies/{uid}/` prefix on every
+    delete — cross-user attempts get 403."""
+    uid = user["uid"]
+    expected_prefix = _selfies_prefix(uid)
+
+    if key is not None:
+        if not key.startswith(expected_prefix):
+            raise HTTPException(status_code=403, detail="key does not belong to current user")
+        try:
+            _r2.delete_object(key, bucket=settings.r2_selfies_bucket)
+        except _r2.R2NotConfigured as exc:
+            raise HTTPException(status_code=500, detail=f"r2_not_configured: {exc}")
+        return {"deleted": key}
+
+    try:
+        deleted = _r2.delete_prefix(expected_prefix, bucket=settings.r2_selfies_bucket)
+    except _r2.R2NotConfigured as exc:
+        raise HTTPException(status_code=500, detail=f"r2_not_configured: {exc}")
+    return {"deleted_count": deleted, "prefix": expected_prefix}
+
+
 _mount_static(app)
 
 
