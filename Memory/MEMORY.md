@@ -101,3 +101,4 @@
 - [Verify package versions with pip index](feedback_verify_package_version_with_pip_index.md) -- WebFetch hallucinates PyPI/npm versions; always use `pip index versions <pkg>` / `npm view <pkg> versions` before pinning a floor.
 - [Replit Workspace vs Deployment Secrets](reference_replit_workspace_vs_deployment_secrets.md) -- Two separate stores; setting one doesn't sync to the other. Workspace pane may be missing — use export + /tmp file with PATH-style env var for shell smoke tests.
 - [R2 tokens are bucket-scoped](reference_r2_tokens_bucket_scoped.md) -- Default R2 API token scope is single-bucket; adding a new bucket → 403 on presign even with a valid token. Edit token to expand scope (or pick "all buckets in this account").
+- [Default to --dry-run when verifying](feedback_default_dry_run_when_verifying.md) -- Testing a CLI behavior change? Use dry-run unless the change is specifically about the real-spend path. Real mode = real money.
