@@ -257,6 +257,20 @@ export default function SpeechScreen() {
         </Pressable>
       </View>
 
+      {/* Dev-only entry to AIV-30 V2 home shell. Remove when V2 home replaces this screen. */}
+      {__DEV__ && (
+        <Pressable
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onPress={() => router.push('/home-v2' as any)}
+          accessibilityLabel="Preview V2 home"
+          style={{ alignSelf: 'center', paddingVertical: 8 }}
+        >
+          <Text className="text-caption font-body text-muted-foreground">
+            Preview V2 home →
+          </Text>
+        </Pressable>
+      )}
+
       {/* Transcript review modal — fires after voice recording stops */}
       <ConfirmModal
         visible={confirmOpen}
