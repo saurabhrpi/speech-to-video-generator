@@ -32,11 +32,12 @@ when assets change.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 _COLLECTION = "templates"
+_STATUS_LOG_COLLECTION = "template_status_log"
 
 PIPELINE_MOTION_TRANSFER = "motion-transfer"
 PIPELINE_SCENE_INSERTION = "scene-insertion"
@@ -132,8 +133,24 @@ def upsert_template(template_id: str, data: Dict) -> Dict:
     return out
 
 
-def set_status(template_id: str, status: str) -> Dict:
-    """Update only `published_status`. Used by AIV-47 quality auto-pause + admin."""
+def set_status(
+    template_id: str,
+    status: str,
+    actor: str = "unknown",
+    uid: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> Dict:
+    """Update `published_status` and append an audit log entry atomically.
+
+    The template doc update and the `template_status_log` write commit in one
+    Firestore batch — neither lands without the other. Callers:
+      - CLI (`scripts/set_template_status.py`) -> actor="cli"
+      - AIV-47 quality auto-pause -> actor="auto-pause", reason=<rule>
+      - Future admin dashboard -> actor="admin", uid=<who>
+
+    Firebase Console direct edits BYPASS this path and are NOT logged at V2
+    launch. Treat the log as best-effort, not ground truth.
+    """
     from firebase_admin import firestore as fb_firestore
 
     if status not in _VALID_STATUSES:
@@ -141,19 +158,81 @@ def set_status(template_id: str, status: str) -> Dict:
             f"invalid status {status!r}; expected one of {_VALID_STATUSES}"
         )
 
-    ref = _doc_ref(template_id)
-    snap = ref.get()
+    db = _db()
+    template_ref = db.collection(_COLLECTION).document(template_id)
+    snap = template_ref.get()
     if not snap.exists:
         raise TemplateNotFound(template_id)
-    ref.update(
+    from_status = (snap.to_dict() or {}).get("published_status")
+
+    log_ref = db.collection(_STATUS_LOG_COLLECTION).document()
+    batch = db.batch()
+    batch.update(
+        template_ref,
         {
             "published_status": status,
             "updated_at": fb_firestore.SERVER_TIMESTAMP,
-        }
+        },
     )
-    out = ref.get().to_dict() or {}
+    batch.set(
+        log_ref,
+        {
+            "template_id": template_id,
+            "from_status": from_status,
+            "to_status": status,
+            "actor": actor,
+            "uid": uid,
+            "reason": reason,
+            "ts": fb_firestore.SERVER_TIMESTAMP,
+        },
+    )
+    batch.commit()
+
+    out = template_ref.get().to_dict() or {}
     out["id"] = template_id
     return out
+
+
+def list_status_log(
+    template_id: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict]:
+    """Return audit log entries, newest first. `template_id=None` spans all
+    templates. Used by AIV-47 quality dashboard + admin debugging.
+
+    When filtered by `template_id`, sorting is client-side to avoid a Firestore
+    composite (template_id, ts) index. Per-template entry counts are expected
+    to stay in the low hundreds; revisit if that ceases to hold.
+    """
+    from firebase_admin import firestore as fb_firestore
+
+    coll = _db().collection(_STATUS_LOG_COLLECTION)
+    if template_id is not None:
+        snaps = list(coll.where("template_id", "==", template_id).stream())
+        snaps.sort(key=lambda s: (s.to_dict() or {}).get("ts"), reverse=True)
+        snaps = snaps[:limit]
+    else:
+        query = coll.order_by("ts", direction=fb_firestore.Query.DESCENDING).limit(limit)
+        snaps = list(query.stream())
+
+    out: List[Dict] = []
+    for snap in snaps:
+        data = snap.to_dict() or {}
+        data["id"] = snap.id
+        out.append(data)
+    return out
+
+
+def _delete_status_log_for(template_id: str) -> int:
+    """Test/admin helper: hard-delete all log entries for a template_id.
+    Returns the number of deleted entries. NOT used in normal app flow.
+    """
+    coll = _db().collection(_STATUS_LOG_COLLECTION)
+    deleted = 0
+    for snap in coll.where("template_id", "==", template_id).stream():
+        snap.reference.delete()
+        deleted += 1
+    return deleted
 
 
 def delete_template(template_id: str) -> bool:
