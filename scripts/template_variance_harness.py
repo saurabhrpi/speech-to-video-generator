@@ -72,7 +72,7 @@ IMG_MIME = {
 # Rough COGS per dispatcher call. Tune as real numbers land. Used only for the
 # pre-run cost estimate / confirm gate — does NOT bill anything.
 COGS_PER_GEN_USD = 0.50
-WARN_THRESHOLD_USD = 1.00
+WARN_THRESHOLD_USD = 5.00
 
 DRYRUN_SAMPLE_MP4 = ROOT / "docs/research/Kling_MotionControl_Image_Output.mp4"
 
@@ -249,7 +249,7 @@ def _render_html(out_root: Path, template_ids: List[str], selfies: List[Path], e
         if not e:
             return '<td class="missing">—</td>'
         if not e["success"]:
-            err = (e.get("error") or "FAILED").replace("<", "&lt;")
+            err = str(e.get("error") or "FAILED").replace("<", "&lt;")
             return f'<td class="fail"><div class="label">FAILED</div><div class="err">{err}</div></td>'
         video_src = e["output_rel"]
         size_kb = (e.get("size_bytes") or 0) // 1024
