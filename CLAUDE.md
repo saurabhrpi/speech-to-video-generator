@@ -329,21 +329,13 @@ User Input (room_type, style, features)
 - `pipeline-store.ts` — **dormant** (wired for timelapse, no active UI).
 - `clips-store.ts` — clip list for the (currently web-only) clips sidebar.
 
-**Components (`mobile/components/`):**
-- `Paywall.tsx` — full-screen modal, RC offering fetch, `purchasePackage` handler, bundles Apple Sign In for anon users. Count comes from `PRO_PACK_COUNT` in `lib/constants.ts`, price from `pkg.product.priceString`.
-- `VideoPlayer.tsx` — expo-av wrapper with URL preflight + 90s timeout safety net.
-- `MicVisualizer.tsx` — canvas waveform during recording.
-- `Button.tsx`, `ConfirmModal.tsx`, `Picker.tsx`, `ProgressBar.tsx`, `NetworkBanner.tsx`, `TagInput.tsx`, `ClipRow.tsx`, `ClipsList.tsx`, `PipelineReview.tsx`.
-
-**Libs (`mobile/lib/`):**
-- `api-client.ts` — `apiGet`/`apiPost`/`apiDelete` with Firebase Bearer injection.
-- `auth.ts` — Firebase anon + Apple Sign In, nonce pattern, anon→Apple linking.
-- `purchases.ts` — RevenueCat `configurePurchases`, `syncPurchasesUser(uid)`, `resetPurchasesUser()`. `__DEV__` picks Test Store vs App Store SDK key.
-- `polling.ts` — job-status polling with adaptive intervals + AbortController.
-- `constants.ts` — `PRO_PACK_COUNT`, Terms/Privacy URLs.
-- `streaming.ts` — legacy SSE; being replaced by polling.
-
-**Polling:** Adaptive intervals. Tolerates 10 consecutive failures before pausing. AbortController per job.
+**Non-obvious component/lib behavior:**
+- `Paywall.tsx` — full-screen modal (not a route), RC offering fetch, bundles Apple Sign In for anon users. Count from `PRO_PACK_COUNT` in `lib/constants.ts`, price from `pkg.product.priceString`.
+- `VideoPlayer.tsx` — expo-av wrapper with URL preflight + 90s timeout safety net (silent fails are the failure mode, see `memory/project_video_player_test.md`).
+- `lib/auth.ts` — Firebase anon + Apple Sign In, nonce pattern, anon→Apple linking preserves UID.
+- `lib/purchases.ts` — `__DEV__` picks Test Store vs App Store SDK key.
+- `lib/polling.ts` — adaptive intervals, tolerates 10 consecutive failures before pausing, AbortController per job.
+- `lib/streaming.ts` — legacy SSE, being replaced by polling.
 
 ### Web Frontend Architecture (Paused)
 
@@ -380,38 +372,11 @@ All configuration via environment variables (`.env` file). Settings loaded via `
 
 **R2 (V2 template asset hosting):** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` (default `speech-to-video-templates`), `R2_PUBLIC_BASE_URL` (default `https://assets.speech-2-video.ai`). All four credentials required for `r2_client._s3()` to initialize; missing any raises `R2NotConfigured`. DNS hosted on Cloudflare (migrated from GoDaddy S61); Cache Rule `Cache R2 assets` ensures edge caching for the custom-domain hostname.
 
-## API Endpoint Reference
+## API Endpoints
 
-### Auth (Firebase Bearer)
-- `GET /api/auth/session` -> `{uid, is_anonymous, email, name, provider, usage_count, limit}` (requires `Authorization: Bearer <firebaseIdToken>`)
-- No server-side login/callback/logout routes. Mobile handles Apple Sign In + anonymous auth entirely via Firebase SDK; server only verifies tokens.
+Enumerate via `grep '^@app\.' src/speech_to_video/api/server.py`. The Pipelines table above is the load-bearing map; signatures live in the code.
 
-### Generation (Job-Based)
-- `POST /api/generate/speech-to-video` (form: prompt|audio, model, duration) -> `{job_id}` **← SHIPPING (mobile)**
-- `POST /api/transcribe` (form: audio) -> `{success, text, length}` **← SHIPPING (mobile)**
-- `POST /api/generate/timelapse` (json) -> `{job_id}` _(paused)_
-- `POST /api/generate/custom-videos` (json) -> `{job_id}` _(paused)_
-- `GET /api/jobs/{job_id}` -> `{status, phase, step, total_steps, message, result, partial_result}`
-
-### Generation (Direct Response — legacy/paused)
-- `POST /api/generate` (form: prompt, duration, quality) -> `{success, video_url}`
-- `POST /api/speech-to-video` (form: audio, duration, quality, prompt?) -> `{success, video_url, transcript}` _(direct-response legacy; mobile uses `/api/generate/speech-to-video` instead)_
-- `POST /api/ads/superbowl` (form: prompt|audio) -> `{success, video_url, seed}` _(paused)_
-
-### Clips
-- `GET /api/clips` -> `[{url, note, ts, has_response}]`
-- `POST /api/clips` (form: url, note?, json_response?)
-- `GET /api/clips/{ts}/response` -> stored JSON
-- `DELETE /api/clips/{ts}` | `DELETE /api/clips`
-- `POST /api/clips/reorder` (form: order)
-
-### Stitching
-- `POST /api/stitch` (form: urls?, use_saved?)
-- `POST /api/generate/stitch-custom` (json: video_urls)
-- `GET /api/stitched` | `GET /api/stitched/{name}`
-
-### Utility
-- `GET /api/health`, `GET /api/setup`, `GET /api/timelapse/options`, `GET /api/proxy-video?url=...`
+Auth contract: mobile sends `Authorization: Bearer <firebaseIdToken>`. No server-side login/callback/logout routes — mobile handles Apple Sign In + anonymous auth entirely via Firebase SDK; the server only verifies tokens.
 
 ## Development Standards
 
@@ -497,71 +462,6 @@ Before adding or modifying ANY rule/instruction in a GPT prompt that references 
 
 No automated tests. Manual testing via the mobile app on simulator (`npx expo run:ios`) or TestFlight. Backend CLI, Gradio UI, and the paused web frontend exist but are not the primary test paths.
 
-## File Structure
+## docs/ convention
 
-```
-mobile/                         # SHIPPING frontend (Expo / React Native)
-  app/
-    _layout.tsx                 # Root layout, auth listener, RC config, Paywall mount
-    (tabs)/
-      _layout.tsx               # Tab navigator
-      index.tsx                 # Speech-to-Video screen (shipping core UI)
-      gallery.tsx               # Generated clips
-    settings.tsx
-  components/
-    Paywall.tsx                 # Full-screen modal paywall, RC + Apple Sign In
-    VideoPlayer.tsx             # expo-av wrapper w/ URL preflight + timeout
-    Button.tsx, Picker.tsx, ProgressBar.tsx, ClipRow.tsx, ClipsList.tsx,
-    MicVisualizer.tsx, ConfirmModal.tsx, TagInput.tsx, NetworkBanner.tsx,
-    PipelineReview.tsx
-  store/
-    auth-store.ts               # Firebase + paywall state (Zustand)
-    gallery-store.ts            # S2V job submission + polling
-    pipeline-store.ts           # Dormant (timelapse)
-    clips-store.ts
-  lib/
-    api-client.ts, auth.ts, purchases.ts, polling.ts, constants.ts,
-    design-tokens.ts, pipeline.ts, streaming.ts, types.ts, utils.ts,
-    clips.ts
-  hooks/useRecording.ts
-  app.json, eas.json, package.json, tailwind.config.js, babel.config.js
-
-src/speech_to_video/             # Backend (Python, FastAPI)
-  clients/
-    openai_client.py            # GPT (Vision + text), Whisper
-    aimlapi_client.py           # AIMLAPI video/image gen, polling
-    minimax_client.py           # Direct MiniMax for Hailuo T2V (shipping path)
-  services/
-    video_service.py            # Orchestrates all pipelines
-  models/
-    timelapse.py                # TimelapseRequest (paused Timelapse-Phase-2)
-  utils/
-    config.py                   # Settings dataclass, env var loading
-    job_manager.py              # In-memory job registry, thread-based execution
-    clip_store.py               # Per-user filesystem clip storage
-    video.py                    # 4 stitching functions (paused — timelapse)
-  api/
-    server.py                   # FastAPI: endpoints, Firebase auth, CORS, static
-    firebase_auth.py            # Bearer token verification
-  webui/app.py                  # Legacy Gradio UI
-  cli.py                        # CLI
-
-web/                            # PAUSED frontend (React / Vite)
-  src/
-    pages/App.tsx               # Main SPA (~1240 lines)
-    components/
-      TimelapseForm.tsx, VideoStudio.tsx, MicVisualizer.tsx
-      ui/button.tsx
-    lib/shadcn.ts
-
-clips/                          # Runtime: per-user clip storage (gitignored)
-
-docs/                           # Project knowledge — split by purpose
-  api-notes/                    # Provider/model API + prompt notes (Hailuo, Kling, Seedance, Timelapse)
-  research/                     # Spike outputs + competitor research
-    competitor-apps/            # Screenshots of competing products
-    motion-transfer-providers-S57.md   # Provider-comparison spike logs (template for future spikes)
-    *.mp4                       # Generated outputs from provider spikes (kept past CDN expiry)
-```
-
-**docs/ convention:** `api-notes/` is for static reference material (API request shapes, prompt templates we use). `research/` is for spike outputs and competitor analysis — anything we generate or capture while evaluating providers, models, or competing products. When running a new provider spike, write a `motion-transfer-providers-{S##}.md`-style log into `research/` so the comparison data outlives the session.
+`docs/api-notes/` is for static reference material (API request shapes, prompt templates we use). `docs/research/` is for spike outputs and competitor analysis — anything we generate or capture while evaluating providers, models, or competing products. When running a new provider spike, write a `motion-transfer-providers-{S##}.md`-style log into `research/` so the comparison data outlives the session.

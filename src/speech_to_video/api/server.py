@@ -1146,6 +1146,79 @@ def create_template_video(
 
 
 # ----------------------------------------------------------------------
+# V2 GET /api/templates (AIV-83). Public read endpoint for the mobile carousel.
+# ----------------------------------------------------------------------
+# Always filters to published_status="published". Admin scripts call
+# `template_registry.list_templates(published_only=False)` directly when they
+# need drafts.
+#
+# Caching: ~25 docs at launch — list_templates() is cheap, but we still cache
+# in-process for 60s to keep cold-start cost off the carousel and to serve a
+# stable ETag for mobile's If-None-Match. ETag is weak: sha256 prefix of
+# sorted `id|updated_at`.
+#
+# No CDN cache + no pagination at launch. Both can land if catalog growth or
+# carousel latency demand it.
+
+import hashlib as _hashlib
+import threading as _threading
+
+from fastapi.responses import Response as _Response
+
+_TEMPLATE_CACHE_TTL_SEC = 60
+_template_cache_lock = _threading.Lock()
+_template_cache: Dict[str, Any] = {"ts": 0.0, "templates": None, "etag": None}
+
+
+def _serialize_template(doc: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(doc)
+    for k in ("created_at", "updated_at"):
+        v = out.get(k)
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+    return out
+
+
+def _compute_template_etag(serialized: List[Dict[str, Any]]) -> str:
+    parts = sorted(
+        f"{t.get('id', '')}|{t.get('updated_at', '')}" for t in serialized
+    )
+    digest = _hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    return f'W/"{digest[:16]}"'
+
+
+def _get_published_templates_cached():
+    # Lock held through the Firestore fetch to prevent stampede; ~25 docs +
+    # fast read make serial fetches a non-issue.
+    with _template_cache_lock:
+        now = time.time()
+        cached = _template_cache["templates"]
+        if cached is not None and (now - _template_cache["ts"]) < _TEMPLATE_CACHE_TTL_SEC:
+            return cached, _template_cache["etag"]
+
+        from ..utils import template_registry
+        raw = template_registry.list_templates(published_only=True)
+        serialized = [_serialize_template(t) for t in raw]
+        etag = _compute_template_etag(serialized)
+        _template_cache["ts"] = now
+        _template_cache["templates"] = serialized
+        _template_cache["etag"] = etag
+        return serialized, etag
+
+
+@app.get("/api/templates")
+def list_published_templates(request: Request):
+    templates, etag = _get_published_templates_cached()
+    inm = request.headers.get("if-none-match", "")
+    if inm and inm == etag:
+        return _Response(status_code=304, headers={"ETag": etag})
+    return JSONResponse(
+        {"templates": templates},
+        headers={"ETag": etag, "Cache-Control": "public, max-age=60"},
+    )
+
+
+# ----------------------------------------------------------------------
 # V2 selfie endpoints (AIV-89). Policy locked in AIV-77.
 # ----------------------------------------------------------------------
 # Selfies live in the private R2 selfies bucket under `selfies/{uid}/`.
