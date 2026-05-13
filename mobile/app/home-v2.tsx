@@ -126,10 +126,8 @@ function TemplateTile({ template }: { template: Template }) {
   const thumb = template.assets?.thumbnail_url;
 
   const onPress = () => {
-    // Pipeline Review wiring lands in AIV-31. Log for now so we can confirm
-    // taps fire as expected during shell QA.
-    // eslint-disable-next-line no-console
-    console.log('[home-v2] tap template', template.id, template.pipeline_class);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    router.push(`/template/${template.id}` as any);
   };
 
   return (

@@ -20,7 +20,7 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Required for voice recording to generate videos from speech",
-        "NSPhotoLibraryUsageDescription": "Save generated videos to your Camera Roll",
+        "NSPhotoLibraryUsageDescription": "Pick a photo of yourself to use in AI-generated video templates",
         "NSPhotoLibraryAddUsageDescription": "Save generated videos to your Camera Roll",
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -63,6 +63,14 @@
         {
           "photosPermission": "Save generated videos to your Camera Roll.",
           "savePhotosPermission": "Save generated videos to your Camera Roll."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a photo of yourself to use in AI-generated video templates.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       "@react-native-firebase/app",

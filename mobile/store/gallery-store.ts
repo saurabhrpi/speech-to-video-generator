@@ -45,6 +45,12 @@ interface GalleryStore {
     formData: FormData,
     meta: { prompt: string; model: string; duration: number; cost: number },
   ) => string;
+  /** V2 template-video submit. Same poll machinery as startGeneration; differs
+   *  only in the POST body shape and endpoint. */
+  startTemplateGeneration: (
+    body: { template_id: string; selfie_key: string },
+    meta: { prompt: string; model: string; cost: number },
+  ) => string;
   markSaved: (id: string) => void;
   clearThumbnail: (id: string) => void;
   removeJob: (id: string) => void;
@@ -266,6 +272,81 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
         // 429 = server's per-uid concurrent-submit gate (ToDo #1). Honest users
         // are blocked by `blockedByInFlight` upstream; this branch covers the
         // multi-device collision (same UID signed in on two devices).
+        if (err?.status === 429) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert(
+            'Generation in progress',
+            'Please wait for your current generation to finish before starting another.',
+          );
+          return;
+        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Generation failed', err.message || 'Network error');
+      }
+    })();
+
+    return tempId;
+  },
+
+  startTemplateGeneration: (body, meta) => {
+    const tempId = `temp_${Date.now()}`;
+    const job: GalleryJob = {
+      id: tempId,
+      prompt: meta.prompt,
+      model: meta.model,
+      // Approximate; V2 clips land at whatever the dispatcher returns.
+      // Used today only for the in-flight cost projection.
+      duration: 10,
+      costAtSubmit: meta.cost,
+      status: 'generating',
+      statusMsg: 'Submitting...',
+      videoUrl: null,
+      error: null,
+      createdAt: Date.now(),
+      saved: false,
+    };
+
+    set((s) => ({ jobs: [job, ...s.jobs] }));
+
+    const ac = new AbortController();
+    abortControllers.set(tempId, ac);
+
+    (async () => {
+      try {
+        const { job_id } = await apiPost<{ job_id: string }>(
+          '/api/generate/template-video',
+          body,
+        );
+
+        abortControllers.set(job_id, ac);
+        abortControllers.delete(tempId);
+        set((s) => {
+          const jobs = s.jobs.map((j) => (j.id === tempId ? { ...j, id: job_id } : j));
+          persist(jobs);
+          return {
+            jobs,
+            selectedJobId: s.selectedJobId === tempId ? job_id : s.selectedJobId,
+          };
+        });
+
+        runPoll(job_id, meta.prompt, ac, { tempId, refreshAuth: true });
+      } catch (err: any) {
+        if (err?.message === 'Aborted') return;
+        set((s) => {
+          const jobs = s.jobs.filter((j) => j.id !== tempId);
+          persist(jobs);
+          return { jobs, selectedJobId: s.selectedJobId === tempId ? null : s.selectedJobId };
+        });
+        abortControllers.delete(tempId);
+        if (!hasGenerating(get().jobs)) {
+          deactivateKeepAwake(KEEP_AWAKE_TAG);
+        }
+        if (err?.status === 402) {
+          const auth = useAuthStore.getState();
+          auth.refreshCredits();
+          auth.openPaywall();
+          return;
+        }
         if (err?.status === 429) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           Alert.alert(
