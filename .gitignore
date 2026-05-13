@@ -1,3 +1,7 @@
+# Dev-only credit grant tool (writes to live Firestore credit ledger).
+# Never commit — keep local-only to limit blast radius.
+scripts/dev_grant_credits.py
+
 # Python
 __pycache__/
 *.py[cod]
