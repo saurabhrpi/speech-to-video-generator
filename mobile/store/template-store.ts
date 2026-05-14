@@ -99,6 +99,14 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
   },
 }));
 
+// Convenience selector: look up one template by id. Returns undefined when
+// the store hasn't hydrated yet OR the templateId refers to a deleted/draft
+// template — callers should fall back to a generic card.
+export function findTemplateById(templates: Template[], id: string | undefined): Template | undefined {
+  if (!id) return undefined;
+  return templates.find((t) => t.id === id);
+}
+
 // Convenience selector: group templates by category in stable insertion order.
 export function groupByCategory(templates: Template[]): Array<{ category: string; items: Template[] }> {
   const map = new Map<string, Template[]>();

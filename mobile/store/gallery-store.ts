@@ -29,6 +29,10 @@ export interface GalleryJob {
   // via expo-video-thumbnails right after completion. Optional/back-compat:
   // pre-thumbnail jobs render the play-icon fallback in gallery.tsx.
   thumbnailUri?: string;
+  // V2 template-video jobs only. Lets gallery.tsx render a template-aware card
+  // (title overlay, named generating copy) by looking up the template via
+  // useTemplateStore. Undefined for V1 S2V jobs — they keep the V1 card.
+  templateId?: string;
   error: string | null;
   createdAt: number;
   saved: boolean;
@@ -301,6 +305,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       status: 'generating',
       statusMsg: 'Submitting...',
       videoUrl: null,
+      templateId: body.template_id,
       error: null,
       createdAt: Date.now(),
       saved: false,

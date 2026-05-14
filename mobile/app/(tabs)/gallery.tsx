@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useGalleryStore, type GalleryJob } from '@/store/gallery-store';
+import { useTemplateStore, findTemplateById } from '@/store/template-store';
 import { Colors } from '@/lib/design-tokens';
 
 const CARD_GAP = 12;
@@ -25,10 +26,20 @@ export default function GalleryScreen() {
 
   const jobs = useGalleryStore((s) => s.jobs);
   const clearThumbnail = useGalleryStore((s) => s.clearThumbnail);
+  // Subscribed for V2 card variant — undefined templates fall through to V1 styling,
+  // so an unhydrated store doesn't break rendering.
+  const templates = useTemplateStore((s) => s.templates);
 
   const renderItem = useCallback(({ item }: { item: GalleryJob }) => {
+    const template = findTemplateById(templates, item.templateId);
+
     if (item.status === 'generating' || item.status === 'paused') {
       const paused = item.status === 'paused';
+      const inflightCopy = paused
+        ? 'Paused'
+        : template
+          ? `Generating ${template.title}…`
+          : 'Generating Video';
       return (
         <View
           style={{
@@ -50,9 +61,9 @@ export default function GalleryScreen() {
           )}
           <Text
             style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 10, textAlign: 'center' }}
-            numberOfLines={1}
+            numberOfLines={2}
           >
-            {paused ? 'Paused' : 'Generating Video'}
+            {inflightCopy}
           </Text>
         </View>
       );
@@ -85,10 +96,34 @@ export default function GalleryScreen() {
               }}
             />
           )}
+          {/* V2 template title chip — only on template-video clips. Semi-opaque
+              backing ensures legibility regardless of thumbnail content. */}
+          {template && (
+            <View
+              style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                right: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}
+              >
+                {template.title}
+              </Text>
+            </View>
+          )}
         </View>
       </Pressable>
     );
-  }, [cardWidth, cardHeight, router, clearThumbnail]);
+  }, [cardWidth, cardHeight, router, clearThumbnail, templates]);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
