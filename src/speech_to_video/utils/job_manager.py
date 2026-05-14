@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +10,32 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
 _MAX_JOBS = 50
 _JOB_TTL = 3600
+
+_INFLIGHT_STATUSES = {"queued", "running"}
+
+
+def inflight_jobs() -> List[Dict[str, Any]]:
+    """Return lightweight summaries of jobs that would be orphaned by a
+    container restart (status in {queued, running}). Used by the AIV-78
+    observability logs to measure V2 orphan rate without persisting state.
+    Order: oldest first, for grep stability."""
+    now = time.time()
+    with _lock:
+        items = []
+        for job_id, j in _jobs.items():
+            if j.get("status") not in _INFLIGHT_STATUSES:
+                continue
+            items.append({
+                "job_id": job_id,
+                "uid": j.get("uid"),
+                "status": j.get("status"),
+                "phase": j.get("phase"),
+                "credit_cost": j.get("credit_cost"),
+                "is_anonymous": j.get("is_anonymous"),
+                "age_s": int(now - (j.get("created_at") or now)),
+            })
+        items.sort(key=lambda x: x["age_s"], reverse=True)
+        return items
 
 
 def _gc_stale_locked(now: float) -> None:

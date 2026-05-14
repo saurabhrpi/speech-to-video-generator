@@ -688,6 +688,14 @@ def get_job_status(job_id: str, user: Dict = Depends(verify_firebase_token)):
 
     job = get_job(job_id)
     if not job:
+        # AIV-78: user-side observation of an orphaned job (likely from a
+        # container restart between submit and poll). Grep `JOB_POLL_MISS`
+        # in prod logs to measure orphan rate before deciding on full
+        # Firestore-backed durability.
+        logger.warning(
+            "JOB_POLL_MISS job_id=%s uid=%s anon=%s",
+            job_id, user.get("uid"), user.get("is_anonymous"),
+        )
         raise HTTPException(status_code=404, detail="Job not found")
 
     _maybe_consume_job_credits(job, job_id)
@@ -987,6 +995,37 @@ def _maybe_run_startup_diagnostic():
             logger.exception("[DEBUG time-image-edit] startup diagnostic crashed: %s", e)
     logger.info("[DEBUG time-image-edit] RUN_STARTUP_DIAGNOSTIC=1 — spawning background diagnostic thread")
     threading.Thread(target=_runner, daemon=True, name="startup-diagnostic").start()
+
+
+# --- AIV-78 observability: measure orphan rate without persisting state ---
+@app.on_event("startup")
+def _log_job_manager_startup():
+    """Fresh-container marker. Pair with JOB_ORPHAN_SNAPSHOT and JOB_POLL_MISS
+    to triangulate post-restart orphans in Replit logs."""
+    logger.info("JOB_MANAGER_STARTUP pid=%s time=%s", os.getpid(), int(time.time()))
+
+
+@app.on_event("shutdown")
+def _log_job_orphan_snapshot():
+    """List in-flight jobs at the moment uvicorn begins shutdown. Hard kills
+    (SIGKILL from Replit) won't fire this; that case is caught by the
+    next-startup JOB_MANAGER_STARTUP log + subsequent JOB_POLL_MISS lines."""
+    try:
+        from ..utils.job_manager import inflight_jobs
+        items = inflight_jobs()
+        if not items:
+            logger.info("JOB_ORPHAN_SNAPSHOT count=0")
+            return
+        # One line per job — grep-friendly, and each line stays readable.
+        logger.warning("JOB_ORPHAN_SNAPSHOT count=%d", len(items))
+        for it in items:
+            logger.warning(
+                "JOB_ORPHAN job_id=%s uid=%s status=%s phase=%s cost=%s anon=%s age_s=%s",
+                it["job_id"], it["uid"], it["status"], it["phase"],
+                it["credit_cost"], it["is_anonymous"], it["age_s"],
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("JOB_ORPHAN_SNAPSHOT failed: %s", e)
 
 
 # --- Speech to Video (MVP) ---
