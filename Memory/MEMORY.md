@@ -103,3 +103,4 @@
 - [R2 tokens are bucket-scoped](reference_r2_tokens_bucket_scoped.md) -- Default R2 API token scope is single-bucket; adding a new bucket → 403 on presign even with a valid token. Edit token to expand scope (or pick "all buckets in this account").
 - [Default to --dry-run when verifying](feedback_default_dry_run_when_verifying.md) -- Testing a CLI behavior change? Use dry-run unless the change is specifically about the real-spend path. Real mode = real money.
 - [AIV-78 orphan-rate greps](reference_aiv78_orphan_rate_greps.md) -- JOB_MANAGER_STARTUP / JOB_ORPHAN / JOB_POLL_MISS — how to measure V2 job orphan rate from Replit prod logs, and the >1% escalation rule.
+- [Verify pain still exists before preventative fix](feedback_verify_pain_still_exists.md) -- "S63 hurt 3 times" is not a reason to build defenses in S64 if the cause is already resolved. Check current state first.
