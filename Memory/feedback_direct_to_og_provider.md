@@ -12,6 +12,19 @@ User strongly prefers direct API access to the original model provider (Kling di
 2. **Reliability of service.** Wrappers share rate limits, shared infrastructure, and a single point of failure across all their customers. OG providers give us our own quota lane and a more direct support escalation path. Past V1 incidents with AIMLAPI (intermittent timeouts, opaque error responses, no SLA) shaped this view.
 3. **IP indemnity / license clarity.** You contract with the wrapper, not the model maker. For a consumer-facing V2 product where outputs may include recognizable people, scenes, or styles, enterprise IP indemnification (Vertex's Generated Output Indemnity, Kling's enterprise terms) is what stops a takedown / legal claim from landing on us.
 
+   **Concrete risk scenarios indemnity covers:**
+   - **Output reproduces copyrighted material.** Image-gen models occasionally regurgitate training data — a Disney character, a Pixar style, a Banksy. Rights-holder sues the *app that generated it*, not just the user.
+   - **Training-data class-action spillover.** Active lawsuits against Stability/OpenAI/Midjourney from artists and Getty. If a court rules model output is derivative of training data, every past gen becomes retroactively exposed. Indemnity shifts that to Google.
+   - **Style/character mimicry.** "In the style of [living artist]" or templates that look too close to a copyrighted scene/aesthetic. Style and likeness claims are increasingly litigated.
+   - **DMCA / App Store takedown.** Rights-holder files DMCA → App Store can pull us within 24h. Indemnity doesn't prevent the takedown but gives legal teeth to push back instead of capitulating.
+
+   **What indemnity does NOT cover (risk doesn't disappear entirely):**
+   - User uploads someone else's selfie → publicity/privacy claim against us. Solved by consent checkbox + ToS, not by Google.
+   - User violates ToS (CSAM, non-consensual deepfakes of real people) — indemnity voids.
+   - Outputs we modify downstream past Google's response — depending on contract wording, edits may break coverage.
+
+   Realistic blast radius: low per-gen probability, but single bad output × viral distribution × litigious rights-holder = existential for solo-founder app. Indemnity is cheap insurance, bundled into the Vertex SKU we're already paying for. Contract text: `cloud.google.com/terms/generative-ai-indemnified-services`.
+
 Plus secondary factors: latency (extra hop), opacity (less control over auth / retry / features), and feature lag (wrappers expose a subset of the OG provider's capabilities, often months behind).
 
 **How to apply:**
