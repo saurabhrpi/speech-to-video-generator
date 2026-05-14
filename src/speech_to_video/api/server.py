@@ -809,6 +809,78 @@ def create_fake_job():
     return JSONResponse({"job_id": job_id})
 
 
+# AIV-80: long-thread durability harness.
+#
+# Acceptance: submit a 7-8min job on Replit prod and verify the worker thread
+# survives + poll calls keep returning 200. Today Pipeline B can't be run end-
+# to-end (no real scene-image assets — gated on AIV-84 #1), so this harness
+# exercises the SAME job_manager.start_job / update_job / get_job code path
+# at zero API spend by sleeping + logging every 30s for N seconds.
+#
+# Gated by ENABLE_LONG_JOB_TEST=1 (Replit Deployment Secrets) to keep the
+# endpoint dormant in normal prod. No auth — env-gated.
+#
+# Replit prod procedure:
+#   1. Set ENABLE_LONG_JOB_TEST=1 in Replit Deployment Secrets; redeploy.
+#   2. JOB=$(curl -sX POST 'https://speech-2-video.ai/api/debug/long-job?duration_s=480' | jq -r .job_id)
+#   3. while :; do curl -s "https://speech-2-video.ai/api/debug/long-job/$JOB" | jq -c .; sleep 30; done
+#   4. After ~8 min, expect status=completed with no intermediate 502/504/timeouts.
+#   5. Unset ENABLE_LONG_JOB_TEST + redeploy when done.
+@app.post("/api/debug/long-job")
+def debug_long_job_start(duration_s: int = 480):
+    if os.getenv("ENABLE_LONG_JOB_TEST") != "1":
+        raise HTTPException(status_code=404, detail="disabled")
+    if not (30 <= duration_s <= 900):
+        raise HTTPException(status_code=400, detail="duration_s must be 30..900")
+    from ..utils.job_manager import create_job, start_job, update_job
+
+    job_id = create_job()
+    tick_s = 10 if duration_s <= 120 else 30
+    steps = max(1, duration_s // tick_s)
+
+    def _aiv80_worker():
+        for i in range(steps):
+            time.sleep(tick_s)
+            elapsed = (i + 1) * tick_s
+            update_job(
+                job_id,
+                phase="sleeping",
+                step=i + 1,
+                total_steps=steps,
+                message=f"AIV-80 fake worker {elapsed}s / {duration_s}s",
+            )
+            logger.info("AIV-80 long-job %s tick step=%d/%d", job_id, i + 1, steps)
+        return {"success": True, "duration_s": duration_s, "video_url": "debug://aiv-80"}
+
+    start_job(job_id, _aiv80_worker)
+    logger.info("AIV-80 long-job %s started duration_s=%d tick_s=%d", job_id, duration_s, tick_s)
+    return {
+        "job_id": job_id,
+        "poll_url": f"/api/debug/long-job/{job_id}",
+        "duration_s": duration_s,
+        "tick_s": tick_s,
+    }
+
+
+@app.get("/api/debug/long-job/{job_id}")
+def debug_long_job_poll(job_id: str):
+    if os.getenv("ENABLE_LONG_JOB_TEST") != "1":
+        raise HTTPException(status_code=404, detail="disabled")
+    from ..utils.job_manager import get_job
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {
+        "status": job.get("status"),
+        "phase": job.get("phase"),
+        "step": job.get("step"),
+        "total_steps": job.get("total_steps"),
+        "message": job.get("message"),
+        "result": job.get("result"),
+    }
+
+
 def _run_image_edit_diagnostic() -> Dict[str, Any]:
     """Time Nano Banana Pro T2I and Edit calls end-to-end from inside the deployed container."""
     import time
