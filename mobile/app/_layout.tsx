@@ -15,7 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Colors } from '@/lib/design-tokens';
-import { configurePurchases } from '@/lib/purchases';
+import { configurePurchases, refreshPurchasesState } from '@/lib/purchases';
 import { useGalleryStore } from '@/store/gallery-store';
 import { useAuthStore } from '@/store/auth-store';
 import NetworkBanner from '@/components/NetworkBanner';
@@ -74,6 +74,9 @@ export default function RootLayout() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         useGalleryStore.getState().resumePausedJobs();
+        // AIV-51: re-poke RC so the CustomerInfo listener catches up any
+        // transactions ingested while we were backgrounded.
+        refreshPurchasesState();
       }
     });
     return () => sub.remove();
