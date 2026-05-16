@@ -134,20 +134,20 @@ Pipeline-class column above is a working hypothesis from a quick read of names �
 
 ## §2a. V2 launch subset (S59 — locked)
 
-**Choice:** "Dances + Scenes (~25)" — 2 pipelines (motion-transfer + scene-insertion), 5 categories, ~25 templates. Proves both the wedge and the home-screen carousel UX across pipeline types.
+**Choice:** "Dances + Scenes" — 2 pipelines (motion-transfer + scene-insertion), 5 categories, **24 templates** (was ~25 pre-S65; AIV-23 dup closed). Proves both the wedge and the home-screen carousel UX across pipeline types.
 
 | Category | Pipeline | Take |
 |---|---|---|
-| (a) Viral Dances | Motion-transfer (Outcome 2, Kling Motion Control) | All 9 |
-| (f) Trends | Scene-insertion (Outcome 1, Nano Banana Edit → I2V) | 5 of 18 (specific picks TBD) |
-| (l) Birthday Photoshoot | Scene-insertion | 4 of 6 (specific picks TBD) |
-| (i) Awards Night + (k) Winter Olympics | Scene-insertion | 4 combined (2+2, specific picks TBD) |
-| (r) Flying | Scene-insertion | 3 of 8 (specific picks TBD) |
-| **Total** | **2 pipelines** | **~25** |
+| (a) Viral Dances | Motion-transfer (Outcome 2, Kling Motion Control) | All 8 (AIV-23 "Baby dance" closed S65 as dup of AIV-19) |
+| (f) Trends | Scene-insertion (Outcome 1, Nano Banana Edit → I2V) | 5 of 18 (locked S60 — see AIV-26) |
+| (l) Birthday Photoshoot | Scene-insertion | 4 of 6 (locked S60 — see AIV-27) |
+| (i) Awards Night + (k) Winter Sports | Scene-insertion | 4 combined (2+2, locked S60 — see AIV-28; "Winter Olympics" renamed to "Winter Sports" to avoid IOC trademark) |
+| (r) Flying | Scene-insertion | 3 of 8 (locked S60 — see AIV-29) |
+| **Total** | **2 pipelines** | **24** |
 
 Other categories (b, c, d, e, g, h, m, n, o, q, s, t, u, v, w, x) shift to V2.1+ release. (j, p) deferred per §3a.
 
-Specific template picks within each pool: still open — see §3 for the per-template work that gates this.
+Specific template picks within each pool: locked S60 (see AIV-26/27/28/29). Per-template work tracked under Track 2 — Asset generation milestone (AIV-17..25 + AIV-60..75).
 
 ---
 
@@ -184,3 +184,4 @@ Many template names here reference real, named TikTok / IG trends ("Soda Pop", "
 ## §5. Source / change log
 
 - **2026-05-07 (S59):** Initial capture from user message. List as supplied; pipeline-class column is S59 working hypothesis.
+- **2026-05-15 (S65):** AIV-23 "Baby dance" closed as duplicate of AIV-19 "Baby Dance" (catalog §1a typo — user originally meant "Soda Pop Baby Dance" which already lives in §1c TikTok Dances, deferred to V2.1+). Launch subset count §2a: ~25 → **24**. (a) Viral Dances: 9 → 8.

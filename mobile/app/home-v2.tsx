@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   Pressable,
   ScrollView,
   ActivityIndicator,
@@ -11,8 +10,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
+import { Video, ResizeMode } from 'expo-av';
 import { useTemplateStore, groupByCategory, type Template } from '@/store/template-store';
 import { Colors } from '@/lib/design-tokens';
+
+function isUsableMediaUrl(url: string | null | undefined): url is string {
+  return !!url && /^https?:\/\//.test(url) && !url.includes('placeholder.example');
+}
 
 // AIV-30 carousel home — SHELL ONLY (S63). Pipeline Review wiring + real
 // thumbnails + hero curation land later (AIV-31 + Track 2 assets).
@@ -32,7 +36,6 @@ export default function HomeV2Screen() {
   const hydrated = useTemplateStore((s) => s.hydrated);
   const hydrate = useTemplateStore((s) => s.hydrate);
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
-
   useEffect(() => {
     // Hydrate first so cold-start shows cached templates immediately, then
     // re-fetch in the background. fetch sends If-None-Match → 304 keeps the
@@ -123,7 +126,7 @@ function CategoryRow({ category, items }: { category: string; items: Template[] 
 
 function TemplateTile({ template }: { template: Template }) {
   const router = useRouter();
-  const thumb = template.assets?.thumbnail_url;
+  const driving = template.assets?.driving_video_url;
 
   const onPress = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,8 +135,15 @@ function TemplateTile({ template }: { template: Template }) {
 
   return (
     <Pressable style={styles.tile} onPress={onPress}>
-      {thumb ? (
-        <Image source={{ uri: thumb }} style={styles.tileThumb} />
+      {isUsableMediaUrl(driving) ? (
+        <Video
+          source={{ uri: driving }}
+          style={styles.tileThumb}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          isMuted
+          shouldPlay
+        />
       ) : (
         <View style={[styles.tileThumb, styles.tileThumbPlaceholder]}>
           <Ionicons name="image-outline" size={28} color={Colors.textSecondary} />

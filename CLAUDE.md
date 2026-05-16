@@ -259,8 +259,9 @@ User Input (room_type, style, features)
 - GET polls retry on 502/503/504 via urllib3; POST submit intentionally no-retry (avoids double-charge / duplicate moderation rejection).
 - Output URL expires 30 days after generation — caller must rehost for longer retention.
 
-**VertexAIClient** (`src/speech_to_video/clients/vertex_ai_client.py`) — V2 Pipeline B
-- Vertex AI access for Nano Banana / Gemini-image (T2I + Edit). Lazy `genai.Client(vertexai=True, project, location, credentials)`. Auth precedence: `VERTEX_SERVICE_ACCOUNT_JSON` → `VERTEX_SERVICE_ACCOUNT_PATH`. Default model `gemini-2.5-flash-image` (GA Nano Banana, non-Pro) per `VERTEX_NB_MODEL`; flip to `gemini-3-pro-image-preview` (Nano Banana Pro) one-line via env once allowlist clears.
+**Nano Banana Pro (Pipeline B Edit)** — `gemini-3-pro-image-preview` via Google AI Studio direct (`genai.Client(api_key=NBP_API_Key)`). Locked S65; smoke `scripts/test_aistudio_nano_banana.py`. `vertex_ai_client.py` exists but is **not** the load-bearing path — to be migrated to a thin `gemini_client.py`.
+
+**VertexAIClient** (`src/speech_to_video/clients/vertex_ai_client.py`) — original Vertex AI path for Nano Banana (T2I + Edit). Lazy `genai.Client(vertexai=True, project, location, credentials)`. Auth: `VERTEX_SERVICE_ACCOUNT_JSON` → `VERTEX_SERVICE_ACCOUNT_PATH`. Default model `VERTEX_NB_MODEL`. Retained until migration above lands.
 - `generate_image_nano_banana(prompt, output_dir="/tmp")`: T2I. Returns `{success, local_path, model, mime_type}`.
 - `edit_image_nano_banana(prompt, image_paths, output_dir="/tmp")`: Edit (selfie + scene → composite). Same return shape. Image inputs go inline as `Part.from_bytes`.
 
@@ -367,6 +368,8 @@ All configuration via environment variables (`.env` file). Settings loaded via `
 **Models — Paused (Timelapse-Phase-2 + Ads):** `I2V_MODEL` (minimax/hailuo-02), `KLING_I2V_MODEL` (klingai/video-v3-pro-image-to-video), `SEEDANCE_I2V_MODEL`, `HAILUO_I2V_MODEL`, `AD_MODEL` (openai/sora-2-t2v), T2I: `google/nano-banana-pro`, I2I: `google/nano-banana-pro-edit`
 
 **Auth:** `FIREBASE_SERVICE_ACCOUNT_PATH` (path to Firebase admin SDK JSON — supports `~` expansion). Anon free tier is now controlled by `_ANON_STARTER_CREDITS = 10` constant in `api/server.py` (not env-driven). Legacy `UNAUTH_GEN_LIMIT` env var and Google OAuth vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, `POST_LOGIN_REDIRECT`, `SESSION_SECRET`) are removed.
+
+**Nano Banana Pro (AI Studio direct):** `NBP_API_Key` — Google AI Studio paid-tier key for `gemini-3-pro-image-preview` (Pipeline B Edit).
 
 **Storage:** `CLIPS_NAMESPACE`, `CLIPS_DIR` (./clips/)
 

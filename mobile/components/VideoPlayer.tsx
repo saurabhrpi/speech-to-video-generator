@@ -1,7 +1,9 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { View, Text, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, Pressable, Dimensions } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { resolveVideoUrl } from '@/lib/api-client';
+
+const PREVIEW_HEIGHT = Dimensions.get('window').height * 0.42;
 
 interface VideoPlayerProps {
   url: string;
@@ -98,9 +100,9 @@ export default function VideoPlayer({ url, className }: VideoPlayerProps) {
           <Video
             ref={videoRef}
             source={{ uri: resolvedUrl }}
-            resizeMode={ResizeMode.CONTAIN}
+            resizeMode={ResizeMode.COVER}
             isLooping={false}
-            style={{ width: '100%', aspectRatio: 16 / 9 }}
+            style={{ width: '100%', height: PREVIEW_HEIGHT }}
             onLoad={async () => {
               if (loadTimer.current) clearTimeout(loadTimer.current);
               setLoading(false);

@@ -77,3 +77,6 @@ AUTH_MIGRATION.md
 LAUNCH_CHECKLIST.md
 Memory/reference_simulator_udid.md
 .claude/scheduled_tasks.lock
+
+# Local stage dir for upload_template_assets.py (large binaries; source of truth = R2 + Firestore)
+assets/templates/

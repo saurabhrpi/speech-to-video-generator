@@ -947,7 +947,7 @@ class VideoService:
             image_url=selfie_url,
             video_url=driving_video,
             character_orientation="image",  # Outcome 2: motion-onto-character
-            prompt=(overrides or {}).get("prompt"),
+            prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
         )
         if not result.get("success"):
             return {

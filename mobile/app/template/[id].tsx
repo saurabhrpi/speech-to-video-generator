@@ -8,7 +8,10 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  Dimensions,
 } from 'react-native';
+
+const PREVIEW_HEIGHT = Dimensions.get('window').height * 0.42;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -72,10 +75,7 @@ export default function TemplateReviewScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.topBar}>
-          <BackButton onPress={() => router.back()} />
-          <View style={{ width: 32 }} />
-        </View>
+        <CloseButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/home-v2' as any))} />
         <View style={styles.center}>
           <ActivityIndicator color={Colors.textPrimary} />
           <Text style={styles.dim}>Loading template…</Text>
@@ -158,14 +158,15 @@ export default function TemplateReviewScreen() {
   const scene = template.assets?.scene_image_url;
   const isPipelineA = template.pipeline_class === 'motion-transfer';
 
+  const handleClose = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/home-v2' as any);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.topBar}>
-        <BackButton onPress={() => router.back()} />
-        <Text style={styles.title} numberOfLines={1}>{template.title}</Text>
-        <View style={{ width: 32 }} />
-      </View>
+      <CloseButton onPress={handleClose} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.previewWrap}>
@@ -188,69 +189,71 @@ export default function TemplateReviewScreen() {
           )}
         </View>
 
-        {!!template.description && (
-          <Text style={styles.description}>{template.description}</Text>
-        )}
+        <View style={styles.formContent}>
+          {!!template.description && (
+            <Text style={styles.description}>{template.description}</Text>
+          )}
 
-        <SectionTitle>Add your photo</SectionTitle>
-        <View style={styles.selfieRow}>
-          {selfieUri ? (
-            <>
-              <Image source={{ uri: selfieUri }} style={styles.selfieThumb} />
-              <Pressable onPress={handlePickSelfie} style={styles.changeBtn}>
-                <Text style={styles.changeLabel}>Change</Text>
+          <SectionTitle>Add your photo</SectionTitle>
+          <View style={styles.selfieRow}>
+            {selfieUri ? (
+              <>
+                <Image source={{ uri: selfieUri }} style={styles.selfieThumb} />
+                <Pressable onPress={handlePickSelfie} style={styles.changeBtn}>
+                  <Text style={styles.changeLabel}>Change</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable onPress={handlePickSelfie} style={styles.pickerBox}>
+                <Ionicons name="image-outline" size={28} color={Colors.textSecondary} />
+                <Text style={styles.pickerLabel}>Pick a photo</Text>
               </Pressable>
-            </>
-          ) : (
-            <Pressable onPress={handlePickSelfie} style={styles.pickerBox}>
-              <Ionicons name="image-outline" size={28} color={Colors.textSecondary} />
-              <Text style={styles.pickerLabel}>Pick a photo</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <Pressable
-          onPress={() => setConsent((c) => !c)}
-          style={styles.consentRow}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: consent }}
-        >
-          <View style={[styles.checkbox, consent && styles.checkboxOn]}>
-            {consent && <Ionicons name="checkmark" size={16} color={Colors.background} />}
+            )}
           </View>
-          <Text style={styles.consentText}>
-            I have rights to use this photo and agree to use it for AI-generated video.
-          </Text>
-        </Pressable>
 
-        <View style={styles.costLine}>
-          <Text style={styles.costLabel}>Cost</Text>
-          <Text style={styles.costValue}>{cost} credits</Text>
-        </View>
-
-        <Pressable
-          onPress={handleGenerate}
-          disabled={!canSubmit}
-          style={[styles.generateBtn, { opacity: canSubmit ? 1 : 0.4 }]}
-          accessibilityLabel="Generate video"
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.generateLabel}>
-              {blockedByInFlight ? 'Generation in progress' : 'Generate Video'}
+          <Pressable
+            onPress={() => setConsent((c) => !c)}
+            style={styles.consentRow}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: consent }}
+          >
+            <View style={[styles.checkbox, consent && styles.checkboxOn]}>
+              {consent && <Ionicons name="checkmark" size={16} color={Colors.background} />}
+            </View>
+            <Text style={styles.consentText}>
+              I have rights to use this photo and agree to use it for AI-generated video.
             </Text>
-          )}
-        </Pressable>
+          </Pressable>
+
+          <View style={styles.costLine}>
+            <Text style={styles.costLabel}>Cost</Text>
+            <Text style={styles.costValue}>{cost} credits</Text>
+          </View>
+
+          <Pressable
+            onPress={handleGenerate}
+            disabled={!canSubmit}
+            style={[styles.generateBtn, { opacity: canSubmit ? 1 : 0.4 }]}
+            accessibilityLabel="Generate video"
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.generateLabel}>
+                {blockedByInFlight ? 'Generation in progress' : 'Generate Video'}
+              </Text>
+            )}
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function BackButton({ onPress }: { onPress: () => void }) {
+function CloseButton({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} hitSlop={12} accessibilityLabel="Back">
-      <Ionicons name="chevron-back" size={28} color={Colors.textPrimary} />
+    <Pressable onPress={onPress} hitSlop={12} style={styles.closeOverlay} accessibilityLabel="Close">
+      <Ionicons name="close" size={20} color="#fff" />
     </Pressable>
   );
 }
@@ -261,29 +264,27 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  title: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  scroll: { paddingHorizontal: 16, paddingBottom: 32 },
+  scroll: { paddingBottom: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   dim: { color: Colors.textSecondary, fontSize: 13 },
-  previewWrap: { marginTop: 4 },
+  previewWrap: { marginHorizontal: 0 },
+  formContent: { paddingHorizontal: 16 },
   preview: {
     width: '100%',
-    aspectRatio: 9 / 16,
-    borderRadius: 12,
+    height: PREVIEW_HEIGHT,
     backgroundColor: Colors.card,
+  },
+  closeOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   previewPlaceholder: {
     alignItems: 'center',
