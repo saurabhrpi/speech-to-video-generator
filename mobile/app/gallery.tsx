@@ -90,35 +90,11 @@ export default function GalleryScreen() {
               source={{ uri: item.thumbnailUri }}
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
               resizeMode="cover"
-              onError={() => {
-                console.warn('[Gallery] thumbnail load failed, clearing:', item.thumbnailUri);
+              onError={(e) => {
+                console.warn('[Gallery] thumbnail load failed:', item.thumbnailUri, e?.nativeEvent);
                 clearThumbnail(item.id);
               }}
             />
-          )}
-          {/* V2 template title chip — only on template-video clips. Semi-opaque
-              backing ensures legibility regardless of thumbnail content. */}
-          {template && (
-            <View
-              style={{
-                position: 'absolute',
-                top: 8,
-                left: 8,
-                right: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 6,
-                backgroundColor: 'rgba(0,0,0,0.55)',
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}
-              >
-                {template.title}
-              </Text>
-            </View>
           )}
         </View>
       </Pressable>

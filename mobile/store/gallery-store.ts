@@ -141,11 +141,16 @@ function runPoll(
           return { jobs };
         });
         // Fire-and-forget thumbnail generation. Hailuo URLs have a ~1h TTL, so
-        // the only window this lands is right after completion — perfect.
-        generateThumbnail(resolvedUrl).then((uri) => {
-          if (!uri) return;
+        // the only window this lands is right after completion. If gen fails
+        // here (S66 saw silent failures at this stage — cause unconfirmed,
+        // likely a URL-not-quite-ready race), hydrate()'s backfill loop
+        // catches it on the next app reload.
+        generateThumbnail(resolvedUrl).then((res) => {
+          if (!res.uri) return;
           useGalleryStore.setState((s) => {
-            const jobs = s.jobs.map((j) => (j.id === jobId ? { ...j, thumbnailUri: uri } : j));
+            const jobs = s.jobs.map((j) =>
+              j.id === jobId ? { ...j, thumbnailUri: res.uri ?? undefined } : j,
+            );
             persist(jobs);
             return { jobs };
           });
@@ -460,6 +465,28 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       const ac = new AbortController();
       abortControllers.set(job.id, ac);
       runPoll(job.id, job.prompt, ac);
+    }
+
+    // Thumbnail backfill (S66): the live thumbnail-gen call inside runPoll
+    // silently failed on a chunk of S66 V2 clips — cause unconfirmed (likely
+    // URL-not-quite-ready race the moment Kling returns SUCCEED). On reload,
+    // retry gen for any completed job missing a thumbnail. Fire-and-forget.
+    // URL TTL caveat: very old clips will fail here too (Hailuo ~1h, Kling
+    // ~30d). That's a no-op — the card just keeps rendering without a thumb.
+    const needsBackfill = valid.filter(
+      (j) => j.status === 'completed' && !!j.videoUrl && !j.thumbnailUri,
+    );
+    for (const job of needsBackfill) {
+      generateThumbnail(job.videoUrl as string).then((res) => {
+        if (!res.uri) return;
+        useGalleryStore.setState((s) => {
+          const jobs = s.jobs.map((j) =>
+            j.id === job.id ? { ...j, thumbnailUri: res.uri ?? undefined } : j,
+          );
+          persist(jobs);
+          return { jobs };
+        });
+      });
     }
   },
 
