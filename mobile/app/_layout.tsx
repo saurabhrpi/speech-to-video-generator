@@ -38,7 +38,7 @@ const WarmDarkTheme: Theme = {
 export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: 'index',
 };
 
 SplashScreen.preventAutoHideAsync();
@@ -104,9 +104,17 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <NetworkBanner />
         <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="gallery"
+            options={{ title: 'Gallery', headerBackButtonDisplayMode: 'minimal' }}
+          />
           <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
-          <Stack.Screen name="clip/[id]" options={{ title: 'S2V', headerBackButtonDisplayMode: 'minimal' }} />
+          <Stack.Screen name="clip/[id]" options={{ title: 'AIVO', headerBackButtonDisplayMode: 'minimal' }} />
+          <Stack.Screen
+            name="create-video"
+            options={{ title: 'Create Video', headerBackButtonDisplayMode: 'minimal' }}
+          />
         </Stack>
         <Paywall />
       </ThemeProvider>

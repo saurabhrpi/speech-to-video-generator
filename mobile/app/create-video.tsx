@@ -14,6 +14,9 @@ import { Colors } from '@/lib/design-tokens';
 import { creditCostFor } from '@/lib/constants';
 import { hasDataSharingConsent, setDataSharingConsent } from '@/lib/consent';
 
+// S66: V1 Speech-to-Video flow, reached via the FAB on the V2 home (index.tsx).
+// Logic and copy unchanged from V1.
+//
 // V1 ships single model + single duration (Session 52). Picker UIs removed.
 const HAILUO_MODEL_ID = 'minimax/hailuo-2.3';
 const HAILUO_MODEL_KEY = 'hailuo';
@@ -23,7 +26,7 @@ const CLIP_DURATION = 10;
 const CTA_BLUE = '#2563EB';
 const RECORDING_RED = '#B91C1C';
 
-export default function SpeechScreen() {
+export default function CreateVideoScreen() {
   const router = useRouter();
   const { isRecording, metering, startRecording, stopRecording } = useRecording();
   const [promptText, setPromptText] = useState('');
@@ -31,7 +34,6 @@ export default function SpeechScreen() {
   const canAfford = useAuthStore((s) => s.canAfford);
   const openPaywall = useAuthStore((s) => s.openPaywall);
   const costTable = useAuthStore((s) => s.costTable);
-  const creditBalance = useAuthStore((s) => s.creditBalance);
   const startGeneration = useGalleryStore((s) => s.startGeneration);
   const inFlightCost = useGalleryStore((s) =>
     s.jobs
@@ -52,8 +54,6 @@ export default function SpeechScreen() {
 
   // One-time data-sharing consent before any data leaves the device (audio →
   // OpenAI Whisper, prompt → MiniMax). Required by App Store 5.1.1(i)/5.1.2(i).
-  // pendingActionRef stores the user's intended action so we can resume it
-  // after they tap "I understand" in the modal.
   const [consentOpen, setConsentOpen] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
@@ -106,7 +106,7 @@ export default function SpeechScreen() {
       duration: CLIP_DURATION,
       cost: cost ?? 0,
     });
-    router.navigate('/(tabs)/gallery');
+    router.navigate('/gallery');
   }
 
   async function handleStop() {
@@ -165,7 +165,7 @@ export default function SpeechScreen() {
     <ScrollView className="flex-1 bg-background" contentContainerClassName="p-5 pb-20 gap-6">
       {/* Header — voice-first framing */}
       <View className="gap-1">
-        <Text className="text-heading font-body text-foreground">Speech to Video</Text>
+        <Text className="text-heading font-body text-foreground">Create Video</Text>
         <Text className="text-body font-body text-muted-foreground">
           Speak your idea — get a 10-second video.
         </Text>
@@ -256,20 +256,6 @@ export default function SpeechScreen() {
           </Text>
         </Pressable>
       </View>
-
-      {/* Dev-only entry to AIV-30 V2 home shell. Remove when V2 home replaces this screen. */}
-      {__DEV__ && (
-        <Pressable
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onPress={() => router.push('/home-v2' as any)}
-          accessibilityLabel="Preview V2 home"
-          style={{ alignSelf: 'center', paddingVertical: 8 }}
-        >
-          <Text className="text-caption font-body text-muted-foreground">
-            Preview V2 home →
-          </Text>
-        </Pressable>
-      )}
 
       {/* Transcript review modal — fires after voice recording stops */}
       <ConfirmModal

@@ -33,6 +33,15 @@ Document shape:
                                                # core lives in code; per-template
                                                # specifics live here. See
                                                # Memory/feedback_no_overfit_prompts.md.
+      # S66 — V2 home hero carousel inclusion (optional, per-template)
+      "is_hero": bool | None,                  # When True, template renders in the
+                                               # landscape "Top Trends" hero carousel
+                                               # at the top of the V2 home. Per V2
+                                               # plan §Q3: curated recreations of top
+                                               # TikTok/IG trends.
+      "hero_order": int | None,                # Sort key inside the hero carousel
+                                               # (ascending). Ties break on title.
+                                               # Null/missing → sorts last.
       "created_at": server timestamp,
       "updated_at": server timestamp,
     }

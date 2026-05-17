@@ -4,38 +4,40 @@ import {
   Text,
   Pressable,
   ScrollView,
-  ActivityIndicator,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 import { useTemplateStore, groupByCategory, type Template } from '@/store/template-store';
+import { useAuthStore } from '@/store/auth-store';
 import { Colors } from '@/lib/design-tokens';
 
 function isUsableMediaUrl(url: string | null | undefined): url is string {
   return !!url && /^https?:\/\//.test(url) && !url.includes('placeholder.example');
 }
 
-// AIV-30 carousel home — SHELL ONLY (S63). Pipeline Review wiring + real
-// thumbnails + hero curation land later (AIV-31 + Track 2 assets).
-//
-// Plan refs: docs/V2_motion_transfer_plan.md (no tabs, floating Create Video
-// button, profile-icon top-right → gallery). Floating button + profile icon
-// are stubs here; wired once nav structure decisions land.
+// S66: V2 home — root route. V1 Speech-to-Video flow moved to
+// mobile/app/create-video.tsx, reachable via the floating "Create" button.
+// Tabs were removed S66 — gallery is reached via the profile icon overlaid on
+// the hero, settings via the gear icon on /gallery.
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const HERO_H = Math.round(SCREEN_H * 0.4);
 
 const TILE_W = 140;
 const TILE_H = 200;
 
-export default function HomeV2Screen() {
-  const router = useRouter();
+export default function HomeScreen() {
   const templates = useTemplateStore((s) => s.templates);
   const loading = useTemplateStore((s) => s.loading);
   const error = useTemplateStore((s) => s.error);
   const hydrated = useTemplateStore((s) => s.hydrated);
   const hydrate = useTemplateStore((s) => s.hydrate);
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
+  const router = useRouter();
   useEffect(() => {
     // Hydrate first so cold-start shows cached templates immediately, then
     // re-fetch in the background. fetch sends If-None-Match → 304 keeps the
@@ -47,26 +49,15 @@ export default function HomeV2Screen() {
   }, [hydrate, fetchTemplates]);
 
   const grouped = groupByCategory(templates);
+  const heroItems = pickHeroItems(templates);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.topBar}>
-        <Text style={styles.brand}>Speech to Video</Text>
-        <Pressable
-          onPress={() => router.push('/(tabs)/gallery')}
-          hitSlop={12}
-          accessibilityLabel="Open profile"
-        >
-          <Ionicons name="person-circle-outline" size={32} color={Colors.textPrimary} />
-        </Pressable>
-      </View>
-
+    <View style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        <HeroPlaceholder />
+        <HeroSection items={heroItems} />
 
         {!hydrated || (loading && templates.length === 0) ? (
           <SkeletonRows />
@@ -83,28 +74,101 @@ export default function HomeV2Screen() {
 
       <Pressable
         style={styles.fab}
-        onPress={() => router.push('/(tabs)')}
-        accessibilityLabel="Create with speech to video"
+        onPress={() => router.push('/create-video' as any)}
+        accessibilityLabel="Create a video"
       >
         <Ionicons name="mic" size={24} color={Colors.background} />
         <Text style={styles.fabLabel}>Create</Text>
       </Pressable>
-    </SafeAreaView>
+    </View>
   );
 }
 
-function HeroPlaceholder() {
-  // Hero curation deferred — V2 plan calls for landscape "top trends" carousel.
-  // Placeholder strip keeps the visual hierarchy intact during the shell phase.
+function HeroSection({ items }: { items: Template[] }) {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const creditBalance = useAuthStore((s) => s.creditBalance);
+
   return (
-    <View style={styles.heroWrap}>
-      <Text style={styles.sectionTitle}>Top Trends</Text>
-      <View style={styles.heroTile}>
-        <Text style={styles.heroPlaceholderText}>Hero carousel</Text>
-        <Text style={styles.heroSubText}>(curation pending)</Text>
+    <View style={[styles.heroSection, { height: HERO_H }]}>
+      {items.length > 0 ? (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+        >
+          {items.map((t) => (
+            <HeroCard key={t.id} template={t} onPress={() => router.push(`/template/${t.id}` as any)} />
+          ))}
+        </ScrollView>
+      ) : (
+        <View style={styles.heroPlaceholder}>
+          <Text style={styles.heroPlaceholderTitle}>Top Trends</Text>
+          <Text style={styles.heroPlaceholderSub}>(curation pending)</Text>
+        </View>
+      )}
+
+      {/* Scrim — darkens the top of the hero so the overlay text is legible
+          regardless of the underlying video frame. */}
+      <View
+        pointerEvents="none"
+        style={[styles.heroScrim, { height: insets.top + 56 }]}
+      />
+
+      {/* Overlay row — title (left), credits | profile (right). Positioned
+          inside the safe area so it never hides under the status bar. */}
+      <View style={[styles.heroOverlay, { top: insets.top + 4 }]}>
+        <Text style={styles.brand}>AIVO</Text>
+        <View style={styles.overlayRight}>
+          <Text style={styles.creditsText}>
+            {creditBalance != null ? `${creditBalance} Credits` : '— Credits'}
+          </Text>
+          <Text style={styles.divider}>|</Text>
+          <Pressable
+            onPress={() => router.push('/gallery')}
+            hitSlop={12}
+            accessibilityLabel="Open gallery"
+          >
+            <Ionicons name="person-circle-outline" size={32} color="#fff" />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
+}
+
+function HeroCard({ template, onPress }: { template: Template; onPress: () => void }) {
+  const driving = template.assets?.driving_video_url;
+  return (
+    <Pressable style={styles.heroCard} onPress={onPress}>
+      {isUsableMediaUrl(driving) ? (
+        <Video
+          source={{ uri: driving }}
+          style={styles.heroMedia}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          isMuted
+          shouldPlay
+        />
+      ) : (
+        <View style={[styles.heroMedia, styles.heroMediaPlaceholder]}>
+          <Ionicons name="image-outline" size={36} color={Colors.textSecondary} />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function pickHeroItems(templates: Template[]): Template[] {
+  return templates
+    .filter((t) => t.is_hero === true)
+    .sort((a, b) => {
+      const ao = a.hero_order ?? Number.POSITIVE_INFINITY;
+      const bo = b.hero_order ?? Number.POSITIVE_INFINITY;
+      if (ao !== bo) return ao - bo;
+      return a.title.localeCompare(b.title);
+    });
 }
 
 function CategoryRow({ category, items }: { category: string; items: Template[] }) {
@@ -201,35 +265,71 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 function prettyCategory(c: string): string {
   return c
-    .split(/[_-\s]+/)
+    .split(/[_\-\s]+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  root: { flex: 1, backgroundColor: Colors.background },
+  scroll: { paddingBottom: 120 },
+  // Hero
+  heroSection: {
+    width: SCREEN_W,
+    backgroundColor: '#000',
+    overflow: 'hidden',
   },
-  brand: { color: Colors.textPrimary, fontSize: 20, fontWeight: '600' },
-  scroll: { paddingBottom: 96 },
-  heroWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
-  heroTile: {
-    height: 200,
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  heroCard: {
+    width: SCREEN_W,
+    height: '100%',
+  },
+  heroMedia: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  heroMediaPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroPlaceholderText: { color: Colors.textPrimary, fontSize: 16 },
-  heroSubText: { color: Colors.textSecondary, fontSize: 12, marginTop: 4 },
-  rowWrap: { paddingTop: 8, paddingBottom: 16 },
+  heroPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.card,
+  },
+  heroPlaceholderTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '600' },
+  heroPlaceholderSub: { color: Colors.textSecondary, fontSize: 13, marginTop: 6 },
+  heroScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  heroOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  brand: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  overlayRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  creditsText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  divider: { color: 'rgba(255,255,255,0.55)', fontSize: 16 },
+  // Category rows + tiles (below the hero)
+  rowWrap: { paddingTop: 16, paddingBottom: 16 },
   sectionTitle: {
     color: Colors.textPrimary,
     fontSize: 16,
@@ -297,7 +397,7 @@ const styles = StyleSheet.create({
   retryLabel: { color: Colors.textPrimary, fontSize: 13 },
   fab: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 50,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',

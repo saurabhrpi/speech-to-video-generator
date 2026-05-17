@@ -24,7 +24,7 @@ import { apiPost } from '@/lib/api-client';
 import { Colors } from '@/lib/design-tokens';
 
 // AIV-31 Pipeline Review screen — reached by tapping a template tile on
-// home-v2. Preview + selfie pick + consent + Generate. Uploads to
+// the V2 home (mobile/app/index.tsx). Preview + selfie pick + consent + Generate. Uploads to
 // /api/upload/selfie (AIV-89), dispatches via /api/generate/template-video
 // (AIV-15). Polling reuses gallery-store (AIV-30 shipped startTemplateGeneration).
 //
@@ -50,7 +50,7 @@ export default function TemplateReviewScreen() {
     [templates, id],
   );
 
-  // Deep-link fallback: if we landed here without going through home-v2
+  // Deep-link fallback: if we landed here without going through the home tab
   // (e.g. cold start to a shared link), trigger a fetch so the template
   // becomes available. Cheap — uses the same ETag-cached endpoint.
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function TemplateReviewScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <CloseButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/home-v2' as any))} />
+        <CloseButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/' as any))} />
         <View style={styles.center}>
           <ActivityIndicator color={Colors.textPrimary} />
           <Text style={styles.dim}>Loading template…</Text>
@@ -146,7 +146,7 @@ export default function TemplateReviewScreen() {
 
       // 3) Go to gallery to watch the in-flight job.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      router.replace('/(tabs)/gallery' as any);
+      router.replace('/gallery' as any);
     } catch (err: any) {
       Alert.alert('Upload failed', err?.message ?? 'Could not upload your selfie.');
     } finally {
@@ -160,7 +160,7 @@ export default function TemplateReviewScreen() {
 
   const handleClose = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/home-v2' as any);
+    else router.replace('/' as any);
   };
 
   return (

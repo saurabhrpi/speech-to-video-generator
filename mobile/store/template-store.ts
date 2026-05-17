@@ -22,6 +22,9 @@ export interface Template {
   model: string;
   credit_cost: number;
   prompt_template: string | null;
+  // S66: V2 home hero-carousel inclusion (optional, additive).
+  is_hero?: boolean;
+  hero_order?: number;
   created_at?: string;
   updated_at?: string;
 }

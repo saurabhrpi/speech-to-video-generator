@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useGalleryStore, type GalleryJob } from '@/store/gallery-store';
 import { useTemplateStore, findTemplateById } from '@/store/template-store';
 import { Colors } from '@/lib/design-tokens';
@@ -127,6 +127,20 @@ export default function GalleryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push('/settings')}
+              hitSlop={12}
+              accessibilityLabel="Settings"
+              style={{ marginRight: 8 }}
+            >
+              <Ionicons name="settings-outline" size={22} color={Colors.textPrimary} />
+            </Pressable>
+          ),
+        }}
+      />
       <FlatList
         data={jobs}
         keyExtractor={(item) => item.id}
@@ -141,7 +155,7 @@ export default function GalleryScreen() {
               No videos yet
             </Text>
             <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, opacity: 0.7 }}>
-              Generate one from the Speech tab
+              Tap Create on the home screen to make one
             </Text>
           </View>
         }

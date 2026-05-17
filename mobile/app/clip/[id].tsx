@@ -22,7 +22,7 @@ export default function ClipScreen() {
 
   const handleClose = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/gallery' as any);
+    else router.replace('/gallery' as any);
   }, [router]);
 
   const handleSave = useCallback(async () => {
@@ -65,7 +65,7 @@ export default function ClipScreen() {
   }, [job]);
 
   const handleCreateNew = useCallback(() => {
-    router.dismissTo('/(tabs)');
+    router.dismissTo('/' as any);
   }, [router]);
 
   const handleDelete = useCallback(() => {

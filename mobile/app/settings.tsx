@@ -94,7 +94,7 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-2">
         <Text className="text-sm font-semibold text-foreground">About</Text>
-        <Text className="text-xs text-muted-foreground">AI Speech to Video v1.0.0</Text>
+        <Text className="text-xs text-muted-foreground">AIVO v1.0.0</Text>
         <Text className="text-xs text-muted-foreground">
           Generate AI videos from text or voice prompts.
         </Text>
