@@ -111,12 +111,23 @@ export function findTemplateById(templates: Template[], id: string | undefined):
 }
 
 // Convenience selector: group templates by category in stable insertion order.
+// Within each category, items are sorted by created_at ascending so newly-added
+// templates land at the end of the row (server returns templates in
+// arbitrary Firestore order, so without this the row order is unstable).
 export function groupByCategory(templates: Template[]): Array<{ category: string; items: Template[] }> {
   const map = new Map<string, Template[]>();
   for (const t of templates) {
     const k = t.category || 'uncategorized';
     if (!map.has(k)) map.set(k, []);
     map.get(k)!.push(t);
+  }
+  for (const items of map.values()) {
+    items.sort((a, b) => {
+      const ax = a.created_at ?? '';
+      const bx = b.created_at ?? '';
+      if (ax !== bx) return ax < bx ? -1 : 1;
+      return a.title.localeCompare(b.title);
+    });
   }
   return Array.from(map.entries()).map(([category, items]) => ({ category, items }));
 }

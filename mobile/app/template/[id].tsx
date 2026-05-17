@@ -75,7 +75,7 @@ export default function TemplateReviewScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <CloseButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/' as any))} />
+        <HeaderRow onBack={() => (router.canGoBack() ? router.back() : router.replace('/' as any))} />
         <View style={styles.center}>
           <ActivityIndicator color={Colors.textPrimary} />
           <Text style={styles.dim}>Loading template…</Text>
@@ -154,7 +154,8 @@ export default function TemplateReviewScreen() {
     }
   }
 
-  const driving = template.assets?.driving_video_url;
+  const videoUrl =
+    template.assets?.preview_video_url ?? template.assets?.driving_video_url;
   const scene = template.assets?.scene_image_url;
   const isPipelineA = template.pipeline_class === 'motion-transfer';
 
@@ -166,13 +167,13 @@ export default function TemplateReviewScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <CloseButton onPress={handleClose} />
+      <HeaderRow onBack={handleClose} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.previewWrap}>
-          {isPipelineA && isUsableMediaUrl(driving) ? (
+          {isPipelineA && isUsableMediaUrl(videoUrl) ? (
             <Video
-              source={{ uri: driving }}
+              source={{ uri: videoUrl }}
               style={styles.preview}
               resizeMode={ResizeMode.COVER}
               isLooping
@@ -250,11 +251,18 @@ export default function TemplateReviewScreen() {
   );
 }
 
-function CloseButton({ onPress }: { onPress: () => void }) {
+function HeaderRow({ onBack }: { onBack: () => void }) {
+  // Flow-layout back chevron. Replaces the prior absolute-positioned overlay
+  // X — iOS silently swallowed touches on a Pressable sitting above the
+  // expo-av <Video>. Mirrors clip/[id].tsx (S66). See
+  // Memory/feedback_absolute_overlay_button_intercept.md.
   return (
-    <Pressable onPress={onPress} hitSlop={12} style={styles.closeOverlay} accessibilityLabel="Close">
-      <Ionicons name="close" size={20} color="#fff" />
-    </Pressable>
+    <View style={styles.headerRow}>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.headerBtn} accessibilityLabel="Back">
+        <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
+      </Pressable>
+      <View style={styles.headerBtn} />
+    </View>
   );
 }
 
@@ -274,17 +282,18 @@ const styles = StyleSheet.create({
     height: PREVIEW_HEIGHT,
     backgroundColor: Colors.card,
   },
-  closeOverlay: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    height: 44,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
   },
   previewPlaceholder: {
     alignItems: 'center',

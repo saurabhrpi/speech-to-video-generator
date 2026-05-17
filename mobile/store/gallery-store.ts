@@ -41,6 +41,46 @@ export interface GalleryJob {
 /** Module-level AbortControllers — not serialized */
 const abortControllers = new Map<string, AbortController>();
 
+/**
+ * Try generateThumbnail; on null result, retry with exponential backoff
+ * (1s, 2s, 4s) for up to 3 retries. Total in-session window ~7s.
+ *
+ * Failure mode S66 traced to "upstream URL returns SUCCEED before its CDN has
+ * the bytes ready, expo-video-thumbnails fails silently" — cause unconfirmed,
+ * but the propagation can range from sub-1s to several seconds, so backoff
+ * covers both fast and slow cases. Beyond ~7s diminishing returns kick in;
+ * hydrate()'s backfill remains the long-tail safety net on next app launch.
+ *
+ * Bails between retries if the job was removed or a competing path
+ * (hydration backfill) already populated the thumbnail.
+ */
+const THUMB_RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+function generateThumbnailWithRetry(jobId: string, videoUrl: string) {
+  const attempt = async () => {
+    const res = await generateThumbnail(videoUrl);
+    if (!res.uri) return false;
+    useGalleryStore.setState((s) => {
+      const jobs = s.jobs.map((j) =>
+        j.id === jobId ? { ...j, thumbnailUri: res.uri ?? undefined } : j,
+      );
+      persist(jobs);
+      return { jobs };
+    });
+    return true;
+  };
+
+  (async () => {
+    if (await attempt().catch(() => false)) return;
+    for (const delay of THUMB_RETRY_DELAYS_MS) {
+      await new Promise<void>((r) => setTimeout(r, delay));
+      const job = useGalleryStore.getState().jobs.find((j) => j.id === jobId);
+      if (!job || job.thumbnailUri) return;
+      if (await attempt().catch(() => false)) return;
+    }
+  })();
+}
+
 interface GalleryStore {
   jobs: GalleryJob[];
   selectedJobId: string | null;
@@ -140,21 +180,11 @@ function runPoll(
           persist(jobs);
           return { jobs };
         });
-        // Fire-and-forget thumbnail generation. Hailuo URLs have a ~1h TTL, so
-        // the only window this lands is right after completion. If gen fails
-        // here (S66 saw silent failures at this stage — cause unconfirmed,
-        // likely a URL-not-quite-ready race), hydrate()'s backfill loop
-        // catches it on the next app reload.
-        generateThumbnail(resolvedUrl).then((res) => {
-          if (!res.uri) return;
-          useGalleryStore.setState((s) => {
-            const jobs = s.jobs.map((j) =>
-              j.id === jobId ? { ...j, thumbnailUri: res.uri ?? undefined } : j,
-            );
-            persist(jobs);
-            return { jobs };
-          });
-        });
+        // Fire-and-forget thumbnail generation with exponential-backoff
+        // retry (1s/2s/4s, ~7s ceiling). Covers the URL-not-quite-ready
+        // race the instant upstream returns SUCCEED. hydrate()'s backfill
+        // remains the long-tail safety net for anything beyond that.
+        generateThumbnailWithRetry(jobId, resolvedUrl);
       } else {
         // Backend finished the job but returned no video_url (e.g. result.success=false).
         const err = result?.error;

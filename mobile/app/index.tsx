@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,6 +90,12 @@ function HeroSection({ items }: { items: Template[] }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const creditBalance = useAuthStore((s) => s.creditBalance);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+    if (idx !== activeIndex) setActiveIndex(idx);
+  };
 
   return (
     <View style={[styles.heroSection, { height: HERO_H }]}>
@@ -97,6 +105,7 @@ function HeroSection({ items }: { items: Template[] }) {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
+          onMomentumScrollEnd={onMomentumScrollEnd}
         >
           {items.map((t) => (
             <HeroCard key={t.id} template={t} onPress={() => router.push(`/template/${t.id}` as any)} />
@@ -108,13 +117,6 @@ function HeroSection({ items }: { items: Template[] }) {
           <Text style={styles.heroPlaceholderSub}>(curation pending)</Text>
         </View>
       )}
-
-      {/* Scrim — darkens the top of the hero so the overlay text is legible
-          regardless of the underlying video frame. */}
-      <View
-        pointerEvents="none"
-        style={[styles.heroScrim, { height: insets.top + 56 }]}
-      />
 
       {/* Overlay row — title (left), credits | profile (right). Positioned
           inside the safe area so it never hides under the status bar. */}
@@ -134,17 +136,31 @@ function HeroSection({ items }: { items: Template[] }) {
           </Pressable>
         </View>
       </View>
+
+      {/* Page indicator — one pill per hero card, active pill widens. Hidden
+          when there's only one (or zero) cards to page through. */}
+      {items.length > 1 && (
+        <View style={styles.pageIndicator} pointerEvents="none">
+          {items.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.pageDot, i === activeIndex && styles.pageDotActive]}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 function HeroCard({ template, onPress }: { template: Template; onPress: () => void }) {
-  const driving = template.assets?.driving_video_url;
+  const videoUrl =
+    template.assets?.preview_video_url ?? template.assets?.driving_video_url;
   return (
     <Pressable style={styles.heroCard} onPress={onPress}>
-      {isUsableMediaUrl(driving) ? (
+      {isUsableMediaUrl(videoUrl) ? (
         <Video
-          source={{ uri: driving }}
+          source={{ uri: videoUrl }}
           style={styles.heroMedia}
           resizeMode={ResizeMode.COVER}
           isLooping
@@ -190,7 +206,8 @@ function CategoryRow({ category, items }: { category: string; items: Template[] 
 
 function TemplateTile({ template }: { template: Template }) {
   const router = useRouter();
-  const driving = template.assets?.driving_video_url;
+  const videoUrl =
+    template.assets?.preview_video_url ?? template.assets?.driving_video_url;
 
   const onPress = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,9 +216,9 @@ function TemplateTile({ template }: { template: Template }) {
 
   return (
     <Pressable style={styles.tile} onPress={onPress}>
-      {isUsableMediaUrl(driving) ? (
+      {isUsableMediaUrl(videoUrl) ? (
         <Video
-          source={{ uri: driving }}
+          source={{ uri: videoUrl }}
           style={styles.tileThumb}
           resizeMode={ResizeMode.COVER}
           isLooping
@@ -300,13 +317,6 @@ const styles = StyleSheet.create({
   },
   heroPlaceholderTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '600' },
   heroPlaceholderSub: { color: Colors.textSecondary, fontSize: 13, marginTop: 6 },
-  heroScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   heroOverlay: {
     position: 'absolute',
     left: 16,
@@ -328,6 +338,26 @@ const styles = StyleSheet.create({
   },
   creditsText: { color: '#fff', fontSize: 14, fontWeight: '500' },
   divider: { color: 'rgba(255,255,255,0.55)', fontSize: 16 },
+  pageIndicator: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pageDot: {
+    width: 6,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  pageDotActive: {
+    width: 18,
+    backgroundColor: '#fff',
+  },
   // Category rows + tiles (below the hero)
   rowWrap: { paddingTop: 16, paddingBottom: 16 },
   sectionTitle: {
