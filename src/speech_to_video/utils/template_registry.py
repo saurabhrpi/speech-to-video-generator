@@ -21,13 +21,26 @@ Document shape:
       "model": str,                            # e.g. "kling-2.6-motion-control-image"
       "credit_cost": int,                      # locked at 23 per AIV-36
       "prompt_template": str | None,           # Pipeline B Nano Banana Edit input
+                                               # AND Pipeline A Kling prompt
+                                               # (used by _dispatch_motion_transfer)
+      # S66 — Pipeline A NBP regen step (optional, per-template rollout)
+      "use_nbp_regen": bool | None,            # Pipeline A only: if True, inserts
+                                               # an NBP Edit "regen-character" step
+                                               # between selfie presign and Kling.
+                                               # Default false (raw selfie → Kling).
+      "nbp_framing_hint": str | None,          # Per-template framing line appended
+                                               # to the generic regen prompt. Generic
+                                               # core lives in code; per-template
+                                               # specifics live here. See
+                                               # Memory/feedback_no_overfit_prompts.md.
       "created_at": server timestamp,
       "updated_at": server timestamp,
     }
 
-Schema locked S60 (2026-05-09); see AIV-10. No i18n at V2 launch. No version
-history at the registry layer — create new template entries (e.g. `bombale-v2`)
-when assets change.
+Schema locked S60 (2026-05-09); see AIV-10. Extended S66 with use_nbp_regen +
+nbp_framing_hint (Pipeline A NBP regen — non-breaking additive). No i18n at V2
+launch. No version history at the registry layer — create new template entries
+(e.g. `bombale-v2`) when assets change.
 """
 from __future__ import annotations
 

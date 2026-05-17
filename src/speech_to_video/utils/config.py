@@ -58,6 +58,11 @@ class Settings:
     vertex_service_account_json: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_JSON", "")
     vertex_service_account_path: str = os.environ.get("VERTEX_SERVICE_ACCOUNT_PATH", "")
     vertex_nb_model: str = os.environ.get("VERTEX_NB_MODEL", "gemini-2.5-flash-image")
+    # Google AI Studio direct (paid tier) — Pipeline A NBP regen step + future
+    # Pipeline B Edit migration (AIV-91). Case-tolerant: `.env` ships
+    # `NBP_API_Key` (camelCase) but accept `NBP_API_KEY` too.
+    nbp_api_key: str = os.environ.get("NBP_API_Key") or os.environ.get("NBP_API_KEY", "")
+    nbp_model: str = os.environ.get("NBP_MODEL", "gemini-3-pro-image-preview")
 
 
 def get_settings() -> Settings:

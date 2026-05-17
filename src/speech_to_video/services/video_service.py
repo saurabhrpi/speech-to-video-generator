@@ -928,7 +928,15 @@ class VideoService:
         overrides: Optional[Dict],
         progress: Callable,
     ) -> Dict:
-        """Pipeline A: motion-transfer. Selfie + driving_video → animated character."""
+        """Pipeline A: motion-transfer. Selfie + driving_video → animated character.
+
+        S66: optional NBP regen step inserted between selfie presign and Kling
+        Motion Control when `template.use_nbp_regen` is true. The regen step
+        produces a fuller-bodied character image (face preserved + wardrobe and
+        framing extrapolated stylistically) that Kling then animates. Gated
+        per-template so we can roll out template-by-template after verifying
+        each one's regen quality on the sim.
+        """
         from ..utils import r2_client
 
         assets = template.get("assets") or {}
@@ -937,17 +945,30 @@ class VideoService:
             return {"success": False, "phase": "load_template", "error": "missing assets.driving_video_url"}
 
         progress(phase="presign_selfie", template_id=template["id"])
-        selfie_url = r2_client.generate_presigned_get_url(
-            selfie_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
-        )
+
+        # Optional NBP regen — produces a regen character image and uses ITS url
+        # for the Kling call. Falls back to the raw selfie when the flag is off.
+        if template.get("use_nbp_regen"):
+            regen = self._nbp_regen_character(template, selfie_key, progress)
+            if not regen.get("success"):
+                return regen
+            character_url = regen["character_url"]
+        else:
+            character_url = r2_client.generate_presigned_get_url(
+                selfie_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
+            )
 
         progress(phase="kling_motion_control", template_id=template["id"])
         client = self._resolve_motion_client(template["id"])
         result = client.generate_and_poll(
-            image_url=selfie_url,
+            image_url=character_url,
             video_url=driving_video,
             character_orientation="image",  # Outcome 2: motion-onto-character
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
+            # S66 testing policy (Memory/project_kling_audio_test_policy.md):
+            # all motion-transfer runs are silent until launch. At launch, flip
+            # to a per-template config field, not back to client default.
+            keep_original_sound="no",
         )
         if not result.get("success"):
             return {
@@ -964,6 +985,82 @@ class VideoService:
             "duration": result.get("duration"),
             "pipeline": "motion-transfer",
         }
+
+    # Generic core for the Pipeline A regen step. Generic by construction
+    # (Memory/feedback_no_overfit_prompts.md): describes the *operation*, not
+    # the content. Per-template content/framing specifics go in
+    # `template.nbp_framing_hint` and are appended at request time.
+    _GENERIC_NBP_REGEN_PROMPT = (
+        "Generate a more complete portrait of this person. Preserve facial "
+        "identity, hair, and the visible clothing style. Extrapolate any "
+        "non-visible body parts, garments, and footwear in a way that is "
+        "stylistically continuous with what is visible."
+    )
+
+    def _nbp_regen_character(
+        self,
+        template: Dict,
+        selfie_key: str,
+        progress: Callable,
+    ) -> Dict:
+        """NBP regen step for Pipeline A. Downloads the selfie, runs Nano Banana
+        Pro Edit with the generic regen prompt + the template's framing hint,
+        re-uploads the regen image to the selfies bucket, and presigns a GET URL
+        for Kling to consume.
+
+        Returns `{"success": True, "character_url": str}` on success, or
+        `{"success": False, "phase": "nbp_regen", "error": str}` on any failure.
+        Credit consumption is gated on overall job success, so an NBP failure
+        before Kling does not charge the user.
+        """
+        import mimetypes
+        import uuid
+
+        from ..clients.gemini_client import GeminiClient
+        from ..utils import r2_client
+
+        progress(phase="nbp_regen", template_id=template["id"])
+
+        framing_hint = (template.get("nbp_framing_hint") or "").strip()
+        nbp_prompt = self._GENERIC_NBP_REGEN_PROMPT
+        if framing_hint:
+            nbp_prompt = f"{nbp_prompt}\n\n{framing_hint}"
+
+        try:
+            selfie_bytes = r2_client.download_to_bytes(
+                selfie_key, bucket=self.settings.r2_selfies_bucket,
+            )
+        except Exception as e:
+            return {"success": False, "phase": "nbp_regen", "error": f"selfie_download: {e}"}
+
+        selfie_mime = mimetypes.guess_type(selfie_key)[0] or "image/jpeg"
+
+        try:
+            gemini = GeminiClient(self.settings)
+        except RuntimeError as e:
+            return {"success": False, "phase": "nbp_regen", "error": str(e)}
+
+        regen = gemini.regen_image(selfie_bytes, selfie_mime, nbp_prompt)
+        if not regen.get("success"):
+            return {"success": False, "phase": "nbp_regen", "error": regen.get("error", "regen_failed")}
+
+        regen_mime = regen.get("mime") or "image/png"
+        ext = "png" if "png" in regen_mime else ("jpg" if "jpeg" in regen_mime else "bin")
+        regen_key = f"nbp-regen/{template['id']}/{uuid.uuid4().hex}.{ext}"
+        try:
+            r2_client.upload_bytes(
+                data=regen["image_bytes"],
+                key=regen_key,
+                content_type=regen_mime,
+                bucket=self.settings.r2_selfies_bucket,
+            )
+            character_url = r2_client.generate_presigned_get_url(
+                regen_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
+            )
+        except Exception as e:
+            return {"success": False, "phase": "nbp_regen", "error": f"regen_upload: {e}"}
+
+        return {"success": True, "character_url": character_url, "regen_key": regen_key}
 
     def _dispatch_scene_insertion(
         self,
