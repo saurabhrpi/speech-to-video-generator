@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import { useCallback } from 'react';
+import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
 import { File, Directory, Paths } from 'expo-file-system';
@@ -19,15 +19,11 @@ export default function ClipScreen() {
   const job = useGalleryStore((s) => s.jobs.find((j) => j.id === id));
   const removeJob = useGalleryStore((s) => s.removeJob);
   const markSaved = useGalleryStore((s) => s.markSaved);
-  const [copied, setCopied] = useState(false);
 
-  const handleCopy = useCallback(async () => {
-    if (!job) return;
-    await Clipboard.setStringAsync(job.prompt);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }, [job]);
+  const handleClose = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/gallery' as any);
+  }, [router]);
 
   const handleSave = useCallback(async () => {
     if (!job?.videoUrl) return;
@@ -89,88 +85,78 @@ export default function ClipScreen() {
 
   if (!job || !job.videoUrl) {
     return (
-      <>
-        <Stack.Screen options={{ title: 'S2V', headerBackTitle: '' }} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background }}>
-          <Text style={{ color: Colors.textSecondary }}>Clip not available.</Text>
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <HeaderRow onBack={handleClose} />
+        <View style={styles.center}>
+          <Text style={styles.dim}>Clip not available.</Text>
         </View>
-      </>
+      </SafeAreaView>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'S2V',
-          headerBackButtonDisplayMode: 'minimal',
-          headerRight: () => (
-            <Pressable onPress={handleDelete} hitSlop={10}>
-              <Ionicons name="trash-outline" size={22} color={Colors.textPrimary} />
-            </Pressable>
-          ),
-        }}
-      />
-      {/* Layout split: video ~50% (16:9 letterboxed inside), prompt ~25%,
-          actions ~25%. Achieved via flex 2 / 1 / 1 on the three sections. */}
-      <View style={{ flex: 1, backgroundColor: Colors.background }}>
-        <View style={{ flex: 2, paddingHorizontal: 20, justifyContent: 'center' }}>
-          <VideoPlayer url={job.videoUrl} />
-        </View>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <HeaderRow onBack={handleClose} onDelete={handleDelete} />
 
-        <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 12 }}>
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: Colors.card,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: Colors.glassyBorder,
-              padding: 16,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <Text style={{ color: Colors.textPrimary, fontSize: 16, fontWeight: '600' }}>Prompt</Text>
-              <Pressable
-                onPress={handleCopy}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 6,
-                  borderRadius: 14,
-                  backgroundColor: Colors.elevated,
-                  borderWidth: 1,
-                  borderColor: Colors.glassyBorder,
-                }}
-              >
-                <Text style={{ color: Colors.textPrimary, fontSize: 13 }}>{copied ? 'Copied' : 'Copy'}</Text>
-              </Pressable>
-            </View>
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              <Text style={{ color: Colors.textPrimary, fontSize: 14, lineHeight: 20, opacity: 0.9 }}>
-                {job.prompt}
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
+      <VideoPlayer url={job.videoUrl} />
 
-        <View
-          style={{
-            flex: 1,
-            flexDirection: 'row',
-            justifyContent: 'space-around',
-            alignItems: 'center',
-            paddingHorizontal: 20,
-            paddingBottom: 40,
-          }}
-        >
-          <ActionButton icon="add" label="Create New" onPress={handleCreateNew} />
-          <ActionButton icon="arrow-down" label="Save" onPress={handleSave} />
-          <ActionButton icon="share-outline" label="Share" onPress={handleShare} />
-        </View>
+      <View style={styles.spacer} />
+
+      <View style={styles.actionsRow}>
+        <ActionButton icon="add" label="Create New" onPress={handleCreateNew} />
+        <ActionButton icon="arrow-down" label="Save" onPress={handleSave} />
+        <ActionButton icon="share-outline" label="Share" onPress={handleShare} />
       </View>
-    </>
+    </SafeAreaView>
   );
 }
+
+function HeaderRow({ onBack, onDelete }: { onBack: () => void; onDelete?: () => void }) {
+  return (
+    <View style={styles.headerRow}>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.headerBtn} accessibilityLabel="Back">
+        <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
+      </Pressable>
+      {onDelete ? (
+        <Pressable onPress={onDelete} hitSlop={12} style={styles.headerBtn} accessibilityLabel="Delete clip">
+          <Ionicons name="trash-outline" size={22} color={Colors.textPrimary} />
+        </Pressable>
+      ) : (
+        <View style={styles.headerBtn} />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  dim: { color: Colors.textSecondary, fontSize: 13 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    height: 44,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spacer: { flex: 1 },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 16,
+  },
+});
 
 interface ActionButtonProps {
   icon: keyof typeof Ionicons.glyphMap;

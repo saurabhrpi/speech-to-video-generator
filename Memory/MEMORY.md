@@ -105,3 +105,4 @@
 - [AIV-78 orphan-rate greps](reference_aiv78_orphan_rate_greps.md) -- JOB_MANAGER_STARTUP / JOB_ORPHAN / JOB_POLL_MISS — how to measure V2 job orphan rate from Replit prod logs, and the >1% escalation rule.
 - [Anchor preventative fixes in concrete plans](feedback_anchor_fixes_in_concrete_plans.md) -- Before proposing "let's harden X" work, read CLAUDE.md/docs/Linear/NOW.md and verify the fix addresses something concrete and near-term — "I don't know what's coming" is almost always a lie about not having read the docs.
 - [Don't overload V-terms](feedback_dont_overload_v_terms.md) -- V1/V2/V2.1+/Timelapse-Phase-2 are reserved for project release names; use descriptive labels (baseline, iteration_1, dates) for everything else
+- [Absolute overlay buttons silently die on iOS](feedback_absolute_overlay_button_intercept.md) -- When absolute-positioned Pressable swallows touches with no onPressIn, refactor to flow layout instead of hunting the interceptor
