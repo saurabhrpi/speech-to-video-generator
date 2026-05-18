@@ -7,7 +7,7 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -18,7 +18,9 @@ import { Colors } from '@/lib/design-tokens';
 import { configurePurchases, refreshPurchasesState } from '@/lib/purchases';
 import { useGalleryStore } from '@/store/gallery-store';
 import { useAuthStore } from '@/store/auth-store';
+import { hasDataSharingConsent, setDataSharingConsent } from '@/lib/consent';
 import NetworkBanner from '@/components/NetworkBanner';
+import OnboardingScreen from '@/components/OnboardingScreen';
 import Paywall from '@/components/Paywall';
 import '../global.css';
 
@@ -53,16 +55,25 @@ export default function RootLayout() {
   // CTFontManagerError 104 = font already registered (still usable). Treat as success.
   const isAlreadyRegistered = error?.message?.includes('code: 104');
 
+  // null = unknown (AsyncStorage read in flight); false = first launch, must
+  // accept; true = already accepted on a prior launch. Splash hide waits on
+  // this resolving so we don't flash the home before the gate renders.
+  const [consented, setConsented] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (error && !isAlreadyRegistered) throw error;
   }, [error, isAlreadyRegistered]);
 
   useEffect(() => {
-    if (loaded || isAlreadyRegistered) {
+    hasDataSharingConsent().then(setConsented);
+  }, []);
+
+  useEffect(() => {
+    if ((loaded || isAlreadyRegistered) && consented !== null) {
       SplashScreen.hideAsync();
       useGalleryStore.getState().hydrate();
     }
-  }, [loaded, isAlreadyRegistered]);
+  }, [loaded, isAlreadyRegistered, consented]);
 
   useEffect(() => {
     configurePurchases();
@@ -97,26 +108,40 @@ export default function RootLayout() {
   if (!loaded && !isAlreadyRegistered) {
     return null;
   }
+  if (consented === null) {
+    return null;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={WarmDarkTheme}>
         <StatusBar style="light" />
-        <NetworkBanner />
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="gallery"
-            options={{ title: 'Gallery', headerBackButtonDisplayMode: 'minimal' }}
+        {consented ? (
+          <>
+            <NetworkBanner />
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="gallery"
+                options={{ title: 'Gallery', headerBackButtonDisplayMode: 'minimal' }}
+              />
+              <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
+              <Stack.Screen name="clip/[id]" options={{ title: 'AIVO', headerBackButtonDisplayMode: 'minimal' }} />
+              <Stack.Screen
+                name="create-video"
+                options={{ title: 'Create Video', headerBackButtonDisplayMode: 'minimal' }}
+              />
+            </Stack>
+            <Paywall />
+          </>
+        ) : (
+          <OnboardingScreen
+            onContinue={async () => {
+              await setDataSharingConsent();
+              setConsented(true);
+            }}
           />
-          <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
-          <Stack.Screen name="clip/[id]" options={{ title: 'AIVO', headerBackButtonDisplayMode: 'minimal' }} />
-          <Stack.Screen
-            name="create-video"
-            options={{ title: 'Create Video', headerBackButtonDisplayMode: 'minimal' }}
-          />
-        </Stack>
-        <Paywall />
+        )}
       </ThemeProvider>
     </GestureHandlerRootView>
   );

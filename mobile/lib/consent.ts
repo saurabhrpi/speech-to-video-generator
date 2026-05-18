@@ -2,12 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Versioned key — bump if the disclosure scope changes (e.g., add a new
 // third-party processor). Old consent is invalidated and the modal re-prompts.
-const CONSENT_KEY = 'data_sharing_consent_v1';
+// v2 (V2.0.0): adds Kling AI + photo upload to the disclosure scope; also
+// folds in the "rights to use the photo" affirmation that used to live as a
+// per-template checkbox.
+const CONSENT_KEY = 'data_sharing_consent_v2';
 
 /**
- * One-time disclosure + consent for sending user data (text prompts, audio)
- * to third-party AI providers (OpenAI Whisper, MiniMax Hailuo). Required by
- * App Store guidelines 5.1.1(i) and 5.1.2(i).
+ * One-time disclosure + consent for sending user data (text prompts, audio,
+ * photos) to third-party AI providers (OpenAI Whisper, MiniMax Hailuo,
+ * Kling AI). Required by App Store guidelines 5.1.1(i) and 5.1.2(i).
  */
 export async function hasDataSharingConsent(): Promise<boolean> {
   try {

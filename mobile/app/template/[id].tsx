@@ -24,7 +24,7 @@ import { apiPost } from '@/lib/api-client';
 import { Colors } from '@/lib/design-tokens';
 
 // AIV-31 Pipeline Review screen — reached by tapping a template tile on
-// the V2 home (mobile/app/index.tsx). Preview + selfie pick + consent + Generate. Uploads to
+// the V2 home (mobile/app/index.tsx). Preview + selfie pick + Generate. Uploads to
 // /api/upload/selfie (AIV-89), dispatches via /api/generate/template-video
 // (AIV-15). Polling reuses gallery-store (AIV-30 shipped startTemplateGeneration).
 //
@@ -68,7 +68,6 @@ export default function TemplateReviewScreen() {
   );
 
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
-  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (!template) {
@@ -86,7 +85,7 @@ export default function TemplateReviewScreen() {
 
   const cost = template.credit_cost;
   const blockedByInFlight = inFlightCost > 0;
-  const canSubmit = !!selfieUri && consent && !submitting && !blockedByInFlight;
+  const canSubmit = !!selfieUri && !submitting && !blockedByInFlight;
 
   async function handlePickSelfie() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -211,20 +210,6 @@ export default function TemplateReviewScreen() {
             )}
           </View>
 
-          <Pressable
-            onPress={() => setConsent((c) => !c)}
-            style={styles.consentRow}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: consent }}
-          >
-            <View style={[styles.checkbox, consent && styles.checkboxOn]}>
-              {consent && <Ionicons name="checkmark" size={16} color={Colors.background} />}
-            </View>
-            <Text style={styles.consentText}>
-              I have rights to use this photo and agree to use it for AI-generated video.
-            </Text>
-          </Pressable>
-
           <View style={styles.costLine}>
             <Text style={styles.costLabel}>Cost</Text>
             <Text style={styles.costValue}>{cost} credits</Text>
@@ -335,25 +320,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   changeLabel: { color: Colors.textPrimary, fontSize: 13 },
-  consentRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
-  checkboxOn: { backgroundColor: Colors.textPrimary, borderColor: Colors.textPrimary },
-  consentText: { flex: 1, color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
   costLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',

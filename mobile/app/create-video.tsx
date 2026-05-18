@@ -1,18 +1,16 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import MicVisualizer from '@/components/MicVisualizer';
 import ConfirmModal from '@/components/ConfirmModal';
-import DataSharingConsentModal from '@/components/DataSharingConsentModal';
 import { useRecording } from '@/hooks/useRecording';
 import { apiPost } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { useGalleryStore } from '@/store/gallery-store';
 import { Colors } from '@/lib/design-tokens';
 import { creditCostFor } from '@/lib/constants';
-import { hasDataSharingConsent, setDataSharingConsent } from '@/lib/consent';
 
 // S66: V1 Speech-to-Video flow, reached via the FAB on the V2 home (index.tsx).
 // Logic and copy unchanged from V1.
@@ -51,33 +49,6 @@ export default function CreateVideoScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
   const [pendingTranscript, setPendingTranscript] = useState('');
-
-  // One-time data-sharing consent before any data leaves the device (audio →
-  // OpenAI Whisper, prompt → MiniMax). Required by App Store 5.1.1(i)/5.1.2(i).
-  const [consentOpen, setConsentOpen] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
-
-  async function withConsent(action: () => void) {
-    if (await hasDataSharingConsent()) {
-      action();
-    } else {
-      pendingActionRef.current = action;
-      setConsentOpen(true);
-    }
-  }
-
-  function onConsentAccept() {
-    setDataSharingConsent();
-    setConsentOpen(false);
-    const next = pendingActionRef.current;
-    pendingActionRef.current = null;
-    next?.();
-  }
-
-  function onConsentDecline() {
-    setConsentOpen(false);
-    pendingActionRef.current = null;
-  }
 
   function buildFormData(prompt?: string, audioUri?: string): FormData {
     const formData = new FormData();
@@ -135,18 +106,14 @@ export default function CreateVideoScreen() {
   }
 
   function handleStartRecording() {
-    withConsent(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      startRecording();
-    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startRecording();
   }
 
   function handleTextToVideo() {
     if (!promptText.trim()) return;
-    withConsent(() => {
-      const formData = buildFormData(promptText.trim());
-      dispatchGeneration(formData, promptText.trim());
-    });
+    const formData = buildFormData(promptText.trim());
+    dispatchGeneration(formData, promptText.trim());
   }
 
   function handleConfirmProceed() {
@@ -280,11 +247,6 @@ export default function CreateVideoScreen() {
           className="rounded-input-r bg-card px-4 py-3 text-body font-body text-foreground min-h-[120px]"
         />
       </ConfirmModal>
-      <DataSharingConsentModal
-        visible={consentOpen}
-        onAccept={onConsentAccept}
-        onDecline={onConsentDecline}
-      />
     </ScrollView>
   );
 }
