@@ -79,8 +79,8 @@ export default function HomeScreen() {
         onPress={() => router.push('/create-video' as any)}
         accessibilityLabel="Create a video"
       >
-        <Ionicons name="mic" size={24} color={Colors.background} />
-        <Text style={styles.fabLabel}>Create</Text>
+        <Ionicons name="mic" size={24} color="#FFFFFF" />
+        <Text style={styles.fabLabel}>Create a Video</Text>
       </Pressable>
     </View>
   );
@@ -434,12 +434,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 28,
-    backgroundColor: Colors.textPrimary,
+    backgroundColor: '#007AFF',
     elevation: 4,
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
-  fabLabel: { color: Colors.background, fontSize: 14, fontWeight: '600', marginLeft: 6 },
+  fabLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginLeft: 6 },
 });
