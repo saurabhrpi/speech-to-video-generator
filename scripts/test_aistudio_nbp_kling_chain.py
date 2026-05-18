@@ -18,8 +18,9 @@ Isolation: Kling call uses Bombale's CURRENT prod prompt verbatim (the
 "coherence" prompt). NBP regen is the only changed variable vs the existing
 7/10 output, so any quality delta attributes cleanly to the NBP step.
 
-Audio: keep_original_sound="no" for ALL dev/test iterations (S66 testing
-policy). Toggle to "yes" only at launch.
+Audio: defaults silent (S66 dev/test default). Pass --keep-audio to opt in
+(e.g. for re-rendering a launch-ready preview_video.mp4 with the driving
+video's soundtrack intact).
 
 Usage:
     # Full chain: NBP + Kling
@@ -147,7 +148,7 @@ def run_regen(client: genai.Client, selfie: Path, framing_hint: str, out_dir: Pa
     return 1, ""
 
 
-def run_kling(regen_image_path: str, out_dir: Path) -> int:
+def run_kling(regen_image_path: str, out_dir: Path, keep_audio: bool = False) -> int:
     """Upload regen image to selfies bucket, call Kling Motion Control, save mp4."""
     settings = get_settings()
 
@@ -167,7 +168,7 @@ def run_kling(regen_image_path: str, out_dir: Path) -> int:
 
     # 2. Kling Motion Control submit + poll.
     client = KlingMotionClient()
-    log.info("Kling submit  driving=%s", BOMBALE_DRIVING_VIDEO)
+    log.info("Kling submit  driving=%s  keep_audio=%s", BOMBALE_DRIVING_VIDEO, keep_audio)
     log.info("Kling prompt:\n%s", BOMBALE_KLING_PROMPT)
 
     t0 = time.time()
@@ -176,7 +177,7 @@ def run_kling(regen_image_path: str, out_dir: Path) -> int:
         video_url=BOMBALE_DRIVING_VIDEO,
         character_orientation="image",  # Outcome 2 — motion-onto-character
         prompt=BOMBALE_KLING_PROMPT,
-        keep_original_sound="no",
+        keep_original_sound="yes" if keep_audio else "no",
     )
     elapsed = time.time() - t0
 
@@ -214,6 +215,11 @@ def main():
     )
     ap.add_argument("--no-kling", action="store_true", help="Run NBP only, skip Kling")
     ap.add_argument(
+        "--keep-audio",
+        action="store_true",
+        help="Pass keep_original_sound=yes to Kling (default: no, per S66 test policy)",
+    )
+    ap.add_argument(
         "--out-dir",
         default=str(Path.home() / "Downloads"),
         help="Where to write outputs (default: ~/Downloads)",
@@ -249,7 +255,7 @@ def main():
         print("\nSKIP  Kling  (--no-kling)")
         return 0
 
-    return run_kling(regen_path, out_dir)
+    return run_kling(regen_path, out_dir, keep_audio=args.keep_audio)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,21 @@
-"""V2 Pipeline A Baby Dance template — NBP-edit → Kling Motion Control chain (S67).
+"""V2 Pipeline A Bombale template — NBP-edit → Kling Motion Control chain (S68).
 
-Sister to scripts/test_gangsta_chain.py. Same shape; only the per-template
-specifics change: source reference, NBP edit prompt, driving video URL.
-The Kling prompt remains the generic coherence prompt (no-overfit policy).
+Sister to scripts/test_gangsta_chain.py and scripts/test_baby_dance_chain.py.
+Same shape; only per-template specifics change.
+
+Bombale was originally driven by test_aistudio_nbp_kling_chain.py (NBP regen
+of a head-shot selfie). S68 migrates Bombale to the screenshot-edit pattern
+used by Gangsta + Baby Dance: a competitor-app screenshot is NBP-edited to
+strip UI overlays + restyle, then run through Kling Motion Control.
+
+Driving video: viral-dances/bombale/driving_video.mp4 (NEW S68 key — has
+audio). Old _silent variant remains at its key for backwards-compat.
 
 Usage:
-    .venv/bin/python scripts/test_baby_dance_chain.py
-    .venv/bin/python scripts/test_baby_dance_chain.py --no-kling
-    .venv/bin/python scripts/test_baby_dance_chain.py --edited-image ~/Downloads/baby_edit_xxx.png
+    .venv/bin/python scripts/test_bombale_chain.py
+    .venv/bin/python scripts/test_bombale_chain.py --no-kling
+    .venv/bin/python scripts/test_bombale_chain.py --edited-image ~/Downloads/bombale_edit_xxx.png
+    .venv/bin/python scripts/test_bombale_chain.py --edited-image ... --keep-audio
 """
 from __future__ import annotations
 
@@ -36,21 +44,26 @@ from speech_to_video.utils.config import get_settings  # noqa: E402
 
 MODEL = "gemini-3-pro-image-preview"
 
-DEFAULT_REFERENCE = Path("/tmp/baby_dance_clean.png")  # pre-cropped to strip the bottom caption bar; see Skill chat S67
+DEFAULT_REFERENCE = Path.home() / "Downloads/App Templates Prep/Bombale_screenshot.png"
 
-BABY_DANCE_EDIT_PROMPT = (
+BOMBALE_EDIT_PROMPT = (
     "Edit this image:\n"
+    "- Remove the iOS status bar at the top (time, signal, wifi, battery icons). "
+    "Paint over with what would naturally be behind it.\n"
     "- Remove the dark circular X close-button in the top-left corner. Paint "
-    "over it with what would naturally be behind it (window, wall, ceiling).\n"
-    "- Change the outfit to a soft lavender ruffle top paired with a tiered "
-    "light-pink skirt (visibly layered/tiered) worn over light leggings. Keep "
-    "the soft, kid-appropriate fit and the cute, girly register.\n"
-    "- Change the background to a children's playroom with a painted pastel "
-    "wall mural, a textured rug on the floor, and a few woven toy bins along "
-    "the edges. Remove the dollhouse, TV, and lamp from the original. Soft "
-    "natural daylight.\n"
-    "- Preserve the child's pose, face, hair, and identity exactly. Preserve "
-    "the mid-dance body position.\n"
+    "over it with the surrounding scene.\n"
+    "- Remove the entire dark band at the bottom containing the 'Bombale' "
+    "title, tagline, the photo-upload card, and the 'Create' button. Extend "
+    "the floor / background naturally where the band was.\n"
+    "- Change the outfit to a cropped white tank top paired with dark "
+    "high-waisted joggers and dance sneakers. Keep the athletic, dance-ready "
+    "register.\n"
+    "- Change the background to a nighttime neon-lit dance club: magenta + "
+    "cyan neon strip lighting along the walls, shallow depth-of-field crowd "
+    "silhouettes in the distance, polished concrete floor reflecting the "
+    "neon. Moody, cinematic.\n"
+    "- Preserve the character's pose, face, hair, and identity exactly. "
+    "Preserve the mid-dance body position.\n"
     "- Output a clean photographic frame with no UI elements, no buttons, no text."
 )
 
@@ -61,8 +74,8 @@ GENERIC_KLING_PROMPT = (
     "elements that conflict with the visible context."
 )
 
-BABY_DANCE_DRIVING_VIDEO = (
-    "https://assets.speech-2-video.ai/viral-dances/baby-dance/driving_video_10s.mp4"
+BOMBALE_DRIVING_VIDEO = (
+    "https://assets.speech-2-video.ai/viral-dances/bombale/driving_video.mp4"
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -95,12 +108,12 @@ def _save_image(resp, out_dir: Path, prefix: str) -> tuple[bool, str, str]:
 
 def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int, str]:
     log.info("NBP edit submit  model=%s  reference=%s", MODEL, reference)
-    log.info("Prompt:\n%s", BABY_DANCE_EDIT_PROMPT)
+    log.info("Prompt:\n%s", BOMBALE_EDIT_PROMPT)
 
     mime = mimetypes.guess_type(str(reference))[0] or "image/png"
     contents = [
         types.Part.from_bytes(data=reference.read_bytes(), mime_type=mime),
-        BABY_DANCE_EDIT_PROMPT,
+        BOMBALE_EDIT_PROMPT,
     ]
 
     t0 = time.time()
@@ -116,7 +129,7 @@ def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int,
         return 1, ""
     elapsed = time.time() - t0
 
-    ok, info, _ = _save_image(resp, out_dir, "baby_dance_edit")
+    ok, info, _ = _save_image(resp, out_dir, "bombale_edit")
     if ok:
         print(f"PASS  NBP edit  model={MODEL}  elapsed={elapsed:.1f}s")
         print(f"      saved: {info}")
@@ -129,7 +142,7 @@ def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False) -
     settings = get_settings()
 
     selfies_bucket = settings.r2_selfies_bucket
-    key = f"spike-outputs/baby-dance-chain/{uuid.uuid4().hex}.png"
+    key = f"spike-outputs/bombale-chain/{uuid.uuid4().hex}.png"
     log.info("R2 upload (private)  bucket=%s key=%s", selfies_bucket, key)
     r2_client.upload_file(
         local_path=edited_image_path,
@@ -142,13 +155,13 @@ def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False) -
     )
 
     client = KlingMotionClient()
-    log.info("Kling submit  driving=%s  keep_audio=%s", BABY_DANCE_DRIVING_VIDEO, keep_audio)
+    log.info("Kling submit  driving=%s  keep_audio=%s", BOMBALE_DRIVING_VIDEO, keep_audio)
     log.info("Kling prompt:\n%s", GENERIC_KLING_PROMPT)
 
     t0 = time.time()
     result = client.generate_and_poll(
         image_url=image_url,
-        video_url=BABY_DANCE_DRIVING_VIDEO,
+        video_url=BOMBALE_DRIVING_VIDEO,
         character_orientation="image",
         prompt=GENERIC_KLING_PROMPT,
         keep_original_sound="yes" if keep_audio else "no",
@@ -163,7 +176,7 @@ def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False) -
         return 1
 
     video_url = result["video_url"]
-    out_path = out_dir / f"baby_dance_chain_{uuid.uuid4().hex[:8]}.mp4"
+    out_path = out_dir / f"bombale_chain_{uuid.uuid4().hex[:8]}.mp4"
     log.info("Kling download  %s -> %s", video_url, out_path)
     with requests.get(video_url, stream=True, timeout=60) as r:
         r.raise_for_status()
@@ -185,7 +198,7 @@ def main():
     ap.add_argument(
         "--reference",
         default=str(DEFAULT_REFERENCE),
-        help=f"Path to Baby Dance reference image (default: {DEFAULT_REFERENCE})",
+        help=f"Path to Bombale reference screenshot (default: {DEFAULT_REFERENCE})",
     )
     ap.add_argument(
         "--edited-image",

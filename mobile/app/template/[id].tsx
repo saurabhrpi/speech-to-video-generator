@@ -177,7 +177,6 @@ export default function TemplateReviewScreen() {
               style={styles.preview}
               resizeMode={ResizeMode.COVER}
               isLooping
-              isMuted
               shouldPlay
             />
           ) : !isPipelineA && isUsableMediaUrl(scene) ? (
