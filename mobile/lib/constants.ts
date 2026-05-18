@@ -8,12 +8,17 @@ export type PackSku = (typeof PACK_SKUS)[number];
 
 export const PACK_CREDITS: Record<PackSku, number> = {
   pro_pack_50: 50,
-  pro_pack_120: 120,
+  // SKU still reads "120" — ASC SKUs are immutable. The pack now grants 150
+  // credits (V2.0.0 resize so the mid tier divides more evenly into 23-cr
+  // template gens). ASC IAP display name must read "150 credits" before
+  // V2.0.0 ships. Keep in sync with PACK_CREDITS in src/speech_to_video/api/credits.py.
+  pro_pack_120: 150,
   pro_pack_250: 250,
 };
 
 // Badge target — the pack with the lowest per-credit price (best deal).
-// $19.99 / 250 = $0.080/credit beats $9.99 / 120 = $0.083/credit and $4.99 / 50 = $0.100/credit.
+// V2.0.0 final pricing: $24.99 / 250 = $0.0999/cr beats $15.99 / 150 = $0.1066/cr
+// and $5.99 / 50 = $0.1198/cr. Top pack reclaims the badge.
 export const BEST_VALUE_PACK: PackSku = 'pro_pack_250';
 
 // Default-selected radio when the paywall opens. We deliberately do NOT default

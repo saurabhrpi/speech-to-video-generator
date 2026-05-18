@@ -4,27 +4,26 @@ description: Credit-packs only (no subscriptions); anon 10-credit free tier → 
 type: project
 ---
 
-Monetization model for the shipping mobile app (V1 state, Session 52):
+Monetization model — current state at V2.0.0 launch (S67 update):
 
-- **Anon users:** 10 free credits granted on first API call = exactly 1 free generation. One-time, not refilling.
+- **Anon users:** 25 free credits granted on first API call (was 10 at V1) = exactly 1 free template generation (23-cr cost). One-time, not refilling.
 - **After free tier:** User hits the **paywall** — never a standalone "please sign in" wall.
 - **Sign-in:** Happens *as part of Apple IAP purchase* (anon → Apple account linking at checkout, preserves Firebase UID).
 - **Paid:** Signed-in users have NO unlimited free gens. Same credit gate as anon.
-- **Product shape: credit packs only (no subscriptions).** Three one-time consumable IAPs (already in ASC):
-  - `pro_pack_50` — $4.99 / 50 credits = **5 gens**
-  - `pro_pack_120` — $9.99 / 120 credits = **12 gens** (BEST_VALUE)
-  - `pro_pack_250` — $19.99 / 250 credits = **25 gens**
-- **Per-gen cost: 10 credits = $1.00 retail.** V1 is single-model + single-duration (Hailuo 10s only); future variants slot back into `CREDIT_COSTS` if needed.
+- **Product shape: credit packs only (no subscriptions).** Three one-time consumable IAPs (SKUs unchanged from V1; prices + credit counts updated for V2):
+  - `pro_pack_50` — **$5.99** / 50 credits
+  - `pro_pack_120` — **$15.99** / **150 credits** (SKU name retains "120" — ASC SKUs are immutable; display name in ASC is "150 Credits")
+  - `pro_pack_250` — **$24.99** / 250 credits (**BEST_VALUE** — $0.0999/cr beats mid pack's $0.1066/cr)
+- **Per-gen cost: 10 credits for V1 S2V (Hailuo 10s), 23 credits for V2 motion-transfer templates.** Per-template `credit_cost` schema field supports variance; all V2.0.0 launch templates are 23.
 
-**Why credit packs, not subscriptions:** ~$0.50 COGS/gen makes unlimited subs a bankruptcy risk; capped subs feel punitive; "pay per video" matches the impulse use case (one weird thought = one purchase occasion); no churn engineering, cleanest margin math. Subscription revisited at month 3-6 if retention data justifies.
+**Why credit packs, not subscriptions:** ~$0.50 COGS/gen for V1 S2V, ~$1.32 COGS/gen for V2 templates — both make unlimited subs a bankruptcy risk; capped subs feel punitive; "pay per video" matches the impulse use case; no churn engineering, cleanest margin math. Subscription revisited at month 3-6 if retention data justifies.
 
 **Why anon-first:** Validated by Sid (friend with successful iOS app) — "don't force login, allow anon, use Firebase." Login walls kill conversion but the app still needs revenue. Paywall with sign-in bundled into the purchase flow is the right gate.
 
-**Margin math (V1, post Session 52 simplification):**
-- $0.50 COGS (Hailuo 10s direct via MiniMax) per gen
-- Apple Small Business Program (15% cut): user MUST enroll at developer.apple.com → Account → Agreements → Paid Apps. Without enrollment, Apple takes 30%, halving the numbers below.
-- After Apple 15%: $0.85 net per $1.00 retail (small pack), $0.68 net (top pack with bulk discount)
-- Gross margin: **$0.35/gen at $4.99 pack, $0.18/gen at $19.99 pack** (top pack tighter due to bulk discount; accepted for V1).
+**V2.0.0 margin math (templates, post-Apple 15% Small Business):**
+- COGS: ~$1.32/template gen (NBP regen $0.05 + Kling Motion Control)
+- Per-pack margin: Small +$2.45 (41%), Mid +$5.67 (35%), Top +$8.04 (32%) — healthy across the board
+- Per-credit retail: $0.1198 / $0.1066 / $0.0999 — top pack has lowest per-credit (badge target)
 
 **How to apply:**
 - Do NOT design features that assume "signed-in = free unlimited." Every gen costs credits, regardless of auth state.

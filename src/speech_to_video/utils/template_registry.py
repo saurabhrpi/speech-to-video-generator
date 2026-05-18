@@ -42,14 +42,25 @@ Document shape:
       "hero_order": int | None,                # Sort key inside the hero carousel
                                                # (ascending). Ties break on title.
                                                # Null/missing → sorts last.
+      # S67 — Per-template audio control (replaces S66 hardcoded silence policy)
+      "audio_enabled": bool | None,            # Pipeline A only: when True, the
+                                               # dispatcher passes
+                                               # keep_original_sound="yes" to Kling
+                                               # so the output retains the driving
+                                               # video's audio. Default false
+                                               # (silent, matches the S66 dev/test
+                                               # default). Flip per-template via
+                                               # scripts/set_template_audio.py.
       "created_at": server timestamp,
       "updated_at": server timestamp,
     }
 
 Schema locked S60 (2026-05-09); see AIV-10. Extended S66 with use_nbp_regen +
-nbp_framing_hint (Pipeline A NBP regen — non-breaking additive). No i18n at V2
-launch. No version history at the registry layer — create new template entries
-(e.g. `bombale-v2`) when assets change.
+nbp_framing_hint (Pipeline A NBP regen — non-breaking additive). Extended S67
+with audio_enabled (replaces the hardcoded silence in the motion-transfer
+dispatcher — non-breaking additive). No i18n at V2 launch. No version history
+at the registry layer — create new template entries (e.g. `bombale-v2`) when
+assets change.
 """
 from __future__ import annotations
 

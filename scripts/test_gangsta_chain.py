@@ -145,7 +145,7 @@ def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int,
     return 1, ""
 
 
-def run_kling(edited_image_path: str, out_dir: Path) -> int:
+def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False) -> int:
     settings = get_settings()
 
     selfies_bucket = settings.r2_selfies_bucket
@@ -162,7 +162,7 @@ def run_kling(edited_image_path: str, out_dir: Path) -> int:
     )
 
     client = KlingMotionClient()
-    log.info("Kling submit  driving=%s", GANGSTA_DRIVING_VIDEO)
+    log.info("Kling submit  driving=%s  keep_audio=%s", GANGSTA_DRIVING_VIDEO, keep_audio)
     log.info("Kling prompt:\n%s", GANGSTA_KLING_PROMPT)
 
     t0 = time.time()
@@ -171,7 +171,7 @@ def run_kling(edited_image_path: str, out_dir: Path) -> int:
         video_url=GANGSTA_DRIVING_VIDEO,
         character_orientation="image",
         prompt=GANGSTA_KLING_PROMPT,
-        keep_original_sound="no",
+        keep_original_sound="yes" if keep_audio else "no",
     )
     elapsed = time.time() - t0
 
@@ -213,6 +213,11 @@ def main():
     )
     ap.add_argument("--no-kling", action="store_true", help="Run NBP only, skip Kling")
     ap.add_argument(
+        "--keep-audio",
+        action="store_true",
+        help="Pass keep_original_sound=yes to Kling (default: no, per S66 test policy)",
+    )
+    ap.add_argument(
         "--out-dir",
         default=str(Path.home() / "Downloads"),
         help="Where to write outputs (default: ~/Downloads)",
@@ -243,7 +248,7 @@ def main():
         print("\nSKIP  Kling  (--no-kling)")
         return 0
 
-    return run_kling(edited_path, out_dir)
+    return run_kling(edited_path, out_dir, keep_audio=args.keep_audio)
 
 
 if __name__ == "__main__":

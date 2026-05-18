@@ -100,7 +100,7 @@ CREDIT_COSTS: Dict[tuple, int] = {
     ("hailuo", 10): 10,
 }
 
-_ANON_STARTER_CREDITS = 10
+_ANON_STARTER_CREDITS = 25  # V2.0.0 bump (was 10) — covers one template gen (23 cr) so anons can try one for free
 
 
 def _cost_table_public() -> Dict[str, Dict[str, int]]:

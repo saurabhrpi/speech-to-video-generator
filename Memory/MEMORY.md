@@ -3,7 +3,7 @@
 - [Expo Migration](project_expo_migration.md) -- Migrated from Capacitor to Expo (React Native) based on friend's advice
 - [User Profile](user_profile.md) -- iOS app business goals, friend with successful iOS app
 - [NOW.md Frequency](feedback_now_md.md) -- Only update NOW.md at end of session, not mid-work
-- [NOW.md Carryover Rule](feedback_now_md_carryover.md) -- Don't drop unresolved Open Questions at /close; trim only when resolved or moved to a tracked artifact
+- [NOW.md Carryover Rule](feedback_now_md_carryover.md) -- Don't drop unresolved at /close; trim only when resolved or migrated. Open Questions cap = top ~10, prefer untracked; exceed 10 only for untracked items that wouldn't otherwise fit (never pad with tracked). Never include commit history.
 - [Summary Scope](feedback_summary_delta.md) -- /summary = summarize ALL uncommitted changes since last commit, no delta logic
 - [Replit Log Format](reference_replit_logs.md) -- How to read exported Replit backend logs (4 lines per row)
 - [Analyze Before Concluding](feedback_analysis_depth.md) -- Don't jump to lazy conclusions; analyze evidence, think multi-directionally, make defensible arguments
@@ -107,4 +107,6 @@
 - [Don't overload V-terms](feedback_dont_overload_v_terms.md) -- V1/V2/V2.1+/Timelapse-Phase-2 are reserved for project release names; use descriptive labels (baseline, iteration_1, dates) for everything else
 - [Absolute overlay buttons silently die on iOS](feedback_absolute_overlay_button_intercept.md) -- When absolute-positioned Pressable swallows touches with no onPressIn, refactor to flow layout instead of hunting the interceptor
 - [⚠️ DO NOT OVERFIT PROMPTS ⚠️](feedback_no_overfit_prompts.md) -- Prompt cores stay GENERIC across all inputs; specifics (wardrobe, framing, pose, content) live in per-row config (Firestore template fields), NEVER in the prompt string. Overfitting = ML overfitting.
-- [Kling audio off during testing](project_kling_audio_test_policy.md) -- All Kling Motion Control dev/test runs pass keep_original_sound="no"; audio only flips to "yes" at launch as an explicit per-template decision
+- [Kling audio off during testing](project_kling_audio_test_policy.md) -- S67: hardcoded silence replaced by per-template template.audio_enabled flag; default off; spike scripts default silent with --keep-audio override
+- [NBP may fail on UI overlays](feedback_nbp_wont_remove_ui_overlays.md) -- Inconsistent: Gangsta stripped X+caption on first try, Baby Dance didn't across 2 tries; if it fails once, fall back to Pillow pre-crop rather than iterating on the prompt
+- [Pillow tittle positioning is fragile](feedback_pillow_tittle_positioning.md) -- For precise icon/logo composition, draw primitives from scratch rather than retrofitting decorations on rendered glyphs

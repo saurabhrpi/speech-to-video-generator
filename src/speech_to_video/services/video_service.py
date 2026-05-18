@@ -960,15 +960,18 @@ class VideoService:
 
         progress(phase="kling_motion_control", template_id=template["id"])
         client = self._resolve_motion_client(template["id"])
+        # S67: per-template audio control replaces the S66 hardcoded silence.
+        # template.audio_enabled True → keep_original_sound="yes" (output keeps
+        # the driving-video soundtrack). Default missing/False stays silent
+        # so the dispatcher's behavior is unchanged for templates that haven't
+        # explicitly opted in. Flip per-template via scripts/set_template_audio.py.
+        keep_sound = "yes" if template.get("audio_enabled") else "no"
         result = client.generate_and_poll(
             image_url=character_url,
             video_url=driving_video,
             character_orientation="image",  # Outcome 2: motion-onto-character
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
-            # S66 testing policy (Memory/project_kling_audio_test_policy.md):
-            # all motion-transfer runs are silent until launch. At launch, flip
-            # to a per-template config field, not back to client default.
-            keep_original_sound="no",
+            keep_original_sound=keep_sound,
         )
         if not result.get("success"):
             return {
