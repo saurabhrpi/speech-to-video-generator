@@ -107,8 +107,13 @@ function HeroSection({ items }: { items: Template[] }) {
           decelerationRate="fast"
           onMomentumScrollEnd={onMomentumScrollEnd}
         >
-          {items.map((t) => (
-            <HeroCard key={t.id} template={t} onPress={() => router.push(`/template/${t.id}` as any)} />
+          {items.map((t, i) => (
+            <HeroCard
+              key={t.id}
+              template={t}
+              isActive={i === activeIndex}
+              onPress={() => router.push(`/template/${t.id}` as any)}
+            />
           ))}
         </ScrollView>
       ) : (
@@ -153,7 +158,15 @@ function HeroSection({ items }: { items: Template[] }) {
   );
 }
 
-function HeroCard({ template, onPress }: { template: Template; onPress: () => void }) {
+function HeroCard({
+  template,
+  isActive,
+  onPress,
+}: {
+  template: Template;
+  isActive: boolean;
+  onPress: () => void;
+}) {
   const videoUrl =
     template.assets?.preview_video_url ?? template.assets?.driving_video_url;
   return (
@@ -165,7 +178,7 @@ function HeroCard({ template, onPress }: { template: Template; onPress: () => vo
           resizeMode={ResizeMode.COVER}
           isLooping
           isMuted
-          shouldPlay
+          shouldPlay={isActive}
         />
       ) : (
         <View style={[styles.heroMedia, styles.heroMediaPlaceholder]}>
