@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   ScrollView,
+  FlatList,
   StyleSheet,
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -201,26 +203,63 @@ function pickHeroItems(templates: Template[]): Template[] {
 }
 
 function CategoryRow({ category, items }: { category: string; items: Template[] }) {
+  // Track which template IDs are currently in the viewport. Initialize with
+  // the first 3 so the row isn't black on mount (before onViewableItemsChanged
+  // fires for the first time).
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(
+    () => new Set(items.slice(0, 3).map((t) => t.id)),
+  );
+
+  // RN requires viewabilityConfig + onViewableItemsChanged to be stable refs;
+  // changing them between renders throws at runtime.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      setVisibleIds(new Set(viewableItems.map((v) => (v.item as Template).id)));
+    },
+  ).current;
+
   return (
     <View style={styles.rowWrap}>
       <Text style={styles.sectionTitle}>{prettyCategory(category)}</Text>
-      <ScrollView
+      <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.rowScroll}
-      >
-        {items.map((t) => (
-          <TemplateTile key={t.id} template={t} />
-        ))}
-      </ScrollView>
+        data={items}
+        keyExtractor={(t) => t.id}
+        renderItem={({ item }) => (
+          <TemplateTile template={item} isVisible={visibleIds.has(item.id)} />
+        )}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        initialNumToRender={4}
+      />
     </View>
   );
 }
 
-function TemplateTile({ template }: { template: Template }) {
+function TemplateTile({
+  template,
+  isVisible,
+}: {
+  template: Template;
+  isVisible: boolean;
+}) {
   const router = useRouter();
   const videoUrl =
     template.assets?.preview_video_url ?? template.assets?.driving_video_url;
+  const videoRef = useRef<Video>(null);
+
+  // Per AIV-92 contract: when a tile scrolls back into view, restart from
+  // frame 0 (TikTok-style). Initial-mount play comes "free" from the Video's
+  // own load behavior. replayAsync is a no-op if the source isn't ready yet,
+  // and shouldPlay={isVisible} handles the off-screen pause case.
+  useEffect(() => {
+    if (isVisible) {
+      videoRef.current?.replayAsync().catch(() => {});
+    }
+  }, [isVisible]);
 
   const onPress = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -231,12 +270,13 @@ function TemplateTile({ template }: { template: Template }) {
     <Pressable style={styles.tile} onPress={onPress}>
       {isUsableMediaUrl(videoUrl) ? (
         <Video
+          ref={videoRef}
           source={{ uri: videoUrl }}
           style={styles.tileThumb}
           resizeMode={ResizeMode.COVER}
           isLooping
           isMuted
-          shouldPlay
+          shouldPlay={isVisible}
         />
       ) : (
         <View style={[styles.tileThumb, styles.tileThumbPlaceholder]}>
