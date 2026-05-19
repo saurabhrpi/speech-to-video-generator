@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 
-EFFECTIVE_DATE = "May 2, 2026"
+EFFECTIVE_DATE = "May 18, 2026"
 SUPPORT_EMAIL = "support@speech-2-video.ai"
 GOVERNING_LAW_JURISDICTION = "the State of Tennessee, United States"
 GOVERNING_LAW_VENUE = "Davidson County, Tennessee"
@@ -79,6 +79,12 @@ _PRIVACY_BODY = f"""
       <li><strong>MiniMax</strong> receives your text prompt and returns a generated video clip (Hailuo).</li>
     </ul>
     Before any data is sent for the first time, the App shows an in-app disclosure listing these providers and the data they receive, and asks for your consent. These providers handle your data under their own privacy policies, which we have reviewed to confirm they provide equal or better protection of your information. Links: <a href="https://openai.com/policies/privacy-policy">OpenAI Privacy Policy</a>, <a href="https://www.minimax.io/legal/privacy-policy">MiniMax Privacy Policy</a>.</li>
+  <li><strong>Photos you upload.</strong> Some templates ask you to provide a photo of yourself (a "selfie") so the AI can apply a motion to your likeness. When you tap Generate on one of these templates:
+    <ul>
+      <li>Your photo is uploaded to <strong>Cloudflare R2</strong> — our object storage — under a randomized key tied to your account.</li>
+      <li>The R2 URL and your template choice are sent to <strong>Kling AI</strong> (Kuaishou Technology), which generates a video clip applying the template's motion to your photo and returns a video URL.</li>
+    </ul>
+    We retain your uploaded photo so the resulting video can be regenerated or troubleshot. You can delete it at any time by deleting your account (Settings → Danger Zone → Delete Account), which also removes any associated stored photos. Kling AI handles your data under its own privacy policy.</li>
   <li><strong>Generated videos.</strong> URLs to your generated videos are stored on our servers under your account identifier so you can access them from the App's gallery. The video files themselves are hosted by the AI providers.</li>
 </ul>
 
@@ -87,7 +93,7 @@ _PRIVACY_BODY = f"""
 <p><strong>Information we do NOT collect.</strong></p>
 <ul>
   <li>We do not run third-party analytics, advertising SDKs, or remote crash reporters.</li>
-  <li>We do not collect device identifiers, location, contacts, photo library, or any microphone data beyond the audio you actively record for transcription.</li>
+  <li>We do not collect device identifiers, location, contacts, or any microphone or camera data beyond what you actively share (audio you record for transcription, or a photo you explicitly pick for a template). We do not access your photo library; you choose a single photo via iOS's standard picker, and only that photo is uploaded.</li>
 </ul>
 
 <h2>How we use information</h2>
@@ -108,11 +114,13 @@ _PRIVACY_BODY = f"""
   <li><strong>RevenueCat</strong> — purchase verification</li>
   <li><strong>OpenAI</strong> — audio transcription (Whisper)</li>
   <li><strong>MiniMax (Hailuo)</strong> — text-to-video generation</li>
+  <li><strong>Kling AI</strong> (Kuaishou Technology) — image-and-template-to-video generation</li>
+  <li><strong>Cloudflare R2</strong> — object storage for uploaded photos and template assets</li>
   <li><strong>Replit</strong> — backend hosting</li>
 </ul>
 
 <h2>Data retention and deletion</h2>
-<p>You can permanently delete your account from inside the App: <em>Settings → Danger Zone → Delete Account</em>. Deletion removes your authentication record, your credit balance, and all generated video URLs and metadata associated with your account. This action is irreversible.</p>
+<p>You can permanently delete your account from inside the App: <em>Settings → Danger Zone → Delete Account</em>. Deletion removes your authentication record, your credit balance, any photos you uploaded, and all generated video URLs and metadata associated with your account. This action is irreversible.</p>
 <p>Generated video files hosted by AI providers are retained per those providers' own policies; we cannot recall them on your behalf.</p>
 
 <h2>Children</h2>
@@ -147,11 +155,12 @@ _TERMS_BODY = f"""
 <h2>3. Acceptable use</h2>
 <p>You may not use the App to generate or distribute content that:</p>
 <ul>
+  <li>Contains a photo of any person whose explicit permission you do not have to use their likeness for AI-generated content</li>
   <li>Is illegal, defamatory, harassing, or infringes the rights of others</li>
   <li>Sexualizes or harms minors in any way</li>
   <li>Promotes violence, self-harm, or hatred toward any group</li>
   <li>Impersonates a real person without their consent</li>
-  <li>Violates the policies of the underlying AI providers (OpenAI, MiniMax)</li>
+  <li>Violates the policies of the underlying AI providers (OpenAI, MiniMax, Kling AI)</li>
 </ul>
 <p>We reserve the right to revoke your access if we determine you have violated this section.</p>
 
@@ -200,7 +209,7 @@ _SUPPORT_BODY = f"""
 <h2>Common questions</h2>
 
 <h3>How do credits work?</h3>
-<p>One video = 10 credits. New users get 10 free credits — enough for one free video. When you want more, buy a credit pack from the in-app paywall: $4.99 for 50 credits (5 videos), $9.99 for 120 credits (12 videos), or $19.99 for 250 credits (25 videos). Credits never expire.</p>
+<p>One video = 25 credits. New users get 25 free credits — enough for one free video. When you want more, buy a credit pack from the in-app paywall: $5.99 for 50 credits (2 videos), $15.99 for 150 credits (6 videos), or $24.99 for 250 credits (10 videos). Credits never expire.</p>
 
 <h3>Where are my generated videos stored?</h3>
 <p>Each generated video is saved in your in-app Gallery. From there you can save it to your Camera Roll, share via the iOS share sheet, or delete it.</p>
