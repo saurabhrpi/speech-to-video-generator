@@ -2,61 +2,66 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 67 — 2026-05-17 — branch `v2`
+## Current Session: 70 — 2026-05-19/20 — branch `v2`
 
-**Status:** V2.0.0 wired end-to-end on local. 3 Pipeline A templates live (Bombale hero #0, Gangsta hero #1, Baby Dance hero #2). App rebranded to AIVO (icon + splash + app.json `name`). Pricing locked at $5.99 / $15.99 / $24.99. `template.audio_enabled` schema in place, all templates currently silent. Awaiting user-side `expo prebuild`, ASC manual steps, and EAS build for TestFlight.
+**Status:** Beat It template shipped end-to-end (NBP → Kling → R2 → Firestore PUBLISHED, in new `mj_dances` row). 1 of 5 new V2.1 dance templates complete. V2.0.0 still in App Review. V2.0.1 backlog grew significantly with bugs surfaced during real-iPhone testing of Beat It.
 
 ## What happened this session
 
-**Two new Pipeline A templates shipped end-to-end.**
-- **Gangsta** (`viral-dances-gangsta`, hero #1) — NBP Edit on `gangsta_reference.png` (outfit → beige blazer + white tee + light chinos, bg → lighter urban alley, UI overlay stripped) → Kling Motion Control → preview rendered → seeded Firestore → published. Audio-on test pass (`keep_original_sound="yes"`) — soundtrack clean, sync intact.
-- **Baby Dance** (`viral-dances-baby-dance`, hero #2) — Same flow. Twist: where Gangsta's NBP run had cleanly stripped the X + caption strip on first try, Baby Dance's first two NBP runs (with increasingly emphatic prompts) both retained the overlays. Resolved by pre-cropping the input image (Pillow: crop bottom 19%, mask top-left 220×220 with sampled wall color) before passing to NBP — worked first try on the cleaned input. Output landed cleanly: lavender ruffle top + tiered pink tulle skirt + leggings, pastel forest mural playroom. Memory saved: `feedback_nbp_wont_remove_ui_overlays.md`.
+**Template-creation runbook written + locked.** `docs/V2_template_creation_runbook.md` + pointer in CLAUDE.md. Step-by-step procedure for V2 dance templates: source assets → Pillow-crop PNG → write `test_<slug>_chain.py` (bespoke NBP prompt for marketing preview only — production uses generic regen) → upload driving video to R2 → run NBP → review → run Kling → review → upload preview → write `seed_<slug>_template.py` (DRAFT) → sim test → flip published. User flagged hard early on that I'd deviated from the per-template sister-script pattern (had bundled into a generic CONFIG dict); reverted + documented to prevent recurrence.
 
-**Mobile carousel now prefers `preview_video_url` over `driving_video_url`.** Tile/hero/template-detail screens fall back to driving only when preview is unset — so Bombale (preview null) stays as-is, Gangsta + Baby Dance show the Kling output (motion applied to a stand-in character).
+**Beat It template — 5 iterations to land.** Started with 576×1024 TikTok-downloader source + dark dusk-alley NBP scene → Kling output had "floating dancer" + "jacket disappears" artifacts. Diagnosed two compound issues: (1) low-res driver loses pose detail, (2) dark-on-dark NBP scene loses silhouette contrast. Fixed in stages:
+- **(v1)** Upscaled Beat_It_clip.mp4 576×1024 → 1080×1920 via Replicate `lucataco/real-esrgan-video` (~$0.02, 226s). Required URL-input (not local file) — see new memory.
+- **(v2)** Discovered TikTok+username watermarks bouncing across the frame; user pulled a no-watermark TikTok export with only "channeling that MJ energy" text caption remaining. My delogo box was too tall (h=110) and overlapped the smoke detector on certain frames → ceiling artifacts. Tightened to h=60; still hit the dancer's arm at peak-extension frames.
+- **(v3)** Switched to stream-copy crop of the no-watermark clip with text-caption intact; gambled on Kling ignoring it. Output much better but dancer still "floated" — ground plane mismatch (driving video had parquet floor; my NBP edit had alley asphalt).
+- **(v4)** Regenned NBP edit with indoor industrial loft (hardwood floor + brick + warm pendants). Floor matched; floating reduced but not eliminated.
+- **(v5, final)** User provided alternate source `Beat_It_YT.mp4` — different dancer in MJ Beat It cosplay (red jacket), static camera, hardwood floor, LCD TV with original Beat It MV playing in left ~35% of frame. Concern that Kling would get distracted by the LCD; tested + masked version, user rejected mask as "horrible" (black box obscured dancer's arm at extensions). Went raw with LCD intact → Kling handled it cleanly, accepted as final.
 
-**Hero pager page indicator.** Lined pills at the bottom of the hero (active widens, 18×4 vs 6×4 inactive). Auto-hides at <=1 hero. Renders on `onMomentumScrollEnd`.
+Beat It final state: `viral-dances-beat-it` PUBLISHED, `category=mj_dances`, `audio_enabled=True`, `credit_cost=25`, `use_nbp_regen=True`, `nbp_framing_hint="Composition: full body standing pose, head to feet."`. Driver + preview on R2. CDN purged + verified byte-identical to local.
 
-**Category row sort.** `groupByCategory` sorts items within each category by `created_at` ascending so newly-added templates land at the end of the row instead of arbitrary Firestore order.
+**New "MJ Dances" row landed.** Beat It moved from `viral_dances` to `mj_dances`. Discovered + memorialized that `ref.update({field})` does NOT bump `updated_at`, so the `/api/templates` ETag stays the same and mobile 304s indefinitely — user reported "not showing on iPhone" → diagnosed → bumped `updated_at` via `SERVER_TIMESTAMP` → ETag changed → iPhone saw new row immediately. `mobile/app/index.tsx` has `CATEGORY_LABEL_OVERRIDES` mapping `mj_dances → "MJ Dances"` but that change rides V2.0.1 — current V2.0.0 binary renders the label as "Mj Dances" (mechanical title-case) until then.
 
-**`template/[id].tsx` close button fixed.** Same flow-layout HeaderRow refactor as `clip/[id].tsx` (S66) — replaced the absolute X overlay with a back chevron in flow layout. iOS was silently swallowing touches on the Pressable above the expo-av Video. NOW.md open question #3 resolved.
+**Memories added/updated:**
+- `reference_replicate_url_input_only.md` — local file upload to Replicate is busted; pre-upload to R2 and pass URL. Misleading "Cog: upload output files" error with <10s predict_time = INPUT-fetch crash.
+- `reference_firestore_partial_update_etag.md` — partial updates don't bump `updated_at`; clients get 304s forever. Include `updated_at=SERVER_TIMESTAMP` in every partial update.
+- `project_kling_audio_test_policy.md` UPDATED — dance templates ship with `audio_enabled=True`; home-tile mutes client-side via `isMuted`; V3 will introduce audio-swap. Superseded the S66/S67 "default off" stance.
 
-**Thumbnail retry with exp backoff.** `gallery-store` `runPoll` now retries `generateThumbnail` at 1s / 2s / 4s before falling through to the hydration backfill safety net. NOW.md open question #6 resolved.
+**V2.0.1 backlog grew significantly (locked S70):**
+- Existing: AIV-92, version label fix, CLAUDE.md credit-constant drift fix, app.json buildNumber bump 14→15.
+- **NEW: iOS audio fix** — call `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` in `_layout.tsx`. Without it, video audio honors iPhone silent switch (verified by user on real device — no sound until they flipped the side switch).
+- **NEW: MJ Dances category label** — already in code (`CATEGORY_LABEL_OVERRIDES` in mobile/app/index.tsx), needs to ship.
+- **NEW: Share-button second-tap bug** — `mobile/app/clip/[id].tsx:57-60` throws "Destination already exists" because dest dir from prior Share persists. Fix: `if (dest.exists) dest.delete(); dest.create();` before download. User repro at `~/Downloads/Sharing_Failed_Error.png`.
+- **NEW: Home-screen CPU + scroll behavior** — with MJ row, currently 5 concurrent video decoders (1 hero + 3 row-1 + 1 row-2). Competitor pattern: 2.5 tiles per row + pause+dim hero on scroll. **Locked S70**: tile width 33% → **45%**, `viewabilityConfig.itemVisiblePercentThreshold` 50 → **100**, initial `visibleIds` seed 3 → **2**, hero `isActive={... && scrollY < HERO_H}` + animated black overlay 0→0.5 opacity across 0→HERO_H scrollY. All in `mobile/app/index.tsx`.
 
-**V2.0.0 pricing locked.**
-- Anon starter: 10 → 25 credits (covers one 23-cr template gen).
-- Packs: `pro_pack_50` $5.99/50, `pro_pack_120` $15.99/**150** (SKU name retains "120"; ASC display name must read "150 Credits"), `pro_pack_250` $24.99/250.
-- Per-credit: $0.1198 / $0.1066 / $0.0999 — top pack reclaims BEST_VALUE badge (lowest per-credit).
-- Per-pack margins at $1.32 COGS: 41% / 35% / 32%. Memory `project_monetization_model.md` rewritten for V2.0.0.
+## Next step — Session 71 (on resume)
 
-**Audio control flipped to per-template.** `template.audio_enabled` schema field added; `_dispatch_motion_transfer` reads it; `scripts/set_template_audio.py` CLI mirrors `set_template_hero.py`. Spike scripts default silent with a `--keep-audio` flag for explicit audio testing. Memory `project_kling_audio_test_policy.md` rewritten. NOW.md open question #7 resolved.
+**Continue V2.1 template rollout (4 more):**
 
-**App icon + splash rebranded to AIVO.** Locked design: minimalist Bodoni 72 Bold lowercase "a" with a single white dot above, on solid black (icon) / `#1C1614` (splash). Both 1024×1024, no alpha. Files dropped in `mobile/assets/images/icon.png` + `splash-icon.png`. Three earlier directions (wordmark + cyan star, big "a" + red star + trail variants, big "a" + light blue star) were explored and rejected in favor of minimalism. Memory `feedback_pillow_tittle_positioning.md` saved from the design iterations.
+Priority order based on source quality:
+1. **Pinky Up** — source already 1080×1920, no upscale. Pillow-crop PNG → write `test_pinky_up_chain.py` (pastel-pink hoodie + black biker shorts + white sneakers, pink-painted studio with soft neon accent — S70 approved direction) → NBP review → Kling review → seed.
+2. **Rasputin** — source already 1080×1920, no upscale. Same flow. Approved direction: black turtleneck + brown corduroy + boots, smoky lounge with red velvet drapes + warm chandelier.
+3. **Smooth Criminal** — source 576×1024, needs Replicate upscale first (use `scripts/upscale_driving_video.py` — URL input, FHD). Then same flow. Approved direction: tailored grey blazer + grey trousers + white sneakers, marble lobby with brass railings.
+4. **Bad** — source 576×1024, needs upscale. Same flow. Approved direction: charcoal hoodie + black ripped jeans + chunky sneakers, dimly-lit subway platform with tile walls. Category: `mj_dances` (with Beat It). Smooth Criminal also goes to `mj_dances`.
 
-**`app.json`:** `name` → "AIVO", `version` → "2.0.0". buildNumber stays at 14; EAS auto-increments on next build.
+**Tactical reminders:**
+- Per-template flow lives in `docs/V2_template_creation_runbook.md` — follow it verbatim.
+- Each template costs ~25 Kling credits + a few cents NBP + R2 storage. Real-world spend per template ~$2-3.
+- After each preview is accepted, upload via `upload_template_assets.py`, purge CF cache, seed Firestore as DRAFT.
+- Verify production gen path on iPhone before flipping any of them to published (use `set_template_status.py`). Beat It is currently PUBLISHED but production gen path has NOT been verified — user moved on to other things mid-test. Worth flagging.
 
-**Committed + pushed** the bulk of session work (commit `0b1ba96` — V2 hero templates + preview_video + indicator pills) earlier in session. Subsequent changes (audio_enabled schema, pricing changes, icon assets, app.json rename) still uncommitted.
-
-## Next step — Session 68 (on resume)
-
-**Ship V2.0.0 to TestFlight.** Sequence:
-
-1. Commit the uncommitted bundle: app icon + splash, app.json rename + version bump, audio_enabled schema + dispatcher, scripts/set_template_audio.py, BEST_VALUE_PACK flip, PACK_CREDITS pro_pack_120=150, _ANON_STARTER_CREDITS=25, Memory updates.
-2. `npx expo prebuild --platform ios` (required after app.json name/version changes per `Memory/feedback_app_json_needs_prebuild.md`).
-3. Decide audio_enabled per template — most likely Bombale/Gangsta/Baby Dance all want audio on for the dance music. Flip each via `scripts/set_template_audio.py --template-id ... --enable`. If audio flips on, **re-render preview_video.mp4 with audio on** so the carousel autoplay has sound (current previews are silent).
-4. ASC manual steps (do BEFORE submitting the build): update IAP prices ($5.99 / $15.99 / $24.99), rename `pro_pack_120` IAP display to "150 Credits", change App Name to "AIVO", capture fresh screenshots from the V2 home with `xcrun simctl io booted screenshot`, verify privacy nutrition label includes "Photos" data type, iPad sim smoke pass.
-5. `eas build --platform ios --no-wait` → TestFlight → ASC submit for review.
+**V2.0.1 work (after V2.0.0 lands):**
+- All items above plus the 4 new ones logged in section 3 of the previous list.
+- One commit, EAS build, TestFlight submit. Metadata-only ASC update is sufficient (no new screenshots required unless we want to refresh the paywall one from a true 6.9" device).
 
 ## Open questions
 
-Top open items — Linear/AIV tracked items omitted unless load-bearing for the immediate next session.
-
-1. **(High) Audio decisions per launch template.** Bombale/Gangsta/Baby Dance all `audio_enabled=None` (silent) right now. Dance trends almost certainly want audio on. Decide, flip, re-render previews.
-2. **(High) Fresh ASC screenshots.** V2 home is dramatically different from V1 build #14 — different layout, hero pager, no tabs. Old screenshots will mislead reviewers. Capture native at 6.7" + 6.1" minimum.
-3. **(Medium) Re-render preview_video.mp4 with audio on.** If audio_enabled flips to true on a template, the existing silent preview will be inconsistent with the runtime output. Re-running each chain script with `--keep-audio` produces the audio-on preview. Same upload path applies.
-4. **(Medium) ASC App Name rename impact.** "Speech to Video" → "AIVO" might trigger Apple's "Name change" review path. Verify no extra paperwork required before submission.
-5. **(Medium) iPad sim pass.** Per `Memory/reference_supports_tablet_false_does_not_block_ipad.md`, reviewers can still pick iPad. Smoke test before submit.
-6. **(Medium) Privacy nutrition label review.** Selfie upload is new since V1 build #14 — confirm "Photos" data type is listed in ASC privacy section.
-7. **(Medium) Bombale published-status drift** (S64 carryover) — once flipped from `published` to `draft` between S63 close and S64 start; cause still unknown.
-8. **(Low) Coherence prompt scope.** Bombale's `prompt_template` (generic coherence principle) carried over verbatim to Gangsta + Baby Dance and worked. After 3 templates, could lock as dispatcher-only and drop the per-doc duplication.
-9. **(Low) Pattern smell on spike scripts.** Three nearly-identical `test_*_chain.py` + three nearly-identical `seed_*_template.py`. Generalize when template #4 lands.
-10. **(Low) Adult-on-baby-dance preview** — preview shows original child stand-in; at runtime an adult selfie gets the child's dance motion. Possibly uncanny but probably fine; flag if user reports come in post-launch.
+1. **(Medium, NEW S70) Beat It production gen path unverified.** Status is PUBLISHED; preview tile works on iPhone. Real end-user gen (upload selfie → Generate → confirm production NBP-regen path produces coherent output) was never completed before user pivoted to other tasks. If V2.0.0 ships before this is verified, real users will burn 25 credits on potentially-broken output. Recommendation: flip Beat It back to DRAFT until verified, OR verify it now via iPhone gen.
+2. **(Medium) RC Test Store prices for dev parity.** Update `pro_pack_50/120/250` prices in RC's Test Store catalog to match production ($5.99 / $15.99 / $24.99). Currently stale on dev sim. Not blocking launch.
+3. **(Medium) Bombale published-status drift** (S64 carryover). Spot-check during V2.0.0 review window.
+4. **(Low) Coherence prompt scope.** Now 4 published templates (Bombale + Gangsta + Baby Dance + Beat It); after Smooth Criminal + Pinky Up + Bad + Rasputin land, could lock as dispatcher-only and drop per-doc duplication.
+5. **(Low) Pattern smell on spike scripts.** Now 5 near-identical `test_*_chain.py` + 4 near-identical `seed_*_template.py`. Generalize after all 5 templates land (V2.1 ship complete) — NOT mid-build.
+6. **(Low) Adult-on-baby-dance preview.** Preview shows the child stand-in; runtime applies child motion to adult selfie.
+7. **(Low, S69) CLAUDE.md credit-constant drift.** `_ANON_STARTER_CREDITS = 10` listed; actual is 25. Fix in V2.0.1.
+8. **(Low, S69) Stale version label.** `mobile/app/settings.tsx:97` hardcodes "AIVO v1.0.0". Bump to 2.0.0 in V2.0.1.
+9. **(Low, NEW S70) Auto-bump `updated_at` on Firestore template writes.** Worth considering as a write-through hook in `template_registry.py` so future partial updates can't desync the ETag. Current workaround: include `updated_at=SERVER_TIMESTAMP` in every partial update, or use `upsert_template` (full replace).
+10. **(Low, NEW S70) `scripts/upload_template_assets.py` only matches canonical basename slots.** Tried to upload `driving_video_v2.mp4` — got "skip non-canonical file" warning. Would need a `_manifest.json` to whitelist. Worked around by calling `r2_client.upload_file` directly. Worth either: (a) extending the uploader to take an explicit key, or (b) documenting the `_manifest.json` escape in the runbook.
