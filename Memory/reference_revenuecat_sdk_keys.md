@@ -32,6 +32,7 @@ Purchases.configure({ apiKey });
 - Minimum RC iOS SDK version: 5.43.0 (we are on 10.0.1).
 - Test purchases flow through CustomerInfo like real ones — entitlements activate, webhooks fire.
 - Switch to `appl_` key before uploading to TestFlight — Test Store products don't exist in Apple's catalog.
+- **Prices on Test Store products are set independently in the RC dashboard** — they do NOT track ASC. Changing prices in ASC has zero effect on the dev sim paywall. For dev parity, update Test Store prices in RC separately whenever ASC prices change (S68 — wasted hours debugging stale paywall before realizing this). For App Store marketing screenshots that need production prices, capture from a TestFlight production build (uses `appl_` key → real StoreKit) — never from the dev sim.
 
 **How to apply:**
 - When setting up RC for a new Expo project, grab BOTH keys during onboarding, not just the App Store one. Otherwise simulator testing is blocked.

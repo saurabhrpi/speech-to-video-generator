@@ -1,15 +1,18 @@
 ---
 name: kling-audio-test-policy
-description: S67 launch-time flip — audio is controlled per-template via Firestore template.audio_enabled, default off. Spike scripts still default to silent.
+description: Dance templates ship with audio ON (audio_enabled=True). The driving video's soundtrack rides through into the gen output. Home-screen tile mutes client-side via isMuted. V3 will introduce an audio-swap step.
 metadata:
   type: project
 ---
 
-S67 update: the S66 hardcoded `keep_original_sound="no"` in `_dispatch_motion_transfer` is gone. The motion-transfer dispatcher now reads `template.audio_enabled` (Firestore field) and passes `"yes"` when the flag is true, `"no"` otherwise. Default missing/False = silent, matches the original test-policy default so behavior is unchanged for templates that haven't been explicitly opted in.
+**Current stance (S70, user-affirmed):** All Pipeline A dance templates ship with audio ON. The driving video's audio passes through Kling Motion Control into the gen output, and plays back during detail-screen preview + generated-gen playback. The home grid mutes regardless via `isMuted` on the `<Video>` component (`mobile/app/index.tsx`) so multiple auto-playing tiles never blare music at once.
 
-**Why:** Per-template control was the planned exit from the S66 hardcoded policy. Each template can have a different audio decision based on whether the driving-video soundtrack is good (music dance trends → audio on) or distracting (background ambient → audio off).
+**Why:** The audio is part of the dance experience — Beat It, Smooth Criminal, Bad, Rasputin, Pinky Up all have a song that defines the move. Users expect to hear it. V3 will introduce an audio-swap step (licensed/royalty-free replacement); until then, the driving video's audio rides through. Copyright is a known V3-deferred concern, not a V2 blocker.
 
 **How to apply:**
-- Spike scripts (`scripts/test_*_chain.py`): default to silent. Use `--keep-audio` flag when you specifically want to test audio output for a template (added on `test_gangsta_chain.py` S67).
-- Prod dispatcher: reads `template.audio_enabled` per gen. No code edit needed to flip a template's audio — use `scripts/set_template_audio.py --template-id ... --enable/--disable`.
-- For V2.0.0 launch: walk each Pipeline A template and decide individually. Default off remains a safe ship state — only flip on after verifying the driving-video audio is on-brand for that template (kid templates may want music off; dance-trend templates almost certainly want music on).
+- **Seed:** `audio_enabled: True` in the per-template Firestore fixture.
+- **Spike chain:** pass `--keep-audio` to `scripts/test_<slug>_chain.py` so the preview asset has audio.
+- **Production dispatcher:** reads `template.audio_enabled`. Flip via `scripts/set_template_audio.py --template-id ... --enable/--disable` (no code change).
+- **Home tile:** muted client-side, not template-controlled. Do not try to mute via `audio_enabled=False` — that would also silence the detail-screen playback.
+
+**Superseded:** The S66/S67 "default off / spike scripts default silent" stance applied during early development. For shipping dance templates, that default no longer holds. New non-dance templates (kid content, ambient B-roll, scene-insertion) can still ship silent on a per-template basis.
