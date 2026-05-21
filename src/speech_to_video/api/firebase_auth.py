@@ -109,4 +109,6 @@ def verify_firebase_token(authorization: Optional[str] = Header(default=None)) -
     """FastAPI dep: require a valid Firebase ID token. Returns user dict."""
     token = _extract_token(authorization)
     claims = _decode_token(token)
-    return _user_from_claims(claims)
+    user = _user_from_claims(claims)
+    logger.info("auth uid=%s anon=%s provider=%s", user["uid"], user["is_anonymous"], user["provider"] or "-")
+    return user
