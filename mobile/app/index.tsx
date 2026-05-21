@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -31,8 +31,13 @@ function isUsableMediaUrl(url: string | null | undefined): url is string {
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HERO_H = Math.round(SCREEN_H * 0.4);
 
-const TILE_W = 140;
-const TILE_H = 200;
+// Tile sizing (S71): width = 40% of screen. Height keeps the original
+// 140:200 aspect (~7:10) so the video thumb doesn't crop or letterbox when
+// the width grows. At 40% two tiles fit fully and the third peeks ~40% — a
+// clear scroll-affordance hint. (45% pre-tightened ~5-10% of the third tile,
+// which read as "row ends here" rather than "scroll right.")
+const TILE_W = Math.round(SCREEN_W * 0.40);
+const TILE_H = Math.round(TILE_W * (10 / 7));
 
 export default function HomeScreen() {
   const templates = useTemplateStore((s) => s.templates);
@@ -42,6 +47,20 @@ export default function HomeScreen() {
   const hydrate = useTemplateStore((s) => s.hydrate);
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
   const router = useRouter();
+
+  // Slider-phone pattern: hero is a fixed background layer; content scrolls
+  // OVER it. The freeze flag flips when scrolled past HERO_H (content has
+  // fully covered the hero). State only changes when crossing the threshold,
+  // so we don't re-render on every scroll frame.
+  const [heroFrozen, setHeroFrozen] = useState(false);
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const frozen = e.nativeEvent.contentOffset.y >= HERO_H;
+      setHeroFrozen((prev) => (prev !== frozen ? frozen : prev));
+    },
+    [],
+  );
+
   useEffect(() => {
     // Hydrate first so cold-start shows cached templates immediately, then
     // re-fetch in the background. fetch sends If-None-Match → 304 keeps the
@@ -57,11 +76,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Plain single-scroll layout: hero scrolls off naturally with the rest
+          of the content. Sticky / slider-phone hero layering was attempted but
+          reverted in S71 — the native UIScrollView pan-gesture recognizer
+          always wins over JS pointerEvents in any overlap region, starving
+          the hero of touches. Tracked separately for future work. */}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
-        <HeroSection items={heroItems} />
+        <HeroSection items={heroItems} frozen={heroFrozen} />
 
         {!hydrated || (loading && templates.length === 0) ? (
           <SkeletonRows />
@@ -88,7 +114,13 @@ export default function HomeScreen() {
   );
 }
 
-function HeroSection({ items }: { items: Template[] }) {
+function HeroSection({
+  items,
+  frozen,
+}: {
+  items: Template[];
+  frozen: boolean;
+}) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const creditBalance = useAuthStore((s) => s.creditBalance);
@@ -113,7 +145,7 @@ function HeroSection({ items }: { items: Template[] }) {
             <HeroCard
               key={t.id}
               template={t}
-              isActive={i === activeIndex}
+              isActive={i === activeIndex && !frozen}
               onPress={() => router.push(`/template/${t.id}` as any)}
             />
           ))}
@@ -204,15 +236,18 @@ function pickHeroItems(templates: Template[]): Template[] {
 
 function CategoryRow({ category, items }: { category: string; items: Template[] }) {
   // Track which template IDs are currently in the viewport. Initialize with
-  // the first 3 so the row isn't black on mount (before onViewableItemsChanged
-  // fires for the first time).
+  // the first 2 (~one screen-width of 45%-tiles) so the row isn't black on
+  // mount, but we don't seed extras that will immediately fail the strict
+  // 100% visibility threshold below.
   const [visibleIds, setVisibleIds] = useState<Set<string>>(
-    () => new Set(items.slice(0, 3).map((t) => t.id)),
+    () => new Set(items.slice(0, 2).map((t) => t.id)),
   );
 
   // RN requires viewabilityConfig + onViewableItemsChanged to be stable refs;
-  // changing them between renders throws at runtime.
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  // changing them between renders throws at runtime. 100% threshold = only
+  // fully-visible tiles get a live decoder, keeping concurrent video count
+  // bounded as the catalog grows.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 100 }).current;
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       setVisibleIds(new Set(viewableItems.map((v) => (v.item as Template).id)));
@@ -333,7 +368,14 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
+// Slug → display-label overrides. Mechanical title-case loses uppercase
+// abbreviations (e.g. "mj_dances" → "Mj Dances"); list those here.
+const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
+  mj_dances: 'MJ Dances',
+};
+
 function prettyCategory(c: string): string {
+  if (CATEGORY_LABEL_OVERRIDES[c]) return CATEGORY_LABEL_OVERRIDES[c];
   return c
     .split(/[_\-\s]+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))

@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
+  Linking,
 } from 'react-native';
 
 const PREVIEW_HEIGHT = Dimensions.get('window').height * 0.42;
@@ -88,9 +89,21 @@ export default function TemplateReviewScreen() {
   const canSubmit = !!selfieUri && !submitting && !blockedByInFlight;
 
   async function handlePickSelfie() {
+    // iOS shows the native permission sheet (Allow Full / Limited / Don't
+    // Allow) only on the FIRST call when status='undetermined' — once denied,
+    // the sheet never fires again and the only path is Settings. AIV-96:
+    // dad's iPhone fell through to the in-app Alert with no escape; surface
+    // Open Settings directly so the user isn't dead-ended.
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Photo access needed', 'Enable photo access in Settings to pick a selfie.');
+      Alert.alert(
+        'Photo access needed',
+        'AIVO needs access to your Photos to pick a selfie. Tap Open Settings, then enable Photos for AIVO.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
