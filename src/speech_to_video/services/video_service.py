@@ -966,26 +966,23 @@ class VideoService:
         # so the dispatcher's behavior is unchanged for templates that haven't
         # explicitly opted in. Flip per-template via scripts/set_template_audio.py.
         keep_sound = "yes" if template.get("audio_enabled") else "no"
-        # S73: explicit mode + model_name + character_orientation overriding client defaults.
-        #   character_orientation="video" — uses the full driving video up to 30s
-        #     (vs "image" which caps at 10s). Thriller + No Batidão ship with 15s
-        #     drivers; with "image" the runtime gen would truncate to 10s while
-        #     the preview shows the full 12-14s dance — bait-and-switch UX.
-        #     Per Memory/feedback_provider_mode_names_neq_outcomes.md (S58),
-        #     both orientations produce the same Outcome-2 (motion-onto-character)
-        #     — the difference is the duration cap, not the UX outcome.
-        #   mode="std" — runtime is the user's paid gen, std (720p) keeps
-        #     per-gen Kling cost ~$0.50 vs pro's ~$1; preview chain scripts
-        #     use pro for catalog-quality home-tile thumbnails.
-        #   model_name="kling-v2-6" — half cost vs v3 and ~1:1 native aspect
-        #     (S72 confirmed). Revisit v3 if real-user data shows v2.6's
-        #     facial-consistency gap matters.
+        # S74: runtime upgraded to v3 + pro for facial-consistency parity with
+        # the catalog previews. Cost rises ~4× over S73's v2.6+std (v3 ≈ 2× v2.6,
+        # pro ≈ 2× std → ~$2/gen Kling-side). Margin implication tracked at the
+        # template-level credit_cost (Firestore per AIV-36) — bump there if real
+        # user data warrants. Revert path: flip both args back to "std" / "kling-v2-6".
+        # character_orientation="video" stays from S73 — uses the full driving
+        # video up to 30s (vs "image" which caps at 10s). Thriller + No Batidão
+        # ship with 15s drivers; "image" would truncate to 10s while the preview
+        # shows the full 12-14s dance — bait-and-switch UX. Per S58
+        # (Memory/feedback_provider_mode_names_neq_outcomes.md), both orientations
+        # produce the same Outcome-2 (motion-onto-character).
         result = client.generate_and_poll(
             image_url=character_url,
             video_url=driving_video,
             character_orientation="video",  # Outcome 2; 30s cap (vs image's 10s)
-            mode="std",
-            model_name="kling-v2-6",
+            mode="pro",
+            model_name="kling-v3",
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
             keep_original_sound=keep_sound,
         )
@@ -1139,16 +1136,16 @@ class VideoService:
 
         progress(phase="kling_motion_control", template_id=template["id"])
         motion_client = self._resolve_motion_client(template["id"])
-        # S73: explicit mode + model_name (see Pipeline A site above for rationale).
-        # Pipeline B is dormant today (no shipping templates) but kept consistent
-        # with Pipeline A so a future Pipeline B template doesn't accidentally
-        # ship on the more-expensive client defaults.
+        # S74: matches Pipeline A — v3 + pro for facial-consistency parity with
+        # catalog previews. Pipeline B is dormant today (no shipping templates)
+        # but kept aligned with A so a future Pipeline B template doesn't ship
+        # on stale defaults. See Pipeline A site for cost/revert rationale.
         result = motion_client.generate_and_poll(
             image_url=composite_url,
             video_url=motion_video,
             character_orientation="video",  # I2V step on NBP-composited image (Pipeline B chain achieves Outcome 1; this mode alone does not — per S58)
-            mode="std",
-            model_name="kling-v2-6",
+            mode="pro",
+            model_name="kling-v3",
             prompt=(overrides or {}).get("motion_prompt"),
         )
         if not result.get("success"):
