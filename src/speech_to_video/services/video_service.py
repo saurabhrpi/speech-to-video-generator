@@ -966,23 +966,21 @@ class VideoService:
         # so the dispatcher's behavior is unchanged for templates that haven't
         # explicitly opted in. Flip per-template via scripts/set_template_audio.py.
         keep_sound = "yes" if template.get("audio_enabled") else "no"
-        # S74: runtime is v2.6 + pro + video. History:
-        #   - S73 shipped v2.6 + std (cost-optimized; ~$0.50/gen Kling-side).
-        #   - S74 first tried v3 + pro (~$2/gen) for facial-consistency parity
-        #     with the catalog previews. Bad/clean-driver templates improved,
-        #     but Smooth Criminal collapsed — v3 latched onto burned-in TikTok
-        #     UI overlays in its driving video that v2.6 had tolerated (portrait
-        #     aspect leak + hallucinated background characters). Rolled back.
-        #   - S74 also tested driving_video_url=preview_video_url as a fix
-        #     (Firestore flip on SC, runtime still on v3). Removed the UI-overlay
-        #     contamination but introduced new failure: Kling pulled scene context
-        #     from the polished preview (lined the user's wall with couches).
-        #     Reverted both the Firestore flip and the v3 model.
-        #   - Landed: v2.6 + pro + video. v2.6 = robustness against dirty/clean
-        #     driver variance + tolerated TikTok overlays on SC. pro = matches
-        #     catalog preview resolution so runtime output ≈ what users see on
-        #     the home tile. ~$1/gen Kling-side; ~$0.95 margin/gen on the $4.99
-        #     credit pack after Apple's 15%.
+        # S74: runtime stays v2.6 + std + video (same as S73). History:
+        #   - S74 tried v3 + pro for facial-consistency parity with catalog
+        #     previews. Bad/clean-driver templates improved, but Smooth Criminal
+        #     collapsed — v3 latched onto burned-in TikTok UI overlays in its
+        #     raw driver that v2.6 had tolerated (portrait aspect leak +
+        #     hallucinated background characters). Rolled back.
+        #   - S74 also tested driving_video_url=preview_video_url on SC as an
+        #     alternate fix (runtime still on v3). Removed UI-overlay
+        #     contamination but introduced new failure: Kling pulled scene
+        #     context from the polished preview (lined user's wall with couches).
+        #     Reverted that Firestore flip too.
+        #   - Landed: back to S73's v2.6 + std + video. User prioritized "no
+        #     surprises in output" over catalog/runtime quality parity. The
+        #     "user sees pro-mode preview, gets std-mode gen" UX risk
+        #     (S73 Open Q #4) is accepted for now; revisit if real users flag it.
         # character_orientation="video" stays from S73 — uses the full driving
         # video up to 30s (vs "image" which caps at 10s). Thriller + No Batidão
         # ship with 15s drivers; "image" would truncate to 10s while the preview
@@ -993,7 +991,7 @@ class VideoService:
             image_url=character_url,
             video_url=driving_video,
             character_orientation="video",  # Outcome 2; 30s cap (vs image's 10s)
-            mode="pro",
+            mode="std",
             model_name="kling-v2-6",
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
             keep_original_sound=keep_sound,
@@ -1148,16 +1146,16 @@ class VideoService:
 
         progress(phase="kling_motion_control", template_id=template["id"])
         motion_client = self._resolve_motion_client(template["id"])
-        # S74: matches Pipeline A — v2.6 + pro + video after v3 rollback (SC
-        # collapsed on dirty driver; preview-as-driver caused background leakage).
-        # Pipeline B is dormant today (no shipping templates) but kept aligned
-        # with A so a future Pipeline B template doesn't ship on stale defaults.
-        # See Pipeline A site for the full history.
+        # S74: matches Pipeline A — back to S73's v2.6 + std + video after the
+        # v3+pro experiment regressed SC and preview-as-driver caused background
+        # leakage. Pipeline B is dormant today (no shipping templates) but kept
+        # aligned with A so a future Pipeline B template doesn't ship on stale
+        # defaults. See Pipeline A site for the full history.
         result = motion_client.generate_and_poll(
             image_url=composite_url,
             video_url=motion_video,
             character_orientation="video",  # I2V step on NBP-composited image (Pipeline B chain achieves Outcome 1; this mode alone does not — per S58)
-            mode="pro",
+            mode="std",
             model_name="kling-v2-6",
             prompt=(overrides or {}).get("motion_prompt"),
         )
