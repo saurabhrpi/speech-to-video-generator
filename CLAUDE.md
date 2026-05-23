@@ -253,9 +253,9 @@ User Input (room_type, style, features)
 **KlingMotionClient** (`src/speech_to_video/clients/kling_motion_client.py`) — V2 Pipeline A + B
 - Direct Kling API for Motion Control endpoint (bypasses AIMLAPI). Auth via HS256 JWT regenerated per request from `KLING_ACCESS_KEY` + `KLING_SECRET_KEY`.
 - `generate_and_poll(image_url, video_url, character_orientation, mode, model_name, prompt, ...)`: submit + poll until clip ready. Returns `{success, video_url, task_id, duration}`.
-- `character_orientation` selects mode:
-  - `"image"` → Outcome 2 (motion-onto-character) — Pipeline A (viral dances). Driving video ≤10s.
-  - `"video"` → Outcome 1 (character-into-scene) — Pipeline B (composite-into-scene I2V). Driving video ≤30s.
+- `character_orientation` selects the **character pose-orientation source**, NOT the scene source. Per S58 empirical (`Memory/feedback_provider_mode_names_neq_outcomes.md`), BOTH modes on their own produce Outcome 2 (motion-onto-character) — the input image's background wins in both cases. Kling Motion Control has no native Outcome-1 mode.
+  - `"image"` → pose orientation taken from the reference image; driving video ≤10s. **Pipeline A** (viral dances) uses this on an NBP-cosmetically-edited character image.
+  - `"video"` → pose orientation taken from the driving video; driving video ≤30s. **Pipeline B** uses this as its I2V step, AFTER NBP has already composited the character into the target scene. On its own this mode still produces Outcome 2 — it does NOT do scene composition; the Outcome-1 result of Pipeline B comes from the NBP pre-step, not from this mode.
 - GET polls retry on 502/503/504 via urllib3; POST submit intentionally no-retry (avoids double-charge / duplicate moderation rejection).
 - Output URL expires 30 days after generation — caller must rehost for longer retention.
 

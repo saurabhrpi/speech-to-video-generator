@@ -28,6 +28,18 @@ class KlingMotionClient:
 
     Auth: HS256 JWT regenerated per request from access_key (iss) signed by secret_key.
     Endpoint base: KLING_API_BASE_URL (default https://api-singapore.klingai.com).
+
+    Model-version trade-off (S72):
+      Default `model_name` is "kling-v3" (Kling 3.0), bumped from "kling-v2-6".
+      v3 wins: better facial consistency, longer cap (30s for video-orientation
+      vs v2.6's same cap but weaker face transfer).
+      v3 cost: ~2× v2.6 at the Kling-API level — measured S72 Thriller spike at
+      v3 std+video+15s = ~$2.00 Kling-side, vs v2.6 pro+image+10s = ~$1.02
+      (per docs/V2_motion_transfer_plan.md:44 historical COGS).
+      Revert path: if v3's quality lift doesn't justify the 2× cost on real
+      user usage data, flip the default back to "kling-v2-6" — single-line
+      change at lines 72 + 148. v2.6 is the cheaper option we want to keep
+      available.
     """
 
     def __init__(self, settings: Optional[Settings] = None):
@@ -69,7 +81,7 @@ class KlingMotionClient:
         video_url: str,
         character_orientation: str,
         mode: str = "pro",
-        model_name: str = "kling-v2-6",
+        model_name: str = "kling-v3",  # S72: flipped from "kling-v2-6" for facial consistency (Kling 3.0). Revert if v3 quality regresses on our flow.
         prompt: Optional[str] = None,
         keep_original_sound: str = "yes",
         watermark_enabled: bool = False,
@@ -78,9 +90,16 @@ class KlingMotionClient:
     ) -> Dict[str, Any]:
         """Submit a motion-control task.
 
-        character_orientation:
-          - "image" → Outcome 2 (motion-onto-character); reference video must be ≤10s
-          - "video" → Outcome 1 (character-into-scene); reference video must be ≤30s
+        character_orientation selects character pose-orientation source, NOT scene
+        source. Per S58 empirical, BOTH modes produce Outcome 2 (motion-onto-character)
+        on their own — the input image's background wins in both cases.
+          - "image" → pose orientation from reference image; driving video ≤10s.
+            Pipeline A flow (NBP cosmetic edit → this client → animated output).
+          - "video" → pose orientation from driving video; driving video ≤30s.
+            Pipeline B uses this as its I2V step AFTER NBP has already composited
+            the character into the target scene. This mode does NOT do scene
+            composition on its own — Pipeline B's Outcome-1 result comes from the
+            NBP pre-step.
 
         Returns the parsed JSON response with `_status_code` injected.
         """
@@ -138,7 +157,7 @@ class KlingMotionClient:
         video_url: str,
         character_orientation: str,
         mode: str = "pro",
-        model_name: str = "kling-v2-6",
+        model_name: str = "kling-v3",  # S72: flipped from "kling-v2-6". Revert if v3 regresses.
         prompt: Optional[str] = None,
         keep_original_sound: str = "yes",
         max_wait: int = 600,

@@ -333,9 +333,11 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       id: tempId,
       prompt: meta.prompt,
       model: meta.model,
-      // Approximate; V2 clips land at whatever the dispatcher returns.
-      // Used today only for the in-flight cost projection.
-      duration: 10,
+      // Approximate placeholder; V2 clips land at whatever duration the
+      // server dispatcher returns (matches the template's driving video,
+      // typically 10s or 15s). No UI currently reads this field for the
+      // template gen flow — kept for GalleryJob type compatibility.
+      duration: 15,
       costAtSubmit: meta.cost,
       status: 'generating',
       statusMsg: 'Submitting...',
