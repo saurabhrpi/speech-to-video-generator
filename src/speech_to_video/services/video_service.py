@@ -966,33 +966,24 @@ class VideoService:
         # so the dispatcher's behavior is unchanged for templates that haven't
         # explicitly opted in. Flip per-template via scripts/set_template_audio.py.
         keep_sound = "yes" if template.get("audio_enabled") else "no"
-        # S74: runtime stays v2.6 + std + video (same as S73). History:
-        #   - S74 tried v3 + pro for facial-consistency parity with catalog
-        #     previews. Bad/clean-driver templates improved, but Smooth Criminal
-        #     collapsed — v3 latched onto burned-in TikTok UI overlays in its
-        #     raw driver that v2.6 had tolerated (portrait aspect leak +
-        #     hallucinated background characters). Rolled back.
-        #   - S74 also tested driving_video_url=preview_video_url on SC as an
-        #     alternate fix (runtime still on v3). Removed UI-overlay
-        #     contamination but introduced new failure: Kling pulled scene
-        #     context from the polished preview (lined user's wall with couches).
-        #     Reverted that Firestore flip too.
-        #   - Landed: back to S73's v2.6 + std + video. User prioritized "no
-        #     surprises in output" over catalog/runtime quality parity. The
-        #     "user sees pro-mode preview, gets std-mode gen" UX risk
-        #     (S73 Open Q #4) is accepted for now; revisit if real users flag it.
-        # character_orientation="video" stays from S73 — uses the full driving
-        # video up to 30s (vs "image" which caps at 10s). Thriller + No Batidão
-        # ship with 15s drivers; "image" would truncate to 10s while the preview
-        # shows the full 12-14s dance — bait-and-switch UX. Per S58
-        # (Memory/feedback_provider_mode_names_neq_outcomes.md), both orientations
-        # produce the same Outcome-2 (motion-onto-character).
+        # AIV-101: mode + model_name now come from _resolve_kling_settings —
+        # per-template override → global config/runtime → hardcoded baseline.
+        # Flip with scripts/set_kling_runtime.py (global) or
+        # scripts/set_template_kling_override.py (one template).
+        # character_orientation="video" stays hardcoded — it's a duration-cap
+        # decision tied to template assets, not a quality knob. Uses the full
+        # driving video up to 30s (vs "image" which caps at 10s); Thriller +
+        # No Batidão ship with 15s drivers and "image" would truncate to 10s
+        # while the preview shows the full 12-14s dance — bait-and-switch UX.
+        # Per S58 (Memory/feedback_provider_mode_names_neq_outcomes.md), both
+        # orientations produce the same Outcome-2 (motion-onto-character).
+        model_name, mode = self._resolve_kling_settings(template)
         result = client.generate_and_poll(
             image_url=character_url,
             video_url=driving_video,
             character_orientation="video",  # Outcome 2; 30s cap (vs image's 10s)
-            mode="std",
-            model_name="kling-v2-6",
+            mode=mode,
+            model_name=model_name,
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
             keep_original_sound=keep_sound,
         )
@@ -1146,17 +1137,16 @@ class VideoService:
 
         progress(phase="kling_motion_control", template_id=template["id"])
         motion_client = self._resolve_motion_client(template["id"])
-        # S74: matches Pipeline A — back to S73's v2.6 + std + video after the
-        # v3+pro experiment regressed SC and preview-as-driver caused background
-        # leakage. Pipeline B is dormant today (no shipping templates) but kept
-        # aligned with A so a future Pipeline B template doesn't ship on stale
-        # defaults. See Pipeline A site for the full history.
+        # AIV-101: same resolver as Pipeline A. Pipeline B is dormant today
+        # (no shipping templates) but kept aligned with A so a future Pipeline B
+        # template inherits the same global/override toggles.
+        model_name, mode = self._resolve_kling_settings(template)
         result = motion_client.generate_and_poll(
             image_url=composite_url,
             video_url=motion_video,
             character_orientation="video",  # I2V step on NBP-composited image (Pipeline B chain achieves Outcome 1; this mode alone does not — per S58)
-            mode="std",
-            model_name="kling-v2-6",
+            mode=mode,
+            model_name=model_name,
             prompt=(overrides or {}).get("motion_prompt"),
         )
         if not result.get("success"):
@@ -1178,6 +1168,24 @@ class VideoService:
         }
 
     # Pluggability points — swap providers here, NOT in the dispatch helpers above.
+
+    def _resolve_kling_settings(self, template: Dict) -> tuple:
+        """Resolve Kling (model_name, mode) for a runtime call (AIV-101).
+
+        Resolution order:
+          1. Per-template override — `template["kling_model_override"]` /
+             `template["kling_mode_override"]` (flip with
+             scripts/set_template_kling_override.py).
+          2. Global runtime config — Firestore `config/runtime`, cached 30s
+             (flip with scripts/set_kling_runtime.py).
+          3. Hardcoded fallback inside runtime_config — currently
+             v2.6 + std (S73 baseline).
+        """
+        from ..utils.runtime_config import get_kling_runtime
+        cfg = get_kling_runtime()
+        model_name = template.get("kling_model_override") or cfg["model_name"]
+        mode = template.get("kling_mode_override") or cfg["mode"]
+        return model_name, mode
 
     def _resolve_image_edit_client(self, template_id: str):
         """Pluggability: VertexAIClient today. Future swap point for AIMLAPI fallback
