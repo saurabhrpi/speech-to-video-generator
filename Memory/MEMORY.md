@@ -125,3 +125,5 @@
 - [Kling mode split: pro preview / std runtime](project_kling_mode_split.md) -- S73-locked design: chain scripts use pro (catalog quality), runtime (user gens) uses std (~$0.50 vs ~$1 Kling-side). Both pinned to v2.6.
 - [Template preview ffmpeg CRF](feedback_template_preview_crf.md) -- Trim Kling preview outputs with -crf 15 or lower (not 18) for catalog bitrate parity. Doesn't apply to runtime path.
 - [NBP hybrid-permissive default](feedback_nbp_hybrid_default.md) -- S73-locked NBP prompt approach for template previews: constrain NOT-to-do + menu of options + register not specifics. Don't re-debate per template.
+- [NBP can't reposition](feedback_nbp_cant_reposition.md) -- Gemini 3 Pro image-edit can't relative-reposition subject within frame; 9 iterations all produced same comp. Use Photoshop or AIMLAPI nano-banana-pro-edit instead.
+- [Kling runtime-config commands (AIV-101)](reference_kling_runtime_config_commands.md) -- Flip model/mode via scripts/set_kling_runtime.py (global) + scripts/set_template_kling_override.py (per-template); ~30s propagation, no redeploy needed.
