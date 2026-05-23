@@ -49,16 +49,23 @@ VALID_MODES = {"std", "pro"}
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--template-id", required=True, help="e.g. viral-dances-smooth-criminal")
-    grp = ap.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--show", action="store_true", help="Print current overrides, no write")
-    grp.add_argument("--clear", action="store_true", help="Remove both overrides; template falls back to global")
-    grp.add_argument("--model", choices=sorted(VALID_MODELS), help="Set kling_model_override")
-    ap.add_argument("--mode", choices=sorted(VALID_MODES), help="Set kling_mode_override (combine with --model, or use alone)")
+    # NOT a mutex group: --mode is a valid action on its own (set mode only),
+    # but argparse mutex groups can't express "show XOR clear XOR (model and/or
+    # mode)". Custom validation below handles the real constraints.
+    ap.add_argument("--show", action="store_true", help="Print current overrides, no write")
+    ap.add_argument("--clear", action="store_true", help="Remove both overrides; template falls back to global")
+    ap.add_argument("--model", choices=sorted(VALID_MODELS), help="Set kling_model_override (alone or with --mode)")
+    ap.add_argument("--mode", choices=sorted(VALID_MODES), help="Set kling_mode_override (alone or with --model)")
     args = ap.parse_args()
 
-    # Allow --mode alone without --model (mutually-exclusive group covers --model alone)
-    if not args.show and not args.clear and not args.model and not args.mode:
-        ap.error("provide at least one of --model / --mode (or --show / --clear)")
+    has_show = args.show
+    has_clear = args.clear
+    has_explicit = bool(args.model) or bool(args.mode)
+    modes_chosen = sum([has_show, has_clear, has_explicit])
+    if modes_chosen == 0:
+        ap.error("must specify one of: --show, --clear, or --model/--mode")
+    if modes_chosen > 1:
+        ap.error("--show, --clear, and --model/--mode are mutually exclusive")
 
     from src.speech_to_video.utils.template_registry import (  # noqa: E402
         TemplateNotFound,

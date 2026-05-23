@@ -47,23 +47,34 @@ VALID_MODES = {"std", "pro"}
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    grp = ap.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--show", action="store_true", help="Print current state, no write")
-    grp.add_argument("--preset", choices=sorted(PRESETS.keys()), help="Apply a named preset")
-    grp.add_argument("--model", choices=sorted(VALID_MODELS), help="Set kling_model_name only")
-    ap.add_argument("--mode", choices=sorted(VALID_MODES), help="Set kling_mode (combine with --model, or use alone)")
+    # NOT a mutex group: --mode is a valid action on its own (set mode only),
+    # but argparse mutex groups can't express "show XOR preset XOR (model and/or
+    # mode)". Custom validation below handles the real constraints.
+    ap.add_argument("--show", action="store_true", help="Print current state, no write")
+    ap.add_argument("--preset", choices=sorted(PRESETS.keys()), help="Apply a named preset")
+    ap.add_argument("--model", choices=sorted(VALID_MODELS), help="Set kling_model_name (alone or with --mode)")
+    ap.add_argument("--mode", choices=sorted(VALID_MODES), help="Set kling_mode (alone or with --model)")
     args = ap.parse_args()
 
-    if args.preset:
+    has_show = args.show
+    has_preset = bool(args.preset)
+    has_explicit = bool(args.model) or bool(args.mode)
+    modes_chosen = sum([has_show, has_preset, has_explicit])
+    if modes_chosen == 0:
+        ap.error("must specify one of: --show, --preset PRESET, or --model/--mode")
+    if modes_chosen > 1:
+        ap.error("--show, --preset, and --model/--mode are mutually exclusive")
+
+    if args.show:
+        target = None
+    elif args.preset:
         target = PRESETS[args.preset]
-    elif args.model or args.mode:
+    else:
         target = {}
         if args.model:
             target["model_name"] = args.model
         if args.mode:
             target["mode"] = args.mode
-    else:
-        target = None  # --show
 
     from src.speech_to_video.utils import runtime_config  # noqa: E402
 
