@@ -469,6 +469,8 @@ No automated tests. Manual testing via the mobile app on simulator (`npx expo ru
 
 Step-by-step procedure for creating a new V2 dance template (NBP edit → R2 → Kling chain → Firestore seed → publish) lives in `docs/V2_template_creation_runbook.md`. Always follow that runbook — past sessions converged to this exact shape and novel approaches reintroduce solved bugs. The per-template artifacts are: `scripts/test_<slug>_chain.py` (bespoke NBP prompt, for marketing preview only), `scripts/seed_<slug>_template.py` (Firestore fixture), and R2-public assets under `viral-dances/<slug>/`. Production runtime always uses the generic regen prompt + `nbp_framing_hint`, never the bespoke chain-script prompt — see `Memory/feedback_no_overfit_prompts.md`.
 
+Runtime Kling `model_name` + `mode` are config-driven (AIV-101) via `VideoService._resolve_kling_settings` — flip without deploy via `scripts/set_kling_runtime.py` (global) or `scripts/set_template_kling_override.py` (per-template); details in `Memory/reference_kling_runtime_config_commands.md`.
+
 ## docs/ convention
 
 `docs/api-notes/` is for static reference material (API request shapes, prompt templates we use). `docs/research/` is for spike outputs and competitor analysis — anything we generate or capture while evaluating providers, models, or competing products. When running a new provider spike, write a `motion-transfer-providers-{S##}.md`-style log into `research/` so the comparison data outlives the session.

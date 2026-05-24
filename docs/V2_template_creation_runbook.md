@@ -221,6 +221,38 @@ FF=$(.venv/bin/python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg
   ~/Downloads/template_assets/viral-dances/<slug>/preview_video.mp4
 ```
 
+### 8b. (Optional) Audio-sync correction — `-itsoffset` for the Kling audio lead
+
+Kling Motion Control introduces a **~0.5s audio lead** on its output (you hear the lyrics *before* the lips move). This is **intrinsic to Kling's output**, NOT the driver — confirmed S76: re-encoding the driver to clean CFR + flattening edit lists + removing VFR did NOT fix it, and neither did flipping v2.6→v3 (v3 only delivered faster). The only working fix is an output-side audio delay. See `Memory/feedback_kling_audio_lead_and_preview_propagation.md`.
+
+**Skip this step if the preview's audio already lands on the lips** — not every clip shows a noticeable lead.
+
+If audio leads, delay it (stream-copy, no quality loss). Exact magnitude can only be judged by ear — bracket and pick:
+
+```bash
+FF=$(.venv/bin/python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+IN=~/Downloads/<slug>_chain_<hash>.mp4
+for D in 0.40 0.50 0.60; do
+  "$FF" -y -i "$IN" -itsoffset $D -i "$IN" \
+    -map 0:v:0 -map 1:a:0 -c copy -shortest -movflags +faststart \
+    ~/Downloads/<slug>_shift_${D/./p}.mp4
+done
+# Watch all three; pick the one where lyrics land on the mouth. 0.5s was the answer for DPWM (S76).
+```
+
+The delay leaves ~Ds of silent video at the head. To avoid a "dead" open, trim that head — re-encode at crf 15 for catalog parity (the one place you re-encode the preview). **Tradeoff:** trimming the head drops the first ~Ds of dance footage; the music stays intact from its start. You can't keep all footage AND avoid a silent open AND have frame-one sync — pick two.
+
+```bash
+"$FF" -y -ss 0.5 -i ~/Downloads/<slug>_shift_0p50.mp4 \
+  -c:v libx264 -preset slow -crf 15 -pix_fmt yuv420p \
+  -c:a aac -b:a 192k -movflags +faststart \
+  ~/Downloads/template_assets/viral-dances/<slug>/preview_video.mp4
+```
+
+If you run this step, the shifted-and-trimmed file IS your `preview_video.mp4` — skip the step-8 trim (already re-encoded) and go straight to step 9 upload.
+
+**Runtime caveat:** under preview-as-driver, runtime user gens likely exhibit the same lead (Kling re-applies it on every output; a corrected driver doesn't prevent it). Whether the preview fix propagates is **unverified** — verify with one real gen, and if confirmed apply the per-template `audio_offset_sec` runtime fix (Task 4 / AIV).
+
 ### 9. Upload the preview video to R2 public
 
 ```bash
