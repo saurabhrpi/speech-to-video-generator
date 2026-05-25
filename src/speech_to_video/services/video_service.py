@@ -1007,9 +1007,11 @@ class VideoService:
     # (Memory/feedback_no_overfit_prompts.md): describes the *operation*, not
     # the content. Per-template content/framing specifics go in
     # `template.nbp_framing_hint` and are appended at request time.
-    # Aspect lock is universal across all templates (Kling MC inherits NBP
-    # aspect end-to-end — Memory/reference_kling_mc_aspect_inherits_nbp.md), so
-    # it lives here, not in per-template `nbp_framing_hint`.
+    # Aspect lock + spacious-ambience requirement are universal across all
+    # templates (Kling MC inherits NBP aspect end-to-end —
+    # Memory/reference_kling_mc_aspect_inherits_nbp.md; and every template's
+    # Kling driver needs room for lateral dance movement), so they live here,
+    # not in per-template `nbp_framing_hint`.
     _GENERIC_NBP_REGEN_PROMPT = (
         "Generate a more complete portrait of this person. Preserve facial "
         "identity, hair, and the visible clothing style. Extrapolate any "
@@ -1017,7 +1019,10 @@ class VideoService:
         "stylistically continuous with what is visible. Output a square "
         "(1:1) photographic frame, full body visible head-to-feet with "
         "comfortable headroom above the hair and floor visible under the "
-        "feet."
+        "feet. The setting MUST be roomy and spacious with generous open "
+        "space on both sides of the subject and ample empty floor around "
+        "the feet — never cramped, tight, or closely-walled — so there is "
+        "room for the subject to move laterally."
     )
 
     def _nbp_regen_character(
