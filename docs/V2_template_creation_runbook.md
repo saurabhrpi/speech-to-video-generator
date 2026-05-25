@@ -4,20 +4,39 @@ Step-by-step procedure for creating a new V2 motion-transfer dance template (Pip
 
 If you find yourself deviating from this runbook, **stop and re-read it**. Past sessions have repeatedly converged to this exact shape; novel approaches almost always reintroduce bugs the existing pattern already solved.
 
-## Per-template artifacts (final state)
+## Per-template artifacts (final state — S77 shape, LOCKED)
 
-Each shipped template results in:
+Each shipped template results in **three** R2 video files (filenames now match runtime roles) plus the Firestore doc + scripts:
 
-| Artifact | Location | Type |
+| Artifact | R2 location | Firestore field / role |
 |---|---|---|
-| Driving video (cropped to 10s) | `https://assets.speech-2-video.ai/viral-dances/<slug>/driving_video.mp4` | R2 public |
-| Preview video (NBP→Kling chain output) | `https://assets.speech-2-video.ai/viral-dances/<slug>/preview_video.mp4` | R2 public |
-| Thumbnail (optional fallback poster) | `https://assets.speech-2-video.ai/viral-dances/<slug>/thumbnail.jpg` | R2 public |
+| Raw source clip (trimmed) | `.../viral-dances/<slug>/raw_source.mp4` | `original_driving_video_url` — revert target, NOT the active driver |
+| High-bitrate Kling output | `.../viral-dances/<slug>/driving_video.mp4` | `driving_video_url` — **the runtime Kling driver** |
+| Stream preview (~5 Mbps + faststart) | `.../viral-dances/<slug>/preview_stream.mp4` | `preview_video_url` — **what the app plays** |
+| Thumbnail (optional fallback poster) | `.../viral-dances/<slug>/thumbnail.jpg` | `thumbnail_url` |
 | Firestore template doc | `templates/viral-dances-<slug>` | Firestore (Pipeline A) |
 | Chain spike script | `scripts/test_<slug>_chain.py` | repo |
 | Seed script | `scripts/seed_<slug>_template.py` | repo |
 
-Note: the template tile in the home grid renders `assets.preview_video_url ?? assets.driving_video_url` as a looping `<Video>` (see `mobile/app/index.tsx:TemplateTile`). The thumbnail field is a fallback poster, not the primary tile media — past templates have left it null and the tile still works fine.
+Tile: the home grid renders `assets.preview_video_url ?? assets.driving_video_url` as a looping `<Video>` (`mobile/app/index.tsx:TemplateTile`). `preview_video_url` is the ~5 Mbps `preview_stream.mp4` — **keep it that bitrate**: raw Kling output is 14-35 Mbps @ 1440² and stutters/rebuffers on mobile (S77). Thumbnail is a fallback poster, usually null.
+
+### ⚠️ Filename ≠ role — never delete a file by its name
+
+Everything is URL-driven via the Firestore fields above; no code keys off filenames. In particular **`driving_video.mp4` is the load-bearing runtime driver** (the high-bitrate Kling output) — do NOT delete it as a "leftover preview." `raw_source.mp4` is the revert-only raw clip; `preview_stream.mp4` is the app video.
+
+### Going-forward flow (S77 — supersedes the inline `driving_video.mp4`-as-source naming in steps 2/5/9/10 and the separate preview-as-driver align in step 11)
+
+1. Trim the source → upload as **`raw_source.mp4`** (where older steps say `driving_video.mp4`).
+2. Chain script drives off `raw_source.mp4`; upload its high-bitrate Kling output as **`driving_video.mp4`** (this IS the runtime driver — preview-as-driver is now the default, no separate flip).
+3. Build the mobile stream preview:
+   ```bash
+   .venv/bin/python scripts/streaming_previews.py --template-id viral-dances-<slug> --encode
+   .venv/bin/python scripts/streaming_previews.py --template-id viral-dances-<slug> --repoint
+   ```
+   `--encode` builds + uploads `preview_stream.mp4` (~5 Mbps + faststart); `--repoint` sets `preview_video_url` → it.
+4. Seed sets: `driving_video_url` → `driving_video.mp4`, `preview_video_url` → `preview_stream.mp4`, `original_driving_video_url` → `raw_source.mp4`.
+
+Do NOT ship a template whose `preview_video_url` is the raw high-bitrate file — it will stutter on device. Catalog-wide revert of the streaming layer: `scripts/streaming_previews.py --revert`.
 
 ## Step-by-step (per template)
 
@@ -32,6 +51,8 @@ Drop the source MP4 into `~/Downloads/App Templates Prep/`. The reference PNG is
   3. **Curated reference image** (rare). Only if neither (1) nor (2) is available.
 
 ### 2. Trim the source MP4 — 10s or 15s depending on Kling config
+
+> **⚠️ S77 shape (see "Going-forward flow" at top):** the trimmed clip is the RAW SOURCE — it gets uploaded as `raw_source.mp4`, NOT `driving_video.mp4`. The name `driving_video.mp4` is now reserved for the high-bitrate Kling output (the runtime driver).
 
 Driving video length is constrained by the Kling `character_orientation` you'll pick in step 7:
 - `image` orientation → **≤10s** driving video
@@ -165,6 +186,8 @@ See `Memory/reference_kling_mc_aspect_inherits_nbp.md` (S73 confirmed). Skip thi
 
 ### 5. Upload the driving video to R2 public
 
+> **⚠️ S77 shape (see "Going-forward flow" at top):** this step uploads the RAW SOURCE — stage it as `raw_source.mp4`, NOT `driving_video.mp4`. `driving_video.mp4` is uploaded later (step 9) as the high-bitrate Kling output.
+
 Stage the file into the canonical nested layout, then run the bulk uploader:
 
 ```bash
@@ -255,6 +278,8 @@ If you run this step, the shifted-and-trimmed file IS your `preview_video.mp4` �
 
 ### 9. Upload the preview video to R2 public
 
+> **⚠️ S77 shape (see "Going-forward flow" at top):** upload the high-bitrate Kling output as `driving_video.mp4` (the runtime driver). Then build the app preview with `scripts/streaming_previews.py --template-id viral-dances-<slug> --encode` + `--repoint` — that produces `preview_stream.mp4` (~5 Mbps) and points `preview_video_url` at it. Do NOT serve the raw Kling output to the app; it stutters on device.
+
 ```bash
 # If you skipped step 8, stage the raw Kling output:
 cp ~/Downloads/<slug>_chain_<hash>.mp4 \
@@ -267,6 +292,8 @@ cp ~/Downloads/<slug>_chain_<hash>.mp4 \
 ```
 
 ### 10. Write `scripts/seed_<slug>_template.py`
+
+> **⚠️ S77 shape (see "Going-forward flow" at top):** set `driving_video_url` → `driving_video.mp4`, `preview_video_url` → `preview_stream.mp4`, `original_driving_video_url` → `raw_source.mp4`.
 
 **Copy `scripts/seed_baby_dance_template.py` verbatim**, then change only:
 
@@ -290,6 +317,8 @@ Keep these unchanged:
 - `audio_enabled = True` (dance templates ship with audio ON; home-tile is muted client-side via `isMuted`)
 
 ### 11. Run the seed
+
+> **⚠️ S77 shape (see "Going-forward flow" at top):** the separate preview-as-driver align below is NO LONGER a step — `driving_video.mp4` IS the Kling-output driver by default. Instead, after seeding, run the `streaming_previews.py --encode/--repoint` step (from step 9) so the app plays `preview_stream.mp4`.
 
 ```bash
 .venv/bin/python scripts/seed_<slug>_template.py

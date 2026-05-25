@@ -2,55 +2,38 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 75 — 2026-05-23 / 2026-05-24 — branch `v2`
+## Current Session: 77 — 2026-05-25 — branch `v2`
 
-**Status:** Built the Iconic Dances row (Rasputin + Boot Stop Working published; Cotton Eye Joe + Don't Play With Me + Twist and Shine have Klings ready but unseeded). Bombale (Extended) renamed to Bombale. Bad-chef + Bad-open variants attempted then killed by a Kling depth-axis-moonwalk-inversion failure (AIV-103). Beat It preview given a +0.5s audio shift (hypothesis fix, unverified). Total Kling spend ~$15.
+**Status:** 5 new dance templates published + Beat It preview improved; a catalog-wide mobile-playback fix (streaming previews) + R2 filename↔role migration shipped & verified on iPhone; runbook updated to the new locked shape. The Hills (Girl Dances) Kling done but unpublished. Mac storage reclaimed 9→~47 GB.
 
 ## What happened this session
 
-**Verified the S2/S74 NBP aspect fix in prod.** First real iPhone gen on Smooth Criminal came back square. Bad-chef + Boot Stop spot-checks also clean.
+**Templates — feed now 17 published.**
+- **Iconic Dances:** Cotton Eye Joe, Twist and Shine (Klings from S75 — seeded + published).
+- **Viral Dances:** Na Favelinha (woman/casual/home), Dance Flow (similar man, EU seaside-hotel balcony + beach), Mapopo (recolored toddler girl; driver 2k-upscaled then re-timed — see below).
+- **Beat It** preview re-trimmed to 14.63s (end-dup mitigation), re-uploaded + CF purge. Verified on iPhone.
 
-**Iconic Dances row created.** New category `iconic_dances` (mechanical title-case, no `CATEGORY_LABEL_OVERRIDES` entry needed). Rasputin + Boot Stop Working seeded, published, preview-as-driver aligned.
+**The Hills (Girl Dances) — Kling DONE, NOT published.** Output: `~/Downloads/the_hills_chain_66b624fb.mp4` (15.73s). NBP edit: `the_hills_edit_a3929c33.jpg`. Driver on R2 at `viral-dances/the-hills/`. Reference frame taken at **t=1s** (upright/face-visible — the 0.5s start frame was a faceless hair-flip; see runbook "force face visibility"). Awaiting review → seed+publish or iterate.
 
-**3 more Iconic Dances Klings done, not yet seeded:** Cotton Eye Joe, Don't Play With Me, Twist and Shine. DPWM was re-generated after first attempt was 15s-trim-chopped + had ~0.5s audio lead; the recovered 16.87s version still has slight residual lag in early half + lips don't quite match driver — borderline ship-worthy.
+**Streaming previews (catalog-wide, PERMANENT).** Raw Kling previews were 14-35 Mbps @ 1440² → stuttered on mobile (start-stop/rebuffer). Re-encoded all 17 to ~5 Mbps + faststart via `scripts/streaming_previews.py`; `preview_video_url` now points at `preview_stream.mp4`. Verified smooth on iPhone. Revert lever: `streaming_previews.py --revert`.
 
-**Bad template killed.** 6 Kling configs tried on the HubX moonwalk source (v2.6+pro, v3+pro, prompt-steer, compound time-flip, combos). All produced depth-axis-inverted body translation (forward instead of backward). Tracked in [AIV-103](https://linear.app/speech-to-video/issue/AIV-103/bad-template-depth-axis-moonwalk-inversion-kling-mc-limitation) with 4 ranked fix paths.
+**Filename↔role migration (`scripts/migrate_driver_filenames.py --execute`).** R2 names now match roles across all 17: `raw_source.mp4` (source/revert), `driving_video.mp4` (high-bitrate Kling output = runtime driver), `preview_stream.mp4` (app). Verified live + a gen worked on iPhone.
 
-**Audio sync investigation.** Diagnosed Kling MC outputs at 30fps regardless of driver framerate (verified N=3). The +0.5s ffmpeg-itsoffset shift fixed DPWM's lead per user. Applied same shift speculatively to Beat It preview; propagation through preview-as-driver to runtime user gens is the working hypothesis but **NOT verified** — Beat It is the test case.
+**Mac storage:** 9 GB → ~47 GB free (DerivedData + iOS DeviceSupport ~21 GB; 4 non-primary sims ~15 GB; .dmg installers ~2.7 GB). Primary sim iPhone 17 Pro Max preserved.
 
-**AIV-102 comment posted** documenting the requirement that the future generic builder must support multiple variants per source (slug as row key, source sharing by reference, slot-filled prompts + override escape hatch). Surfaced by today's Bad-chef + Bad-open chained off the same Bad.mov.
+**Runbook** rewritten to the S77 shape (artifacts table + "filename ≠ role" caveat + going-forward flow + inline ⚠️ pointers on steps 2/5/9/10/11).
 
-## Live state at session close
+## Next step — Session 78
 
-- **Code:** `origin/v2 = 18fc600`. Uncommitted: 7 new chain scripts (rasputin, boot_stop_working, bad_chef, bad_open, cotton_eye_joe, dont_play_with_me, twist_and_shine), 2 new seed scripts (rasputin, boot_stop_working), 2 new memory files + MEMORY.md index updates, NOW.md.
-- **Spend:** ~$15 Kling-side, mostly on Bad-variant experiments.
-
-## Next step — Session 76
-
-1. **Verify Beat It preview audio fix.** User runs a real selfie gen on Beat It and checks A/V sync. If clean → batch the +0.5s shift across the other 8 shipped templates. If still off → adjust offset OR conclude the propagation hypothesis is wrong (don't batch).
-
-2. **Seed + publish Cotton Eye Joe + Twist and Shine** under Iconic Dances. (Decide DPWM publish/hold based on user's tolerance for the residual lip-sync drift.)
-
-3. **Commit uncommitted work** — 7 chain scripts + 2 seed scripts + 2 memory files + NOW.md.
-
-4. **V2.0.1 ship work** (S74 carryover) — AIV-97 credit refresh, AIV-98 Show My ID, revert AIV-94 UID logging, version bump, EAS build + TestFlight.
+1. **The Hills:** review `the_hills_chain_66b624fb.mp4` → seed+publish under **Girl Dances** (category `girl_dances`, title-cases clean, no override) or iterate. Follow the S77 runbook shape (`raw_source`/`driving_video`/`preview_stream` + `streaming_previews.py`).
+2. **V2.0.1 ship work** (S74→S77 carryover, still pending): AIV-97 credit refresh, AIV-98 Show My ID, revert AIV-94 UID logging, version bump, EAS build + TestFlight.
 
 ## Open questions
 
-1. **(NEW S75)** Beat It audio-shift hypothesis — does preview-side `-itsoffset` propagate through Kling's runtime audio handling? Verify before batching.
-
-2. **(NEW S75)** DPWM lip-sync drift — Kling MC isn't a lipsync product; this may be a fundamental limitation.
-
-3. **(NEW S75)** Bad moonwalk (AIV-103) — first retry would be Kling I2V with text prompt, ~$2 ceiling.
-
-4. **(NEW S75)** Kling client 600s timeout vs pro-mode + long drivers. User REJECTED bumping client cap ("can't have >10min runtime wait"). If pro+v2.6 keeps timing out at 580-612s on 16s+ drivers, flip runtime to v3 instead (AIV-101 one-line config change).
-
-5. **(S74 carryover)** Preview-as-driver monitoring across the now-11 templates. Mechanism to revert: `scripts/set_preview_template_driving_video.py --all --revert`.
-
-6. **(S74 carryover)** AIMLAPI `nano-banana-pro-edit` for NBP-edit-driven repositioning — worth investigating.
-
-7. **(S74 carryover)** UX risk: users see pro-mode previews (1440×1440) and get std-mode runtime output (~960×960). Accepted; revisit if real users complain.
-
-8. **(S74 carryover)** Future: bump preview chain scripts `kling-v2-6` → `kling-v3` for facial-consistency. Spike A/B before flipping.
-
-9. **(S74 carryover)** Auto-bump `updated_at` on Firestore template writes (write-through hook in `template_registry.py`) so partial updates can't desync `/api/templates` ETag.
+1. **(NEW S77)** Streaming-preview monitoring — watch playback + gens for a few days. If good → AIV-107: fix the buggy `migrate_driver_filenames.py --cleanup` (no-op; see its docstring) and delete the orphaned high-bitrate R2 files.
+2. **(NEW S77)** Rest of the **Girl Dances** sources are staged unprocessed in `~/Downloads/App Templates Prep/Working/Girl Dances/` (Buttons, Give it up, Like a G6, Pole Dance, Pour it Up, River, Stateside, Telephone, Woman).
+3. **(S76→S77)** Other shipped templates' previews may carry the Kling ~0.5s audio-lead — only DPWM/Beat It audited (AIV-105 In Review).
+4. **(S75→S77)** Bad moonwalk — AIV-103. Next retry = Kling I2V w/ text prompt, ~$2 ceiling. Undecided: retry vs drop.
+5. **(S74→S77)** UX risk: users see pro previews but get v2.6-std runtime output. Accepted; revisit if complaints.
+6. **(S74→S77)** AIMLAPI `nano-banana-pro-edit` for NBP-edit repositioning — worth investigating.
+7. **(S76→S77)** NBP runtime dependency hardening — AIV-106 (billing SPOF + preview-model risk).
