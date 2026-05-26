@@ -26,6 +26,8 @@ Everything is URL-driven via the Firestore fields above; no code keys off filena
 
 ### Going-forward flow (S77 — supersedes the inline `driving_video.mp4`-as-source naming in steps 2/5/9/10 and the separate preview-as-driver align in step 11)
 
+> **⚠️ Asset upload mechanism — use `r2_client.upload_file` directly, NOT `upload_template_assets.py` (S80).** The three S77-shape video files (`raw_source.mp4`, `driving_video.mp4`, `preview_stream.mp4`) are each pushed individually to their exact R2 key with a one-line `r2_client.upload_file(local, key, content_type='video/mp4')`. The bulk `upload_template_assets.py` tool only recognizes the four CANONICAL slot stems (`driving_video`, `preview_video`, `scene_image`, `thumbnail`); it **cannot** emit a `raw_source.mp4` or `preview_stream.mp4` key — it skips them as "non-canonical file … (use _manifest.json)". Do NOT reach for the manifest workaround; the direct call is the established one-shot (this is why each file in a published template's R2 dir has a distinct upload timestamp). The chain script's own `run_kling()` already uses `r2_client.upload_file` — same pattern. Public templates bucket is the default (no `bucket=` arg needed).
+
 1. Trim the source → upload as **`raw_source.mp4`** (where older steps say `driving_video.mp4`).
 2. Chain script drives off `raw_source.mp4`; upload its high-bitrate Kling output as **`driving_video.mp4`** (this IS the runtime driver — preview-as-driver is now the default, no separate flip).
 3. Build the mobile stream preview (~5 Mbps + faststart).
@@ -36,7 +38,12 @@ Everything is URL-driven via the Firestore fields above; no code keys off filena
    "$FF" -y -i driving_video.mp4 -c:v libx264 -profile:v high -preset medium \
      -b:v 5M -maxrate 6M -bufsize 12M -pix_fmt yuv420p \
      -c:a aac -b:a 128k -movflags +faststart preview_stream.mp4
-   # then upload preview_stream.mp4 to viral-dances/<slug>/preview_stream.mp4 (public templates bucket)
+   # then upload preview_stream.mp4 directly (see "Asset upload mechanism" note above):
+   .venv/bin/python -c "
+   from src.speech_to_video.utils import r2_client
+   print(r2_client.upload_file('preview_stream.mp4',
+       'viral-dances/<slug>/preview_stream.mp4', content_type='video/mp4'))
+   "
    ```
 4. Seed sets: `driving_video_url` → `driving_video.mp4`, `preview_video_url` → `preview_stream.mp4`, `original_driving_video_url` → `raw_source.mp4`.
 
@@ -57,6 +64,8 @@ Drop the source MP4 into `~/Downloads/App Templates Prep/`. The reference PNG is
 ### 2. Trim the source MP4 — 10s or 15s depending on Kling config
 
 > **⚠️ S77 shape (see "Going-forward flow" at top):** the trimmed clip is the RAW SOURCE — it gets uploaded as `raw_source.mp4`, NOT `driving_video.mp4`. The name `driving_video.mp4` is now reserved for the high-bitrate Kling output (the runtime driver).
+
+> **Trimming is CONDITIONAL.** Trim only when the source needs a different start point (dance begins mid-clip) or is longer than the Kling cap. If the source already starts where you want and is within the cap, **skip this step** and upload the original MP4 as-is in step 5. (Sources whose filename encodes a start offset — e.g. `Pole_Dance_Start_at_1.5_sec.mov` — do need the trim.)
 
 Driving video length is constrained by the Kling `character_orientation` you'll pick in step 7:
 - `image` orientation → **≤10s** driving video
@@ -192,24 +201,25 @@ If the reference PNG is portrait (taller than wide), NBP will produce a portrait
 
 See `Memory/reference_kling_mc_aspect_inherits_nbp.md` (S73 confirmed). Skip this for sources that are already ~1:1 (e.g. first frame extracted from a square driving video).
 
-### 5. Upload the driving video to R2 public
+### 5. Upload the raw source to R2 public as `raw_source.mp4`
 
-> **⚠️ S77 shape (see "Going-forward flow" at top):** this step uploads the RAW SOURCE — stage it as `raw_source.mp4`, NOT `driving_video.mp4`. `driving_video.mp4` is uploaded later (step 9) as the high-bitrate Kling output.
+> **⚠️ S77 shape (see "Going-forward flow" at top):** this step uploads the RAW SOURCE as `raw_source.mp4` (the step-4 chain script drives off this URL). `driving_video.mp4` is uploaded later (step 9) as the high-bitrate Kling output.
 
-Stage the file into the canonical nested layout, then run the bulk uploader:
+`<source-clip>` below is the **step-2 trimmed output IF you trimmed**, otherwise the **original source MP4 as-is** — trimming is conditional (see step 2; trim only when the source needs a different start point or length).
+
+Upload directly with `r2_client.upload_file` — **NOT** the bulk `upload_template_assets.py` (it can't emit a `raw_source.mp4` key; see the "Asset upload mechanism" note at the top of the Going-forward flow):
 
 ```bash
-mkdir -p ~/Downloads/template_assets/viral-dances/<slug>
-cp "~/Downloads/App Templates Prep/<Slug>_clip.mp4" \
-   ~/Downloads/template_assets/viral-dances/<slug>/driving_video.mp4
-
-.venv/bin/python scripts/upload_template_assets.py \
-  ~/Downloads/template_assets \
-  --template viral-dances-<slug> \
-  --no-update-registry
+.venv/bin/python -c "
+from src.speech_to_video.utils import r2_client
+print(r2_client.upload_file(
+    '<source-clip>',   # trimmed step-2 output, or the original source MP4 if no trim
+    'viral-dances/<slug>/raw_source.mp4',
+    content_type='video/mp4'))
+"
 ```
 
-`--no-update-registry` because the Firestore doc doesn't exist yet — we seed it in step 10. The script prints the resulting public URL; verify it matches the constant in step 4.
+The printed public URL must match `<SLUG>_DRIVING_VIDEO` in the step-4 chain script.
 
 ### 6. Run the NBP step
 
