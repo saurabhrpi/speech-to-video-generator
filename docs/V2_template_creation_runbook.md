@@ -28,12 +28,16 @@ Everything is URL-driven via the Firestore fields above; no code keys off filena
 
 1. Trim the source → upload as **`raw_source.mp4`** (where older steps say `driving_video.mp4`).
 2. Chain script drives off `raw_source.mp4`; upload its high-bitrate Kling output as **`driving_video.mp4`** (this IS the runtime driver — preview-as-driver is now the default, no separate flip).
-3. Build the mobile stream preview:
+3. Build the mobile stream preview (~5 Mbps + faststart).
+
+   ⚠️ **`streaming_previews.py` has NO `--template-id` flag** — `--encode`/`--repoint`/`--revert` operate on ALL eligible templates (re-downloading + re-encoding every one). Use it only for catalog-wide operations. For a SINGLE new template, do the surgical manual encode instead (S78 — same ffmpeg params as `cmd_encode`), then point the seed's `preview_video_url` directly at `preview_stream.mp4` (skip `--repoint`):
    ```bash
-   .venv/bin/python scripts/streaming_previews.py --template-id viral-dances-<slug> --encode
-   .venv/bin/python scripts/streaming_previews.py --template-id viral-dances-<slug> --repoint
+   FF=$(.venv/bin/python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+   "$FF" -y -i driving_video.mp4 -c:v libx264 -profile:v high -preset medium \
+     -b:v 5M -maxrate 6M -bufsize 12M -pix_fmt yuv420p \
+     -c:a aac -b:a 128k -movflags +faststart preview_stream.mp4
+   # then upload preview_stream.mp4 to viral-dances/<slug>/preview_stream.mp4 (public templates bucket)
    ```
-   `--encode` builds + uploads `preview_stream.mp4` (~5 Mbps + faststart); `--repoint` sets `preview_video_url` → it.
 4. Seed sets: `driving_video_url` → `driving_video.mp4`, `preview_video_url` → `preview_stream.mp4`, `original_driving_video_url` → `raw_source.mp4`.
 
 Do NOT ship a template whose `preview_video_url` is the raw high-bitrate file — it will stutter on device. Catalog-wide revert of the streaming layer: `scripts/streaming_previews.py --revert`.
@@ -157,7 +161,11 @@ Use when the reference person should NOT appear in the output (e.g., the source 
 **Key shape rules (do not deviate):**
 - **Constrain NOT-to-do**, then give a menu. "Different from the input's beige" → "(e.g. olive, sage, sand — pick one)."
 - **Specify register, not specifics.** "cozy domestic interior" beats "wooden block toys on a plush rug under a sheer-curtained window."
-- **Composition lock (S73 critical).** ALWAYS include: *"Subject must occupy the SAME proportion of the frame as the person in the input image — same head position, same body size relative to the frame edges. Do NOT zoom in, do NOT zoom out, do NOT move the subject closer to or further from the camera. Preserve the input's camera-to-subject distance and framing exactly."* Required to prevent Kling from hallucinating duplicate subjects when the driving video has camera-approach motion (S73 Beat It Hubx failure mode). See `Memory/feedback_nbp_hybrid_default.md`.
+- **Composition: roomy / wider / centered full-body (S78 — SUPERSEDES the S73 preserve-framing lock).** The S73 rule was "preserve the input's framing exactly, do NOT zoom out" — its *purpose* was to stop Kling spawning duplicate subjects when the driving video has camera-approach motion (Beat It Hubx). But preserving a *close* source frame produces a cramped output with no room for lateral dance movement (S78 The Hills: first gen's camera was too close → no side room). For the common **static-camera** driver, prefer a ROOMY composition instead, and manage the duplicate risk the right way (static-camera source + trim the tail downstream, step 8 / `Memory/reference_kling_end_dup_hallucination.md`) rather than by cramming the subject close. This matches the runtime generic NBP prompt, which now mandates spacious ambience (`video_service.py:_GENERIC_NBP_REGEN_PROMPT`). Include in the prompt:
+  - *"Frame her as a WIDER full-body shot — FARTHER from the camera and SMALLER in the frame than the input, occupying roughly the central 55-65% of the frame height, and CENTERED horizontally. Leave GENEROUS, roughly EQUAL open empty floor on BOTH the left and right sides, plus clear floor below the feet — room for lateral dance movement in either direction. Nothing within arm's reach on either side."*
+  - *"FEET AND FLOOR (critical): feet FULLY visible with a clear margin of floor below them — do NOT crop the feet/ankles at the bottom edge. Keep feet ≥8-10% of frame height above the bottom."*
+  - **NBP size-jitter is real (S78):** even with the feet clause, NBP renders the subject too large / crops the feet on *some* rolls (the same prior the `Memory/feedback_nbp_cant_reposition.md` size-control jitter describes — it can't reliably *rescale* a subject, but in a Pattern-B *holistic regen* it CAN compose a fresh wider shot). If a roll crops the feet or is off-center, just **re-roll** the NBP edit (`--no-kling`, ~$0.04) — it took 2-3 rolls each on The Hills and Buttons. Don't escalate to Photoshop/AIMLAPI for this; re-rolling is cheap and works.
+  - Keep this off the **camera-approach** case only: if your driver genuinely zooms/pushes in, fall back to the S73 preserve-framing lock to avoid duplicates.
 - **Enumerate UI overlays explicitly** — vague "remove the UI" misses items per `Memory/feedback_nbp_wont_remove_ui_overlays.md`.
 - **Generic graphic spec** for any printed graphics — "no readable text, no logos, just a small abstract graphic" — avoids NBP fabricating illegible glyphs.
 - **Force face visibility** — explicit "do not crop head or chin" guards against NBP preserving a chin-cropped source frame's composition (S73 Smooth Criminal Hubx — `t=0` frame was chin-cropped; switched to `t=1s` AND added the explicit constraint).
@@ -293,7 +301,13 @@ cp ~/Downloads/<slug>_chain_<hash>.mp4 \
 
 ### 10. Write `scripts/seed_<slug>_template.py`
 
-> **⚠️ S77 shape (see "Going-forward flow" at top):** set `driving_video_url` → `driving_video.mp4`, `preview_video_url` → `preview_stream.mp4`, `original_driving_video_url` → `raw_source.mp4`.
+> **⚠️ S77/S78 shape (see "Going-forward flow" at top):** seed the FULL migrated asset shape directly so the new template matches the catalog and `streaming_previews.py --revert` works:
+> - `driving_video_url` → `driving_video.mp4`
+> - `preview_video_url` → `preview_stream.mp4`
+> - `preview_video_url_orig` → `driving_video.mp4`  (revert backup the migration sets on existing docs; include it so a catalog-wide `--revert` doesn't skip this template)
+> - `original_driving_video_url` → `raw_source.mp4`
+>
+> `upsert_template` accepts arbitrary asset keys (no whitelist), so all four go straight in the fixture. Copy `scripts/seed_buttons_template.py` (S78) — it already has this exact shape. New categories (e.g. `girl_dances`) render automatically — `groupByCategory` in `mobile/store/template-store.ts` is data-driven; only add a `CATEGORY_LABEL_OVERRIDES` entry if title-casing breaks an abbreviation (`girl_dances` → "Girl Dances" is clean; no override needed).
 
 **Copy `scripts/seed_baby_dance_template.py` verbatim**, then change only:
 
@@ -368,5 +382,8 @@ Optionally enable as hero:
 - **Re-uploads need a CF cache purge.** The templates R2 bucket sets `Cache-Control: public, max-age=31536000, immutable`, so overwriting the SAME key leaves CF edges serving the old version for up to a year. When you replace an asset mid-build (delogo, upscale, re-encode), the workflow is: (1) overwrite the R2 object at the canonical key, (2) run `.venv/bin/python scripts/purge_cf_cache.py <url>` to invalidate the CDN edge. Confirm with `curl -sI <url> | grep content-length` matches the new file size. Keep the canonical filename (`driving_video.mp4`) — do NOT version-suffix files to dodge the purge step; that creates URL noise that compounds across templates.
 - **Trim-step CRF: 15, not 18.** When step 8 is needed (temporal trim of Kling output before R2 upload), use `-crf 15` or lower. Visually identical to crf-18 on today's iPhones, but leaves bitrate headroom closer to Kling's native ~20 Mbps and matches the catalog-template parity bar. See `Memory/feedback_template_preview_crf.md`.
 - **Aspect inherits NBP.** Kling output aspect is inherited from the NBP edit's aspect — see `Memory/reference_kling_mc_aspect_inherits_nbp.md`. If the source is portrait, either crop to ~1:1 before NBP, or use the wide-arms T-pose framing in the NBP prompt (step 4).
+- **Driver upscale (optional).** If a gen looks soft/low-detail, the driver may be too low-res — upscale the raw source, then re-run the chain with `--driving-video <upscaled URL>` (S78 arg). NOT a default step.
+  - **Preferred: Topaz Video API** — `scripts/upscale_topaz.py` (S78), runs on Topaz's cloud. ~5 min + ~$1.20 (9-10 credits) for a 15s clip (vs Replicate's ~60 min). Needs `TOPAZ_API_KEY` in `.env`. `POST` create returns a FREE cost estimate first (`--stop-after create`). Upscales resolution only (no fps change) + `audioTransfer:Copy` keeps audio synced → **NO re-time/re-mux needed**; feed the output straight to Kling. Default model `prob-4` (Proteus v4). Full API facts in the `scripts/upscale_topaz.py` docstring (built from Topaz's OpenAPI YAML). [S78: validated the free cost-estimate step only; full run pending confirmation next session.]
+  - **Fallback: Replicate** — `scripts/upscale_driving_video.py`. Slow (~60 min/15s clip) AND re-times the clip → must re-time + re-mux per `Memory/reference_replicate_video_retimes.md` (covers 2k-vs-FHD, URL-input quirk, audio-resync recipe).
 - **Pattern smell.** With 9+ templates, the per-template sister-script pattern (`test_<slug>_chain.py` × N, `seed_<slug>_template.py` × N) is overdue for generalization. Don't refactor mid-build — finish the templates, then generalize.
 - **NBP close-X removal is inconsistent.** `Memory/feedback_nbp_wont_remove_ui_overlays.md` — if it fails once, fall back to Pillow paint rather than re-prompting NBP.

@@ -1,21 +1,28 @@
-"""V2 Pipeline A The Hills template — NBP-edit → Kling Motion Control chain (S77).
+"""V2 Pipeline A River template — NBP-edit → Kling Motion Control chain (S78).
 
-First template of the "Girl Dances" row (category girl_dances).
-Sister to scripts/test_na_favelinha_chain.py.
+Third template of the "Girl Dances" row (category girl_dances).
+Sister to scripts/test_buttons_chain.py.
 
-Pattern B (S73 hybrid-permissive), applied per the runbook's NBP-regen rules:
-push the APPEARANCE off the source anchor (NOT-this + menu), keep ONLY the
-structural traits (age / height / build / pose) that the motion-transfer needs.
+⚠️ River is a FLOOR / reclining dance (kneeling, arched back, lying propped on
+the floor) — NOT an upright standing dance. So this script does NOT use the
+standing "roomy full-body, feet+floor, lateral movement" composition from the
+runbook's S78 default. Instead the NBP pose register is FLOOR-based to stay
+coherent with the driver, framed as a medium-wide shot showing the whole body
+on the floor.
 
-Reference-frame note: the driving clip starts bent-over (hair-flip), face
-hidden — a poor character reference. Per the runbook "force face visibility"
-rule (Smooth Criminal lesson), the NBP reference is taken at t=1s of the clip
-(the_hills_frame_t1.png) where the dancer is upright and face-visible. The
-driving video itself still starts at 0.5s (motion unchanged).
+Styling (S78, user decision "match source"): keep the source's register — a
+fitted orange/red dance top + black pants/heels in a moody, red/teal-lit dark
+corridor. Different woman (Pattern B). Reviewer-risk on this one is accepted by
+the user.
+
+Source: River_start_at_1_sec.mov — cropped from t=1s to the end (no end crop,
+~14.6s) into river_clip.mp4. Reference frame taken at clip t=2s (= original
+t=3s, river_frame_clip_t2.png) — the only early frame with a clearly-visible
+face (the others have the head tilted back or hair across the face).
 
 Usage:
-    .venv/bin/python scripts/test_the_hills_chain.py --no-kling
-    .venv/bin/python scripts/test_the_hills_chain.py --edited-image ~/Downloads/the_hills_edit_xxx.png --keep-audio
+    .venv/bin/python scripts/test_river_chain.py --no-kling
+    .venv/bin/python scripts/test_river_chain.py --edited-image ~/Downloads/river_edit_xxx.png --keep-audio
 """
 from __future__ import annotations
 
@@ -45,55 +52,48 @@ from speech_to_video.utils.config import get_settings  # noqa: E402
 MODEL = "gemini-3-pro-image-preview"
 
 DEFAULT_REFERENCE = Path(
-    "/Users/saurabhsmacbookair/Downloads/App Templates Prep/Working/Girl Dances/the_hills_frame_t1.png"
+    "/Users/saurabhsmacbookair/Downloads/App Templates Prep/Working/Girl Dances/river_frame_clip_t2.png"
 )
 
-THE_HILLS_EDIT_PROMPT = (
+RIVER_EDIT_PROMPT = (
     "Edit this image:\n"
     "- Replace the subject with a GENUINELY DIFFERENT young woman — NOT the "
     "same person as the input. Keep ONLY her age (approximately early-to-mid "
     "20s), her height, and her slim build the same, plus the same general "
-    "standing dance pose (upright, turned side-on to the camera, hands raised "
-    "near her head). Everything about her APPEARANCE must clearly differ from "
-    "the input:\n"
-    "  - Hair: long flowing hair (the dance features hair movement, so keep it "
-    "long), but a DIFFERENT color from the input's dark brown/black — e.g. "
-    "honey-blonde, warm caramel, auburn, or light golden-brown — pick one.\n"
+    "FLOOR dance pose (reclining / propped on the floor, exactly as in the "
+    "input — she is NOT standing). Everything about her APPEARANCE must "
+    "clearly differ from the input:\n"
+    "  - Hair: long flowing hair, but a DIFFERENT color from the input's dark "
+    "brown/black — e.g. honey-blonde, warm caramel, auburn, or light "
+    "golden-brown — pick one.\n"
     "  - Skin tone: a natural skin tone clearly different from the input's.\n"
-    "  - Different facial features. A confident, joyful expression. Her face "
-    "must be clearly visible and NOT hidden by her hair.\n"
-    "- Wardrobe: a stylish PARTY outfit — a tank top paired with pants (e.g. "
-    "a fitted tank top with sleek tailored trousers, wide-leg party pants, or "
-    "dressy fitted pants), in cheerful, party-appropriate colors that are NOT "
-    "the input's all-black cami and leggings. Modest, tasteful coverage. No "
-    "readable text or logos.\n"
-    "- Scene: a bright, spacious indoor interior with soft neutral walls and "
-    "natural daylight, and a WIDE expanse of clear empty floor extending well "
-    "to the LEFT AND RIGHT of her. Distinct from the input's plain studio "
-    "wall. The space around her must be open and uncluttered — any furniture "
-    "or plants must be small and FAR in the background, never near her on "
-    "either side. CRITICAL: do NOT include mirrors or any reflective surfaces "
-    "that could show a reflection of the subject.\n"
+    "  - Different facial features. A confident expression. Her face must be "
+    "clearly visible, turned toward the camera, and NOT hidden by her hair.\n"
+    "- Wardrobe: match the input's register but in a clearly DIFFERENT color "
+    "and cut — a fitted dance top (sporty bralette or crop top) with slim "
+    "black pants and heels, in a color that is NOT the input's orange (e.g. "
+    "deep teal, plum, ruby, or champagne — pick one). Tasteful; do not make "
+    "it more revealing than the input. No readable text or logos.\n"
+    "- Scene: match the input's moody, cinematic register, but in a SPACIOUS "
+    "dark interior — a large empty room / warehouse / studio floor (NOT a "
+    "narrow corridor or hallway), with dramatic colored lighting (deep teal "
+    "shadows with a warm red/amber key light) and a WIDE expanse of clear, "
+    "open, uncluttered floor extending well to her LEFT AND RIGHT. Keep the "
+    "SUBJECT clearly lit and well-exposed against the moody background (her "
+    "body and face must read clearly — avoid crushing her into shadow). "
+    "CRITICAL: do NOT include mirrors or any reflective surfaces that could "
+    "show a reflection of the subject.\n"
     "- Remove ALL UI overlays from the input: the red recording indicator at "
     "top-left, the dark circular X close-button on the left edge, and the "
     "iPhone status-bar elements at top-right (signal / wifi / battery icons). "
     "Paint over each with what would naturally be behind it.\n"
     "- Single subject only — exactly one woman, no second person, no "
     "duplicate, no mirror image.\n"
-    "- COMPOSITION: frame her as a WIDER full-body shot — FARTHER from the "
-    "camera and SMALLER in the frame than the input, occupying roughly the "
-    "central 55-65% of the frame height, and CENTERED horizontally in the "
-    "frame. Leave GENEROUS and roughly EQUAL open empty floor on BOTH the "
-    "left and right sides of her body, plus clear floor below her feet, so "
-    "there is ample room for lateral dance movement in either direction. "
-    "Nothing should be within arm's reach on either side of her. Her whole "
-    "body must be visible head-to-feet with comfortable headroom above her "
-    "hair. The raised arms must be well inside the frame, never clipped at the "
-    "side or top edges.\n"
-    "- FEET AND FLOOR (critical): her FEET must be FULLY visible inside the "
-    "frame with a clear margin of empty floor BELOW her feet — do NOT crop or "
-    "cut off her feet, ankles, or lower legs at the bottom edge. Keep her "
-    "feet at least 8-10% of the frame height above the bottom edge.\n"
+    "- COMPOSITION: a medium-wide shot that shows her WHOLE BODY on the floor "
+    "(head, hands, hips, legs, and feet all inside the frame) with surrounding "
+    "floor space around her, matching the input's camera-to-subject distance. "
+    "Do NOT crop her head, hands, or feet at any edge. Keep her face clearly "
+    "visible.\n"
     "- Output a clean photographic frame at square (1:1) aspect — no UI, no "
     "buttons, no text overlays. The face MUST be clearly visible."
 )
@@ -105,8 +105,11 @@ GENERIC_KLING_PROMPT = (
     "elements that conflict with the visible context."
 )
 
-THE_HILLS_DRIVING_VIDEO = (
-    "https://assets.speech-2-video.ai/viral-dances/the-hills/driving_video.mp4"
+# S77 going-forward flow: the chain drives off the trimmed RAW source
+# (raw_source.mp4); the high-bitrate Kling output is later uploaded as
+# driving_video.mp4 (the runtime driver). See V2_template_creation_runbook.md.
+RIVER_DRIVING_VIDEO = (
+    "https://assets.speech-2-video.ai/viral-dances/river/raw_source.mp4"
 )
 
 KLING_CHARACTER_ORIENTATION = "video"
@@ -143,12 +146,12 @@ def _save_image(resp, out_dir: Path, prefix: str) -> tuple[bool, str, str]:
 
 def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int, str]:
     log.info("NBP edit submit  model=%s  reference=%s", MODEL, reference)
-    log.info("Prompt:\n%s", THE_HILLS_EDIT_PROMPT)
+    log.info("Prompt:\n%s", RIVER_EDIT_PROMPT)
 
     mime = mimetypes.guess_type(str(reference))[0] or "image/png"
     contents = [
         types.Part.from_bytes(data=reference.read_bytes(), mime_type=mime),
-        THE_HILLS_EDIT_PROMPT,
+        RIVER_EDIT_PROMPT,
     ]
 
     t0 = time.time()
@@ -164,7 +167,7 @@ def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int,
         return 1, ""
     elapsed = time.time() - t0
 
-    ok, info, _ = _save_image(resp, out_dir, "the_hills_edit")
+    ok, info, _ = _save_image(resp, out_dir, "river_edit")
     if ok:
         print(f"PASS  NBP edit  model={MODEL}  elapsed={elapsed:.1f}s")
         print(f"      saved: {info}")
@@ -174,10 +177,10 @@ def run_edit(client: genai.Client, reference: Path, out_dir: Path) -> tuple[int,
 
 
 def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False,
-              driving_video: str = THE_HILLS_DRIVING_VIDEO) -> int:
+              driving_video: str = RIVER_DRIVING_VIDEO) -> int:
     settings = get_settings()
     selfies_bucket = settings.r2_selfies_bucket
-    key = f"spike-outputs/the-hills-chain/{uuid.uuid4().hex}.png"
+    key = f"spike-outputs/river-chain/{uuid.uuid4().hex}.png"
     log.info("R2 upload (private)  bucket=%s key=%s", selfies_bucket, key)
     r2_client.upload_file(local_path=edited_image_path, key=key, content_type="image/png", bucket=selfies_bucket)
     image_url = r2_client.generate_presigned_get_url(key, bucket=selfies_bucket, expires_in=1800)
@@ -201,7 +204,7 @@ def run_kling(edited_image_path: str, out_dir: Path, keep_audio: bool = False,
         return 1
 
     video_url = result["video_url"]
-    out_path = out_dir / f"the_hills_chain_{uuid.uuid4().hex[:8]}.mp4"
+    out_path = out_dir / f"river_chain_{uuid.uuid4().hex[:8]}.mp4"
     log.info("Kling download  %s -> %s", video_url, out_path)
     with requests.get(video_url, stream=True, timeout=60) as r:
         r.raise_for_status()
@@ -221,7 +224,7 @@ def main():
     ap.add_argument("--edited-image")
     ap.add_argument("--no-kling", action="store_true")
     ap.add_argument("--keep-audio", action="store_true")
-    ap.add_argument("--driving-video", default=THE_HILLS_DRIVING_VIDEO,
+    ap.add_argument("--driving-video", default=RIVER_DRIVING_VIDEO,
                     help="Driving video URL (override to use an upscaled driver)")
     ap.add_argument("--out-dir", default=str(Path.home() / "Downloads"))
     args = ap.parse_args()
