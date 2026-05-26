@@ -1,7 +1,7 @@
 """Topaz Video API client — upscale a driving video on Topaz's cloud (S78).
 
 Replaces the slow Replicate Real-ESRGAN path. Runs on Topaz's GPUs (NOT the
-local M1). Built against the official OpenAPI schema (video-12-25-updated.yaml).
+local M1). Built against the official OpenAPI schema (docs/api-notes/topaz-video-api.yaml).
 
 Standard flow (chosen over /video/express because POST create returns a FREE
 cost estimate before any credits are spent):
