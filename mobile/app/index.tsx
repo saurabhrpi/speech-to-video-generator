@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   ScrollView,
   FlatList,
@@ -39,6 +40,13 @@ const HERO_H = Math.round(SCREEN_H * 0.4);
 const TILE_W = Math.round(SCREEN_W * 0.40);
 const TILE_H = Math.round(TILE_W * (10 / 7));
 
+// Tiles visible at rest (horizontal offset 0) for a 40%-width tile: two fit
+// fully. We paint those two on first frame so a freshly-revealed row isn't
+// black for a beat; live horizontal viewability refines it on scroll, and the
+// row only plays them when the row itself is on screen (rowOnScreen) — so this
+// never plays a row that's off-screen vertically.
+const INITIAL_VISIBLE_TILES = 2;
+
 export default function HomeScreen() {
   const templates = useTemplateStore((s) => s.templates);
   const loading = useTemplateStore((s) => s.loading);
@@ -61,6 +69,27 @@ export default function HomeScreen() {
     [],
   );
 
+  // Which category ROWS are currently on screen vertically. Combined with each
+  // row's own horizontal tile-visibility (see CategoryRow), a tile plays only
+  // when its row is on screen AND the tile is within the row's viewport. This
+  // bounds live <Video> decoders to ~the rows actually in the viewport, keeping
+  // it well under iOS's concurrent hardware-decode ceiling (the prod stutter /
+  // "off-screen tiles still play" cause). A row counts as on-screen at >=60%
+  // vertical visibility so its tiles light up only once it's mostly in view —
+  // the "sensitive, plays as it enters" feel. The outer container is now a
+  // FlatList (was a plain ScrollView) so rows virtualize AND get viewability;
+  // the S71 sticky-hero gesture bug was about overlapping layers, not a list,
+  // so a plain vertical list does not reintroduce it.
+  const [visibleRows, setVisibleRows] = useState<Set<string>>(new Set());
+  const rowViewabilityConfig = useRef({ itemVisiblePercentThreshold: 90 }).current;
+  const onRowViewableChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      setVisibleRows(
+        new Set(viewableItems.map((v) => (v.item as { category: string }).category)),
+      );
+    },
+  ).current;
+
   useEffect(() => {
     // Hydrate first so cold-start shows cached templates immediately, then
     // re-fetch in the background. fetch sends If-None-Match → 304 keeps the
@@ -74,33 +103,38 @@ export default function HomeScreen() {
   const grouped = groupByCategory(templates);
   const heroItems = pickHeroItems(templates);
 
+  const renderEmpty = () => {
+    if (!hydrated || (loading && templates.length === 0)) return <SkeletonRows />;
+    if (error && templates.length === 0)
+      return <ErrorState message={error} onRetry={fetchTemplates} />;
+    return <EmptyState />;
+  };
+
   return (
     <View style={styles.root}>
-      {/* Plain single-scroll layout: hero scrolls off naturally with the rest
-          of the content. Sticky / slider-phone hero layering was attempted but
-          reverted in S71 — the native UIScrollView pan-gesture recognizer
-          always wins over JS pointerEvents in any overlap region, starving
-          the hero of touches. Tracked separately for future work. */}
-      <ScrollView
+      {/* Vertical FlatList of category rows; hero is the list header so it
+          scrolls off naturally. Sticky / slider-phone hero layering was
+          attempted but reverted in S71 (native pan-gesture beats JS
+          pointerEvents in overlap regions) — a plain list avoids that. */}
+      <FlatList
+        data={grouped}
+        keyExtractor={(g) => g.category}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
-      >
-        <HeroSection items={heroItems} frozen={heroFrozen} />
-
-        {!hydrated || (loading && templates.length === 0) ? (
-          <SkeletonRows />
-        ) : error && templates.length === 0 ? (
-          <ErrorState message={error} onRetry={fetchTemplates} />
-        ) : grouped.length === 0 ? (
-          <EmptyState />
-        ) : (
-          grouped.map((g) => (
-            <CategoryRow key={g.category} category={g.category} items={g.items} />
-          ))
+        ListHeaderComponent={<HeroSection items={heroItems} frozen={heroFrozen} />}
+        ListEmptyComponent={renderEmpty}
+        renderItem={({ item }) => (
+          <CategoryRow
+            category={item.category}
+            items={item.items}
+            rowOnScreen={visibleRows.has(item.category)}
+          />
         )}
-      </ScrollView>
+        viewabilityConfig={rowViewabilityConfig}
+        onViewableItemsChanged={onRowViewableChanged}
+      />
 
       <Pressable
         style={styles.fab}
@@ -203,22 +237,38 @@ function HeroCard({
 }) {
   const videoUrl =
     template.assets?.preview_video_url ?? template.assets?.driving_video_url;
+  // Mount the <Video> only for the ACTIVE hero card (same decoder-pool reason as
+  // TemplateTile) — inactive cards and the scrolled-past state (isActive already
+  // folds in !frozen) render a placeholder, freeing the player.
+  const poster = template.assets?.thumbnail_url;
+  const hasPoster = isUsableMediaUrl(poster);
+  const showVideo = isActive && isUsableMediaUrl(videoUrl);
   return (
     <Pressable style={styles.heroCard} onPress={onPress}>
-      {isUsableMediaUrl(videoUrl) ? (
-        <Video
-          source={{ uri: videoUrl }}
-          style={styles.heroMedia}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          isMuted
-          shouldPlay={isActive}
-        />
-      ) : (
-        <View style={[styles.heroMedia, styles.heroMediaPlaceholder]}>
-          <Ionicons name="image-outline" size={36} color={Colors.textSecondary} />
-        </View>
-      )}
+      <View style={styles.heroMedia}>
+        {hasPoster && (
+          <Image
+            source={{ uri: poster as string }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        )}
+        {showVideo && (
+          <Video
+            source={{ uri: videoUrl as string }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.COVER}
+            isLooping
+            isMuted
+            shouldPlay
+          />
+        )}
+        {!hasPoster && !showVideo && (
+          <View style={[StyleSheet.absoluteFill, styles.heroMediaPlaceholder]}>
+            <Ionicons name="image-outline" size={36} color={Colors.textSecondary} />
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -234,20 +284,28 @@ function pickHeroItems(templates: Template[]): Template[] {
     });
 }
 
-function CategoryRow({ category, items }: { category: string; items: Template[] }) {
-  // Track which template IDs are currently in the viewport. Initialize with
-  // the first 2 (~one screen-width of 45%-tiles) so the row isn't black on
-  // mount, but we don't seed extras that will immediately fail the strict
-  // 100% visibility threshold below.
+function CategoryRow({
+  category,
+  items,
+  rowOnScreen,
+}: {
+  category: string;
+  items: Template[];
+  rowOnScreen: boolean;
+}) {
+  // Which tiles are within this row's HORIZONTAL viewport. Live-updated by the
+  // inner FlatList's viewability; seeded with the tiles that fit at rest so the
+  // row isn't black on first paint (refined immediately on scroll). A tile
+  // plays only when rowOnScreen (vertical) AND it's in this set (horizontal).
   const [visibleIds, setVisibleIds] = useState<Set<string>>(
-    () => new Set(items.slice(0, 2).map((t) => t.id)),
+    () => new Set(items.slice(0, INITIAL_VISIBLE_TILES).map((t) => t.id)),
   );
 
   // RN requires viewabilityConfig + onViewableItemsChanged to be stable refs;
-  // changing them between renders throws at runtime. 100% threshold = only
-  // fully-visible tiles get a live decoder, keeping concurrent video count
-  // bounded as the catalog grows.
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 100 }).current;
+  // changing them between renders throws at runtime. 70% threshold = a tile
+  // lights up as it mostly enters the row (more "sensitive" than 100%, which
+  // waited until fully in); rowOnScreen still bounds total live decoders.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current;
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       setVisibleIds(new Set(viewableItems.map((v) => (v.item as Template).id)));
@@ -264,7 +322,10 @@ function CategoryRow({ category, items }: { category: string; items: Template[] 
         data={items}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
-          <TemplateTile template={item} isVisible={visibleIds.has(item.id)} />
+          <TemplateTile
+            template={item}
+            isVisible={rowOnScreen && visibleIds.has(item.id)}
+          />
         )}
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -284,40 +345,48 @@ function TemplateTile({
   const router = useRouter();
   const videoUrl =
     template.assets?.preview_video_url ?? template.assets?.driving_video_url;
-  const videoRef = useRef<Video>(null);
-
-  // Per AIV-92 contract: when a tile scrolls back into view, restart from
-  // frame 0 (TikTok-style). Initial-mount play comes "free" from the Video's
-  // own load behavior. replayAsync is a no-op if the source isn't ready yet,
-  // and shouldPlay={isVisible} handles the off-screen pause case.
-  useEffect(() => {
-    if (isVisible) {
-      videoRef.current?.replayAsync().catch(() => {});
-    }
-  }, [isVisible]);
 
   const onPress = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.push(`/template/${template.id}` as any);
   };
 
+  // First-frame poster is ALWAYS the base layer, so a non-playing tile shows
+  // its first frame instead of black (matches the competitor's "paused = first
+  // frame"). The looping <Video> mounts on TOP only while visible — expo-av
+  // holds a live AVPlayer per mounted <Video> regardless of shouldPlay, so
+  // mounting only on-screen tiles bounds iOS's decoder pool. A fresh mount also
+  // auto-starts from frame 0 (restart-on-reentry, no replayAsync needed).
+  const poster = template.assets?.thumbnail_url;
+  const hasPoster = isUsableMediaUrl(poster);
+  const showVideo = isVisible && isUsableMediaUrl(videoUrl);
+
   return (
     <Pressable style={styles.tile} onPress={onPress}>
-      {isUsableMediaUrl(videoUrl) ? (
-        <Video
-          ref={videoRef}
-          source={{ uri: videoUrl }}
-          style={styles.tileThumb}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          isMuted
-          shouldPlay={isVisible}
-        />
-      ) : (
-        <View style={[styles.tileThumb, styles.tileThumbPlaceholder]}>
-          <Ionicons name="image-outline" size={28} color={Colors.textSecondary} />
-        </View>
-      )}
+      <View style={styles.tileThumb}>
+        {hasPoster && (
+          <Image
+            source={{ uri: poster as string }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        )}
+        {showVideo && (
+          <Video
+            source={{ uri: videoUrl as string }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.COVER}
+            isLooping
+            isMuted
+            shouldPlay
+          />
+        )}
+        {!hasPoster && !showVideo && (
+          <View style={[StyleSheet.absoluteFill, styles.tileThumbCenter]}>
+            <Ionicons name="image-outline" size={28} color={Colors.textSecondary} />
+          </View>
+        )}
+      </View>
       <Text style={styles.tileTitle} numberOfLines={1}>
         {template.title}
       </Text>
@@ -472,12 +541,11 @@ const styles = StyleSheet.create({
     height: TILE_H,
     borderRadius: 8,
     backgroundColor: Colors.card,
+    overflow: 'hidden',
   },
-  tileThumbPlaceholder: {
+  tileThumbCenter: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   tileTitle: { color: Colors.textPrimary, fontSize: 13, marginTop: 6 },
   tileCost: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
