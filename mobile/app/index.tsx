@@ -32,6 +32,16 @@ function isUsableMediaUrl(url: string | null | undefined): url is string {
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HERO_H = Math.round(SCREEN_H * 0.4);
 
+// Y-offset at which the hero is considered "off" and its <Video> unmounts (S81).
+// Tightened from the old `>= HERO_H` (which only froze at FULL scroll-off, i.e.
+// when the hero was 100% gone). Freezing at 60% scrolled-off (≤40% of the hero
+// still visible) guarantees the hero's decoder is released a beat BEFORE the
+// hero leaves view — matching the tiles' "stop before fully gone" behaviour.
+// Tradeoff: the hero's last ~40% sliver shows its first-frame poster (frozen)
+// for the brief moment before it scrolls away. Tune the 0.6 if you want it
+// stickier (higher) or as eager as the tiles' 90% rule (→ ~0.1).
+const HERO_FREEZE_Y = Math.round(HERO_H * 0.6);
+
 // Tile sizing (S71): width = 40% of screen. Height keeps the original
 // 140:200 aspect (~7:10) so the video thumb doesn't crop or letterbox when
 // the width grows. At 40% two tiles fit fully and the third peeks ~40% — a
@@ -56,14 +66,15 @@ export default function HomeScreen() {
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
   const router = useRouter();
 
-  // Slider-phone pattern: hero is a fixed background layer; content scrolls
-  // OVER it. The freeze flag flips when scrolled past HERO_H (content has
-  // fully covered the hero). State only changes when crossing the threshold,
-  // so we don't re-render on every scroll frame.
+  // The freeze flag flips once the hero is mostly scrolled off (HERO_FREEZE_Y),
+  // which unmounts the active hero card's <Video> (see HeroCard: isActive folds
+  // in !frozen) so its decoder is freed a beat before the hero leaves view.
+  // State only changes when crossing the threshold, so we don't re-render on
+  // every scroll frame.
   const [heroFrozen, setHeroFrozen] = useState(false);
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const frozen = e.nativeEvent.contentOffset.y >= HERO_H;
+      const frozen = e.nativeEvent.contentOffset.y >= HERO_FREEZE_Y;
       setHeroFrozen((prev) => (prev !== frozen ? frozen : prev));
     },
     [],
@@ -441,6 +452,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 // abbreviations (e.g. "mj_dances" → "Mj Dances"); list those here.
 const CATEGORY_LABEL_OVERRIDES: Record<string, string> = {
   mj_dances: 'MJ Dances',
+  tiktok_dances: 'TikTok Dances',
 };
 
 function prettyCategory(c: string): string {
