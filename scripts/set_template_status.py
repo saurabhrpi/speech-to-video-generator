@@ -3,6 +3,13 @@
 Primary admin path for V2 launch — replaces editing the doc in the Firebase
 Console (Console edits bypass `template_status_log` and are NOT logged).
 
+Publishing is gated on a first-frame poster (S81): a template can only go to
+`published` once `assets.thumbnail_url` is usable. If it's missing, this script
+generates it (frame 0 of preview_stream.mp4) before flipping; it refuses with
+exit code 3 only if the poster can't be made (preview_stream.mp4 not on R2).
+This makes "no template ships posterless" an invariant of the publish path,
+independent of how the doc was seeded.
+
 Usage:
     python scripts/set_template_status.py <template_id> <draft|qa-pending|published> [--reason ...]
 
@@ -52,6 +59,30 @@ def main() -> int:
     from_status = before.get("published_status")
     if from_status == args.status:
         log.info("%s already %s — flipping anyway (logs admin intent).", args.template_id, args.status)
+
+    # Poster gate (S81): no template ships posterless. On publish, require a
+    # usable first-frame thumbnail; if missing, generate it here (covers a
+    # template seeded by an older no-thumbnail seed, or one whose seed-time
+    # poster step failed). Refuse only if generation is impossible — that means
+    # preview_stream.mp4 isn't on R2 yet. Enforced regardless of HOW the doc was
+    # seeded, so it also covers future non-dance template types.
+    if args.status == template_registry.STATUS_PUBLISHED:
+        from src.speech_to_video.utils.template_thumbnail import (
+            generate_thumbnail,
+            is_usable_thumbnail,
+        )
+
+        if not is_usable_thumbnail((before.get("assets") or {}).get("thumbnail_url")):
+            log.info("%s has no usable thumbnail_url — generating poster before publish...", args.template_id)
+            result = generate_thumbnail(before, force=True)
+            if result != "ok":
+                log.error(
+                    "refusing to publish %s: no usable thumbnail and auto-generation %r "
+                    "(need preview_stream.mp4 on R2). Backfill then retry:\n"
+                    "  .venv/bin/python scripts/generate_template_thumbnails.py --template-id %s",
+                    args.template_id, result, args.template_id,
+                )
+                return 3
 
     after = template_registry.set_status(
         args.template_id,

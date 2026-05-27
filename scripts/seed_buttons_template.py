@@ -1,8 +1,13 @@
 """Seed the Firestore template registry with the Buttons fixture (S78).
 
-Sister to scripts/seed_dance_flow_template.py. Pipeline A
-(motion-onto-character via Kling Motion Control), use_nbp_regen=true with
-the generic full-body framing hint.
+⭐ CANONICAL SEED — COPY THIS ONE for new templates (per the V2 template
+creation runbook, step 10). It carries the current S77 migrated asset shape
+AND the S81 inline first-frame poster step. The other scripts/seed_*_template.py
+files are historical per-template fixtures — do NOT copy them as a starting
+point (older ones lack the poster step and the migrated asset keys).
+
+Pipeline A (motion-onto-character via Kling Motion Control), use_nbp_regen=true
+with the generic full-body framing hint.
 
 Category: girl_dances (mechanically title-cases to "Girl Dances" in mobile,
 no CATEGORY_LABEL_OVERRIDES entry needed). First published girl_dances row.
@@ -17,6 +22,10 @@ Assets land in the S77 migrated shape directly:
   preview_video_url        -> preview_stream.mp4  (~5 Mbps, what the app plays)
   preview_video_url_orig   -> driving_video.mp4   (so streaming_previews --revert works)
   original_driving_video_url -> raw_source.mp4    (revert target)
+
+After the doc write, the seed generates the first-frame poster (S81): frame0 of
+preview_stream.mp4 -> thumbnail.jpg -> assets.thumbnail_url, so the home tile is
+never black off-screen. Requires preview_stream.mp4 to already be on R2.
 
 Starts as DRAFT — flip to published via `scripts/set_template_status.py`.
 
@@ -41,6 +50,7 @@ from src.speech_to_video.utils.template_registry import (  # noqa: E402
     get_template,
     upsert_template,
 )
+from src.speech_to_video.utils.template_thumbnail import generate_thumbnail  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("seed_buttons_template")
@@ -95,6 +105,18 @@ def main() -> None:
         written.get("audio_enabled"),
     )
 
+    # First-frame poster (S81): extract frame0 of preview_stream.mp4 ->
+    # thumbnail.jpg -> assets.thumbnail_url, so the home tile shows the first
+    # frame instead of black while off-screen / before the <Video> mounts.
+    # force=True: the fixture always seeds thumbnail_url=None, and a re-seed
+    # should rebuild the poster too. Requires preview_stream.mp4 to already be
+    # on R2 (runbook step 9). Never fatal — a hiccup leaves the doc seeded and
+    # the poster backfillable via scripts/generate_template_thumbnails.py.
+    try:
+        log.info("thumbnail: %s", generate_thumbnail(written, force=True))
+    except Exception as e:  # noqa: BLE001 — poster is best-effort, doc write already landed
+        log.warning("thumbnail generation failed (backfill later): %s", e)
+
     log.info("re-reading via get_template...")
     fetched = get_template(TEMPLATE_ID)
     a = fetched.get("assets") or {}
@@ -103,10 +125,11 @@ def main() -> None:
         fetched.get("id"), fetched.get("title"), fetched.get("category"),
     )
     log.info(
-        "assets: driver=%s preview=%s orig_driver=%s",
+        "assets: driver=%s preview=%s orig_driver=%s thumbnail=%s",
         (a.get("driving_video_url") or "").rsplit("/", 1)[-1],
         (a.get("preview_video_url") or "").rsplit("/", 1)[-1],
         (a.get("original_driving_video_url") or "").rsplit("/", 1)[-1],
+        (a.get("thumbnail_url") or "").rsplit("/", 1)[-1] or None,
     )
 
 
