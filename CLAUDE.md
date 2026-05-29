@@ -291,6 +291,10 @@ User Input (room_type, style, features)
 - Daemon threads. Ephemeral — server restart loses all jobs
 - Progress callback updates phase/step/message/partial_result
 
+**Gen Telemetry** (`src/speech_to_video/utils/gen_telemetry.py`) — durable per-gen record in Firestore collection `gen_events` (the persistent counterpart to the ephemeral job manager; survives restarts, so failures don't depend on scraping the Replit console). The shipping motion-transfer path (`VideoService._dispatch_motion_transfer`) writes one doc per gen at every exit: `outcome`, `failure_stage`, `kling_task_id`, `last_task_status`, and per-stage timings (`prep_ms`, `kling_ms`, `total_ms`). Best-effort — never raises, can't fail a gen. Pipeline B (scene-insertion) is not yet instrumented.
+- **Fire the report** (no Replit console needed): `python scripts/gen_telemetry_report.py [--failures-only] [--since-hours N] [--template <id>] [--limit N]`.
+- **Interpret:** prints success rate, within-5-min / within-6-min SLA rates (target 99.99% — see `Memory/project_reliability_target_and_telemetry.md`), latency percentiles (p50/p90/p95/p99 of total + Kling), and a failure table. Failure `outcome`s: `timeout` (exceeded `max_wait` — read `last_task_status`: `submitted`=true hang vs `processing`=slow-but-alive), `kling_failed` (Kling rejected — moderation/internal), `submit_error`/`submit_no_task_id` (never got a Kling task), `empty_result` (Kling said succeed but no video URL), `nbp_error` (regen step failed). The `kling_task_id` lets you poll Kling directly (output URL lives 30 days).
+
 **Clip Store** (`src/speech_to_video/utils/clip_store.py`)
 - Filesystem: `clips/{namespace}/playlist.json`, `responses/{ts}.json`, `stitched/`
 - Namespace sanitized: lowercase, non-alphanumeric -> `-`
@@ -454,7 +458,7 @@ Before adding or modifying ANY rule/instruction in a GPT prompt that references 
 - **AIMLAPI endpoint variation**: Providers expose different paths. Use env vars to configure.
 - **Whisper upload errors**: h11 LocalProtocolError. Client retries 3x with backoff.
 - **Stitching requires ffmpeg**: Via `imageio-ffmpeg` or system PATH.
-- **Job manager is ephemeral**: In-memory, max 50, 1-hour TTL. Server restart loses all jobs.
+- **Job manager is ephemeral**: In-memory, max 50, 1-hour TTL. Server restart loses all jobs. For a durable post-mortem of a gen (which stage failed, timeout vs reject, latency), use **Gen Telemetry** (Firestore `gen_events`) — see the component above and `scripts/gen_telemetry_report.py`.
 - **Config is NOT pydantic-settings**: Plain dataclass with `os.environ.get()` and `python-dotenv` (override=True).
 - **GPT model is gpt-5.2**: Set in .env, not the gpt-4 default in code.
 - **Index-file conflicts: never blindly `git checkout --ours/--theirs`**: For files whose job is to enumerate other files (e.g., `Memory/MEMORY.md`, route registries, `__all__` lists, README TOCs, `package.json` deps), both sides of a conflict are usually *additive* — picking one silently drops the other side's entries and orphans whatever they pointed to. Always read the conflict markers and hand-merge. After resolving, scan the working tree for newly-added files the index would normally reference; orphans = index entries you just dropped. Full context: `Memory/feedback_index_files_need_handmerge.md`.
