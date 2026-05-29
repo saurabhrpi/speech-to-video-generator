@@ -2,15 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current Focus (as of 2026-04-25)
+## Current Focus (as of 2026-05-28)
 
-**Shipping product:** Mobile Speech-to-Video app (`mobile/`). Single-screen UX — user types a prompt OR records audio (→ Whisper transcript), server fires ONE Hailuo 10-second text-to-video clip, returns to gallery. **No model picker, no duration picker** — V1 ships single-model + single-duration (Session 52 simplification). Entry point: `mobile/app/(tabs)/index.tsx` → `POST /api/generate/speech-to-video` → `video_service.generate_speech_to_video` → direct MiniMax client.
+**Shipping product:** Mobile AIVO motion-transfer template app (`mobile/`). Home is a template gallery — user taps a tiktok_dances tile → uploads a selfie → Pipeline A (Nano Banana Pro regen + Kling Motion Control) returns a dance clip to the gallery. Currently on **V2.0.1** (active dev on the `v2` git branch: home redesign, viewport-gated tile playback, first-frame posters, Coins UX rebrand, 45+ tiktok_dances templates) — heading for Build #15+. Entry point: `mobile/app/index.tsx` (home grid) → `mobile/app/template/[id].tsx` (selfie pick + Generate) → `POST /api/generate/template-video` → `video_service.generate_template_video` → Kling Motion Control client.
 
 **Paused:**
 - **Interior Timelapse pipeline** — Timelapse-Phase-2 target (NOT project-release V2). Backend code (`generate_timelapse_v2`, timelapse prompts, stitching) stays in the repo. Mobile has dormant wiring (`pipeline-store.ts`) but no active UI entry. Web has an active UI for it, but web itself is paused.
 - **Web frontend** (`web/`) — future version TBD. Do not invest here unless asked.
 
-**Rule for future sessions:** When product direction changes, update THIS Current Focus section in the same session. Don't let it rot. Every product/pricing/architecture decision must start from what's actually shipping (mobile), which means reading `mobile/app/(tabs)/index.tsx` and `mobile/store/gallery-store.ts` first, not the Vision sections below.
+**Rule for future sessions:** When product direction changes, update THIS Current Focus section in the same session. Don't let it rot. Every product/pricing/architecture decision must start from what's actually shipping (mobile), which means reading `mobile/app/index.tsx` (home grid) and `mobile/app/template/[id].tsx` (template detail) first, not the Vision sections below.
 
 ---
 
@@ -18,9 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project release names — used uniformly across docs, conversation, and commit messages:
 
-- **V1** — the shipping Speech-to-Video app (live on App Store, Build #14 approved 2026-05-04). Single-model + single-duration S2V flow.
-- **V2** — the **next release** we are now building: motion-transfer wedge + home-screen redesign + template gallery. Plan + scope: `docs/V2_motion_transfer_plan.md`. Template catalog: `docs/V2_template_catalog.md`. **NOT** the same as Timelapse-Phase-2 below.
-- **V2.1+** — phases after V2 launch. Categories from the V2 catalog deferred past launch (b, c, d, e, g, h, m, n, o, q, s, t, u, v, w, x) ship here.
+- **V2** — the motion-transfer + template gallery app, AIVO branded. Currently on **V2.0.1** (active dev on the `v2` git branch: home redesign, viewport-gated tile playback, first-frame posters, Coins UX rebrand, 45+ tiktok_dances templates) — heading for Build #15+. Plan + scope: `docs/V2_motion_transfer_plan.md`. Template catalog: `docs/V2_template_catalog.md`. **NOT** the same as Timelapse-Phase-2 below. (Past + future release names tracked outside CLAUDE.md.)
 - **Timelapse-Phase-2** — the second iteration of the (paused) Interior Timelapse pipeline. Internally referenced in code as `generate_timelapse_v2()` (function name unchanged). **Use "Timelapse-Phase-2" in docs/conversation** to disambiguate from project-release V2. Resumes if/when product direction returns to interior renovation timelapses.
 
 When a section or comment uses bare "V2", it always refers to the project release (motion-transfer + home-screen). Never to Timelapse.
