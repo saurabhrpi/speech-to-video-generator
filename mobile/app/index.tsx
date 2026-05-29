@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 import { useTemplateStore, groupByCategory, type Template } from '@/store/template-store';
 import { useAuthStore } from '@/store/auth-store';
@@ -66,6 +66,7 @@ export default function HomeScreen() {
   const hydrated = useTemplateStore((s) => s.hydrated);
   const hydrate = useTemplateStore((s) => s.hydrate);
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
   const router = useRouter();
 
   // The freeze flag flips once the hero is mostly scrolled off (HERO_FREEZE_Y),
@@ -112,6 +113,14 @@ export default function HomeScreen() {
       fetchTemplates();
     })();
   }, [hydrate, fetchTemplates]);
+
+  // AIV-97: refresh the balance whenever home regains focus (returning from the
+  // paywall, a gen, or settings) so the hero-overlay balance is never stale.
+  useFocusEffect(
+    useCallback(() => {
+      refreshCredits();
+    }, [refreshCredits]),
+  );
 
   const grouped = groupByCategory(templates);
   const heroItems = pickHeroItems(templates);

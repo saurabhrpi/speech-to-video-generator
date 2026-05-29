@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { View, Text, Alert } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, Alert, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Clipboard from 'expo-clipboard';
+import Constants from 'expo-constants';
 import { Button } from '@/components/Button';
 import ConfirmModal from '@/components/ConfirmModal';
 import CoinIcon from '@/components/CoinIcon';
@@ -16,6 +18,14 @@ export default function SettingsScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const openPaywall = useAuthStore((s) => s.openPaywall);
+  const uid = useAuthStore((s) => s.uid);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
+
+  // AIV-97: pull a fresh balance when Settings opens — this screen shows the
+  // coin balance, and an out-of-band grant may have landed since last refresh.
+  useEffect(() => {
+    refreshCredits();
+  }, [refreshCredits]);
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -27,6 +37,12 @@ export default function SettingsScreen() {
       if (e?.code === 'ERR_REQUEST_CANCELED') return;
       Alert.alert('Sign-in failed', e?.message ?? 'Please try again.');
     }
+  }
+
+  async function handleCopyUid() {
+    if (!uid) return;
+    await Clipboard.setStringAsync(uid);
+    Alert.alert('Copied', 'Your user ID was copied. Share it with support if asked.');
   }
 
   async function handleConfirmDelete() {
@@ -56,6 +72,19 @@ export default function SettingsScreen() {
           <Text className="text-sm text-foreground">Balance: {balanceLabel}</Text>
           <CoinIcon size={14} />
         </View>
+
+        {uid ? (
+          <Pressable
+            onPress={handleCopyUid}
+            className="gap-0.5"
+            accessibilityLabel="Copy your user ID"
+          >
+            <Text className="text-xs text-muted-foreground">Your user ID (tap to copy)</Text>
+            <Text className="text-xs text-foreground" numberOfLines={1}>
+              {uid}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {!isAnonymous ? (
           <>
@@ -98,7 +127,9 @@ export default function SettingsScreen() {
 
       <View className="rounded-lg border border-border bg-card p-4 gap-2">
         <Text className="text-sm font-semibold text-foreground">About</Text>
-        <Text className="text-xs text-muted-foreground">AIVO v1.0.0</Text>
+        <Text className="text-xs text-muted-foreground">
+          AIVO v{Constants.expoConfig?.version ?? '—'}
+        </Text>
         <Text className="text-xs text-muted-foreground">
           Generate AI videos from text or voice prompts.
         </Text>

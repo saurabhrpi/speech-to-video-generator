@@ -7,7 +7,6 @@ import { apiPost, resolveVideoUrl } from '@/lib/api-client';
 import { pollJob, ERR_CONNECTION_LOST, ERR_JOB_NOT_FOUND } from '@/lib/polling';
 import { generateThumbnail } from '@/lib/thumbnails';
 import { useAuthStore } from '@/store/auth-store';
-import { shouldFireRetry } from '@/lib/generation-status';
 
 const STORAGE_KEY = 'gallery_jobs';
 const BACKUP_KEY = 'gallery_jobs_backup';
@@ -37,13 +36,6 @@ export interface GalleryJob {
   error: string | null;
   createdAt: number;
   saved: boolean;
-  // V2 retry support (lib/generation-status). After the time-based phase
-  // machine declares the attempt failed (~7 min), the gallery watcher fires
-  // one retry — re-POSTs with `retryBody`, swaps in a new job_id, resets
-  // `createdAt`, and increments `retryAttempts`. V1 S2V jobs leave both
-  // unset (no retry, FormData isn't persistable anyway).
-  retryAttempts?: number;
-  retryBody?: { template_id: string; selfie_key: string };
 }
 
 /** Module-level AbortControllers — not serialized */
@@ -109,11 +101,6 @@ interface GalleryStore {
   selectJob: (id: string | null) => void;
   hydrate: () => Promise<void>;
   resumePausedJobs: () => void;
-  /** Iterates `generating` jobs; for any whose phase clock says
-   *  shouldFireRetry, aborts the current poll and re-POSTs once. Idempotent —
-   *  safe to call every UI tick. Only V2 template-video jobs (jobs with
-   *  `retryBody`) are eligible. */
-  tickAndRetryIfDue: () => void;
   wipe: () => Promise<void>;
 }
 
@@ -359,8 +346,6 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       error: null,
       createdAt: Date.now(),
       saved: false,
-      retryAttempts: 0,
-      retryBody: { template_id: body.template_id, selfie_key: body.selfie_key },
     };
 
     set((s) => ({ jobs: [job, ...s.jobs] }));
@@ -544,74 +529,6 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       const ac = new AbortController();
       abortControllers.set(job.id, ac);
       runPoll(job.id, job.prompt, ac);
-    }
-  },
-
-  tickAndRetryIfDue: () => {
-    const candidates = get().jobs.filter(
-      (j) => j.status === 'generating' && !!j.retryBody && shouldFireRetry(j),
-    );
-    for (const job of candidates) {
-      const oldId = job.id;
-      const retryBody = job.retryBody!;
-
-      // Abort the existing poll. runPoll's catch block sees `ac.signal.aborted`
-      // and returns silently — no state change from the abort itself.
-      const ac = abortControllers.get(oldId);
-      if (ac) {
-        ac.abort();
-        abortControllers.delete(oldId);
-      }
-
-      // Bump retryAttempts immediately so the next tick (~30s later) doesn't
-      // double-fire while this POST is in flight. If the POST fails, retries
-      // is now == MAX_RETRIES — the phase machine will surface "failed".
-      set((s) => {
-        const jobs = s.jobs.map((j) =>
-          j.id === oldId
-            ? { ...j, retryAttempts: (j.retryAttempts ?? 0) + 1, statusMsg: 'Retrying…' }
-            : j,
-        );
-        persist(jobs);
-        return { jobs };
-      });
-
-      const newAc = new AbortController();
-      abortControllers.set(`retry_${oldId}`, newAc);
-
-      (async () => {
-        try {
-          const { job_id } = await apiPost<{ job_id: string }>(
-            '/api/generate/template-video',
-            retryBody,
-          );
-          abortControllers.set(job_id, newAc);
-          abortControllers.delete(`retry_${oldId}`);
-          set((s) => {
-            const jobs = s.jobs.map((j) =>
-              j.id === oldId
-                ? { ...j, id: job_id, createdAt: Date.now(), statusMsg: 'Submitted (retry)' }
-                : j,
-            );
-            persist(jobs);
-            return {
-              jobs,
-              selectedJobId: s.selectedJobId === oldId ? job_id : s.selectedJobId,
-            };
-          });
-          runPoll(job_id, job.prompt, newAc, { refreshAuth: true });
-        } catch (err: any) {
-          abortControllers.delete(`retry_${oldId}`);
-          if (err?.message === 'Aborted') return;
-          set((s) => {
-            const jobs = s.jobs.map((j) =>
-              j.id === oldId ? { ...j, statusMsg: 'Retry failed' } : j,
-            );
-            persist(jobs);
-            return { jobs };
-          });
-        }
-      })();
     }
   },
 

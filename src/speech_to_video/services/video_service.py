@@ -952,6 +952,7 @@ class VideoService:
         t_start = time.time()
         tid = template.get("id")
         model_name = mode = None
+        regen_key = None  # set if NBP regen runs; purged with the raw selfie below
 
         def _emit(outcome, *, failure_stage=None, error=None, result=None,
                   prep_ms=None, kling_ms=None):
@@ -972,11 +973,26 @@ class VideoService:
                 total_ms=int((time.time() - t_start) * 1000),
             )
 
+        def _purge():
+            # Privacy (S85): the raw selfie + NBP regen image have no use once the
+            # gen reaches a terminal state (success or failure). Delete them
+            # immediately rather than waiting on the R2 lifecycle rule. Best-effort
+            # — a purge failure must never affect the gen result; the lifecycle TTL
+            # is the backstop. (Retry was stripped, so nothing re-reads these.)
+            for key in (selfie_key, regen_key):
+                if not key:
+                    continue
+                try:
+                    r2_client.delete_object(key, bucket=self.settings.r2_selfies_bucket)
+                except Exception:
+                    logger.warning("[purge] delete failed for %s (swallowed)", key, exc_info=True)
+
         assets = template.get("assets") or {}
         driving_video = assets.get("driving_video_url")
         if not driving_video:
             _emit("error", failure_stage="load_template",
                   error="missing assets.driving_video_url")
+            _purge()
             return {"success": False, "phase": "load_template", "error": "missing assets.driving_video_url"}
 
         progress(phase="presign_selfie", template_id=tid)
@@ -989,8 +1005,10 @@ class VideoService:
                 _emit("nbp_error", failure_stage=regen.get("phase", "nbp_regen"),
                       error=regen.get("error"),
                       prep_ms=int((time.time() - t_start) * 1000))
+                _purge()
                 return regen
             character_url = regen["character_url"]
+            regen_key = regen.get("regen_key")
         else:
             character_url = r2_client.generate_presigned_get_url(
                 selfie_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
@@ -1035,6 +1053,7 @@ class VideoService:
                   failure_stage="kling_motion_control",
                   error=result.get("error"), result=result,
                   prep_ms=prep_ms, kling_ms=kling_ms)
+            _purge()
             return {
                 "success": False,
                 "phase": "kling_motion_control",
@@ -1043,6 +1062,7 @@ class VideoService:
             }
 
         _emit("success", result=result, prep_ms=prep_ms, kling_ms=kling_ms)
+        _purge()
         return {
             "success": True,
             "video_url": result["video_url"],

@@ -89,6 +89,9 @@ export default function RootLayout() {
         // AIV-51: re-poke RC so the CustomerInfo listener catches up any
         // transactions ingested while we were backgrounded.
         refreshPurchasesState();
+        // AIV-97: pull a fresh credit balance — covers out-of-band grants
+        // (support/promo) that landed while the app was backgrounded.
+        useAuthStore.getState().refreshCredits();
       }
     });
     return () => sub.remove();

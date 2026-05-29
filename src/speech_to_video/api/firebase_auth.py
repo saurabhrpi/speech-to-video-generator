@@ -110,5 +110,7 @@ def verify_firebase_token(authorization: Optional[str] = Header(default=None)) -
     token = _extract_token(authorization)
     claims = _decode_token(token)
     user = _user_from_claims(claims)
-    logger.info("auth uid=%s anon=%s provider=%s", user["uid"], user["is_anonymous"], user["provider"] or "-")
+    # AIV-94: removed the temp per-request UID log — plaintext UID on every
+    # authed call was too leaky for prod. Support now reads the UID in-app via
+    # Settings → "Your user ID" (AIV-98).
     return user

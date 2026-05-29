@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Pressable, Text, View, StyleSheet } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,29 +7,22 @@ import { computePhase } from '@/lib/generation-status';
 
 /**
  * Global bottom-right pill that surfaces an in-flight generation's countdown
- * (or retry / failure state) on every screen. Mounted at the root layout next
- * to <Paywall />. Hidden when there's no `generating` job.
+ * on every screen. Mounted at the root layout next to <Paywall />. Hidden when
+ * there's no `generating` job.
  *
  * Tap → /gallery, where the user can watch the same job land.
  *
- * Drives the retry watcher: every 30s tick also calls
- * `gallery-store.tickAndRetryIfDue()` so a stuck job (>12 min, attempts=0)
- * resubmits once without needing any other component to be mounted.
+ * A 30s ticker re-renders so the countdown label refreshes. The terminal state
+ * (completed / failed) is owned by the gallery store's polling, not here.
  */
 export default function FloatingStatusPill() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const jobs = useGalleryStore((s) => s.jobs);
-  const tickAndRetryIfDue = useGalleryStore((s) => s.tickAndRetryIfDue);
 
   // 30s ticker — forces re-render so the countdown label refreshes.
   useGenerationTick(30_000);
-
-  // On every tick (and on first mount), kick the retry watcher. Idempotent.
-  useEffect(() => {
-    tickAndRetryIfDue();
-  });
 
   // Per-route placement:
   //   /gallery        → hidden (the gallery card already surfaces the same info)

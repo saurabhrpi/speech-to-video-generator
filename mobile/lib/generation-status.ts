@@ -2,28 +2,23 @@
  * UX state machine for an in-flight generation job. Drives both the gallery
  * thumbnail card and the global floating status pill.
  *
- * Timeline (single attempt):
- *   0:00 — 5:00   "counting"        "Ready in X min(s)" + "Creating your video…"
- *   5:00 — 7:00   "almost_ready"    "Almost ready"      + "Creating your video…"
- *   7:00 — 12:00  "awaiting_retry"  "Retrying in X min" + "First attempt timed out"
- *  12:00          retry fires (resets createdAt, retryAttempts++)
+ * Timeline (client-side display ONLY — purely cosmetic, no side effects):
+ *   0:00 — 5:00   "counting"      "Ready in X min(s)" + "Creating your video…"
+ *   5:00 — 7:00   "almost_ready"  "Almost ready"      + "Creating your video…"
+ *   7:00+         "extended"      "Almost ready"      + "Hang tight, almost there…"
  *
- * After one retry attempt is in flight, the same window plays again:
- *   0:00 — 7:00   counting → almost_ready
- *   7:00          "failed" (no further retries)
+ * The phase is a pure function of `createdAt`. It NEVER declares success or
+ * failure: the gallery store's polling owns the terminal state — a backend
+ * success flips the job to "completed", a backend failure removes it + alerts.
  *
- * The "phase" is a pure function of `(createdAt, retryAttempts)` — the
- * gallery store's actual polling is independent and continues regardless.
- * If the backend returns success at any point, the job transitions to
- * "completed" through the existing pollJob path and this state machine
- * stops being consulted.
+ * S85: the client-side auto-retry was removed. Kling Motion Control jobs can't
+ * be cancelled, so resubmitting a "stuck" job didn't replace it — it spawned a
+ * duplicate and doubled the cost for zero speed gain. The friendly countdown
+ * stays; the resubmit (and the "Retrying…" / client-declared "failed" states)
+ * are gone. See Memory/project_reliability_target_and_telemetry.md.
  */
 
-export type GenerationPhase =
-  | 'counting'
-  | 'almost_ready'
-  | 'awaiting_retry'
-  | 'failed';
+export type GenerationPhase = 'counting' | 'almost_ready' | 'extended';
 
 export interface PhaseResult {
   phase: GenerationPhase;
@@ -37,8 +32,6 @@ export interface PhaseResult {
 
 export const READY_PHASE_MINS = 5;
 export const ALMOST_READY_PHASE_MINS = 2;
-export const RETRY_WAIT_MINS = 5;
-export const MAX_RETRIES = 1;
 
 const SUBTITLE_CREATING = 'Creating your video…';
 
@@ -47,11 +40,10 @@ function pluralMin(n: number): string {
 }
 
 export function computePhase(
-  job: { createdAt: number; retryAttempts?: number },
+  job: { createdAt: number },
   now: number = Date.now(),
 ): PhaseResult {
   const elapsedMin = (now - job.createdAt) / 60_000;
-  const retries = job.retryAttempts ?? 0;
 
   if (elapsedMin < READY_PHASE_MINS) {
     const minsRemaining = Math.max(1, Math.ceil(READY_PHASE_MINS - elapsedMin));
@@ -71,42 +63,12 @@ export function computePhase(
     };
   }
 
-  if (retries < MAX_RETRIES) {
-    const retryAtMin = READY_PHASE_MINS + ALMOST_READY_PHASE_MINS + RETRY_WAIT_MINS;
-    if (elapsedMin < retryAtMin) {
-      const minsToRetry = Math.max(1, Math.ceil(retryAtMin - elapsedMin));
-      return {
-        phase: 'awaiting_retry',
-        label: `Retrying in ${minsToRetry} ${pluralMin(minsToRetry)}`,
-        subtitle: 'First attempt timed out',
-        minsRemaining: minsToRetry,
-      };
-    }
-    // elapsedMin >= retryAtMin: a retry should be fired by the gallery store
-    // watcher; if it hasn't happened yet (e.g. between ticks), fall through
-    // to a transient "Retrying now…" presentation.
-    return {
-      phase: 'awaiting_retry',
-      label: 'Retrying now…',
-      subtitle: 'First attempt timed out',
-    };
-  }
-
+  // Past the expected window but the backend is still working. Stay reassuring
+  // and never claim failure — the poll will resolve it (success or backend-
+  // declared failure) on its own.
   return {
-    phase: 'failed',
-    label: 'Generation failed',
-    subtitle: 'Tap to dismiss',
+    phase: 'extended',
+    label: 'Almost ready',
+    subtitle: 'Hang tight, almost there…',
   };
-}
-
-/** True when the elapsed time on this attempt has passed the retry threshold
- *  AND we still have retries available — the gallery store should fire one. */
-export function shouldFireRetry(
-  job: { createdAt: number; retryAttempts?: number },
-  now: number = Date.now(),
-): boolean {
-  const elapsedMin = (now - job.createdAt) / 60_000;
-  const retries = job.retryAttempts ?? 0;
-  const retryAtMin = READY_PHASE_MINS + ALMOST_READY_PHASE_MINS + RETRY_WAIT_MINS;
-  return retries < MAX_RETRIES && elapsedMin >= retryAtMin;
 }

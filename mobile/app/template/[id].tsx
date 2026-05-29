@@ -46,6 +46,7 @@ export default function TemplateReviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const templates = useTemplateStore((s) => s.templates);
   const fetchTemplates = useTemplateStore((s) => s.fetchTemplates);
+  const refreshCredits = useAuthStore((s) => s.refreshCredits);
 
   const template: Template | undefined = useMemo(
     () => templates.find((t) => t.id === id),
@@ -58,6 +59,12 @@ export default function TemplateReviewScreen() {
   useEffect(() => {
     if (!template) fetchTemplates();
   }, [template, fetchTemplates]);
+
+  // AIV-97: refresh the credit balance when this screen opens, so the cost
+  // gate reflects any out-of-band grant since the app last refreshed.
+  useEffect(() => {
+    refreshCredits();
+  }, [refreshCredits]);
 
   const canAfford = useAuthStore((s) => s.canAfford);
   const openPaywall = useAuthStore((s) => s.openPaywall);
