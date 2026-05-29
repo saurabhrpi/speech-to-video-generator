@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTemplateStore, type Template } from '@/store/template-store';
 import { useAuthStore } from '@/store/auth-store';
 import { useGalleryStore } from '@/store/gallery-store';
+import CoinIcon from '@/components/CoinIcon';
 import { apiPost } from '@/lib/api-client';
 import { Colors } from '@/lib/design-tokens';
 
@@ -202,11 +203,11 @@ export default function TemplateReviewScreen() {
         </View>
 
         <View style={styles.formContent}>
+          <Text style={styles.title}>{template.title}</Text>
           {!!template.description && (
-            <Text style={styles.description}>{template.description}</Text>
+            <Text style={styles.subtitle}>{template.description}</Text>
           )}
 
-          <SectionTitle>Add your photo</SectionTitle>
           <View style={styles.selfieRow}>
             {selfieUri ? (
               <>
@@ -223,11 +224,6 @@ export default function TemplateReviewScreen() {
             )}
           </View>
 
-          <View style={styles.costLine}>
-            <Text style={styles.costLabel}>Cost</Text>
-            <Text style={styles.costValue}>{cost} credits</Text>
-          </View>
-
           <Pressable
             onPress={handleGenerate}
             disabled={!canSubmit}
@@ -236,10 +232,13 @@ export default function TemplateReviewScreen() {
           >
             {submitting ? (
               <ActivityIndicator color="#fff" />
+            ) : blockedByInFlight ? (
+              <Text style={styles.generateLabel}>Generation in progress</Text>
             ) : (
-              <Text style={styles.generateLabel}>
-                {blockedByInFlight ? 'Generation in progress' : 'Generate Video'}
-              </Text>
+              <View style={styles.generateRow}>
+                <Text style={styles.generateLabel}>{`Generate · ${cost}`}</Text>
+                <CoinIcon size={20} />
+              </View>
             )}
           </Pressable>
         </View>
@@ -261,10 +260,6 @@ function HeaderRow({ onBack }: { onBack: () => void }) {
       <View style={styles.headerBtn} />
     </View>
   );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -298,20 +293,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  description: {
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 28,
+    fontWeight: '700',
+    marginTop: 20,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  subtitle: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginTop: 16,
+    marginTop: 4,
     lineHeight: 20,
   },
-  sectionTitle: {
-    color: Colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  selfieRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  selfieRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 24 },
   pickerBox: {
     flex: 1,
     height: 96,
@@ -333,15 +329,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   changeLabel: { color: Colors.textPrimary, fontSize: 13 },
-  costLine: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 24,
-    paddingHorizontal: 4,
-  },
-  costLabel: { color: Colors.textSecondary, fontSize: 14 },
-  costValue: { color: Colors.textPrimary, fontSize: 16, fontWeight: '600' },
   generateBtn: {
     marginTop: 16,
     height: 56,
@@ -351,4 +338,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   generateLabel: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
+  generateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

@@ -19,6 +19,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useTemplateStore, groupByCategory, type Template } from '@/store/template-store';
 import { useAuthStore } from '@/store/auth-store';
 import { Colors } from '@/lib/design-tokens';
+import CoinIcon from '@/components/CoinIcon';
 
 function isUsableMediaUrl(url: string | null | undefined): url is string {
   return !!url && /^https?:\/\//.test(url) && !url.includes('placeholder.example');
@@ -202,14 +203,17 @@ function HeroSection({
         </View>
       )}
 
-      {/* Overlay row — title (left), credits | profile (right). Positioned
+      {/* Overlay row — title (left), balance + coin | profile (right). Positioned
           inside the safe area so it never hides under the status bar. */}
       <View style={[styles.heroOverlay, { top: insets.top + 4 }]}>
         <Text style={styles.brand}>AIVO</Text>
         <View style={styles.overlayRight}>
-          <Text style={styles.creditsText}>
-            {creditBalance != null ? `${creditBalance} Credits` : '— Credits'}
-          </Text>
+          <View style={styles.coinRow}>
+            <Text style={styles.creditsText}>
+              {creditBalance != null ? String(creditBalance) : '—'}
+            </Text>
+            <CoinIcon size={16} />
+          </View>
           <Text style={styles.divider}>|</Text>
           <Pressable
             onPress={() => router.push('/gallery')}
@@ -401,7 +405,6 @@ function TemplateTile({
       <Text style={styles.tileTitle} numberOfLines={1}>
         {template.title}
       </Text>
-      <Text style={styles.tileCost}>{template.credit_cost} cr</Text>
     </Pressable>
   );
 }
@@ -513,6 +516,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   creditsText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  coinRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   divider: { color: 'rgba(255,255,255,0.55)', fontSize: 16 },
   pageIndicator: {
     position: 'absolute',
@@ -538,7 +542,7 @@ const styles = StyleSheet.create({
   rowWrap: { paddingTop: 16, paddingBottom: 16 },
   sectionTitle: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     paddingHorizontal: 16,
     marginBottom: 8,
@@ -559,8 +563,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileTitle: { color: Colors.textPrimary, fontSize: 13, marginTop: 6 },
-  tileCost: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
+  tileTitle: { color: Colors.textPrimary, fontSize: 13, marginTop: 6, textTransform: 'uppercase' },
   skeletonHeader: {
     height: 14,
     width: 120,

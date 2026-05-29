@@ -20,6 +20,7 @@ import Purchases, {
 } from 'react-native-purchases';
 
 import { Button } from '@/components/Button';
+import CoinIcon from '@/components/CoinIcon';
 import { grantCreditsForTransaction } from '@/lib/purchases';
 import { useAuthStore } from '@/store/auth-store';
 import { Colors } from '@/lib/design-tokens';
@@ -105,7 +106,7 @@ export default function Paywall() {
   const ctaTitle = useMemo(() => {
     if (purchasing) return 'Processing…';
     if (!selectedPkg) return 'Loading…';
-    return `Buy ${PACK_CREDITS[selectedSku]} credits — ${selectedPkg.product.priceString}`;
+    return `Buy ${PACK_CREDITS[selectedSku]} coins — ${selectedPkg.product.priceString}`;
   }, [purchasing, selectedPkg, selectedSku]);
 
   async function handlePurchase() {
@@ -125,7 +126,7 @@ export default function Paywall() {
       const txId = res.transaction?.transactionIdentifier;
       if (!txId) {
         setPurchaseError(
-          'Purchase succeeded but could not be confirmed. If credits do not appear, please email support@speech-2-video.ai.',
+          'Purchase succeeded but could not be confirmed. If coins do not appear, please email support@speech-2-video.ai.',
         );
         return;
       }
@@ -136,7 +137,7 @@ export default function Paywall() {
       } catch {
         await refreshCredits();
         setPurchaseError(
-          'Credits should appear shortly. If not, please email support@speech-2-video.ai.',
+          'Coins should appear shortly. If not, please email support@speech-2-video.ai.',
         );
       }
     } catch (e: any) {
@@ -194,9 +195,9 @@ export default function Paywall() {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-heading font-body-medium text-foreground">Buy Credits</Text>
+            <Text className="text-heading font-body-medium text-foreground">Buy Coins</Text>
             <Text className="text-body font-body text-muted-foreground">
-              One-time purchase. Credits never expire.
+              One-time purchase. Coins never expire.
             </Text>
           </View>
 
@@ -235,9 +236,12 @@ export default function Paywall() {
                     </View>
                   ) : null}
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-subheading font-body-medium text-foreground">
-                      {credits} credits
-                    </Text>
+                    <View className="flex-row items-center gap-1.5">
+                      <Text className="text-subheading font-body-medium text-foreground">
+                        {credits}
+                      </Text>
+                      <CoinIcon size={20} />
+                    </View>
                     <Text className="text-subheading font-body-medium text-foreground">
                       {pkg?.product.priceString ?? '—'}
                     </Text>
@@ -245,7 +249,7 @@ export default function Paywall() {
                   <View className="mt-1 flex-row items-center justify-end">
                     <Text className="text-caption font-body text-muted-foreground">
                       {pkg
-                        ? `${formatUnit(pkg.product.price, pkg.product.currencyCode, credits)} / credit`
+                        ? `${formatUnit(pkg.product.price, pkg.product.currencyCode, credits)} / coin`
                         : ' '}
                     </Text>
                   </View>

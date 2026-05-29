@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Button } from '@/components/Button';
 import ConfirmModal from '@/components/ConfirmModal';
+import CoinIcon from '@/components/CoinIcon';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function SettingsScreen() {
@@ -51,7 +52,10 @@ export default function SettingsScreen() {
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Account</Text>
 
-        <Text className="text-sm text-foreground">Credits: {balanceLabel}</Text>
+        <View className="flex-row items-center gap-1.5">
+          <Text className="text-sm text-foreground">Balance: {balanceLabel}</Text>
+          <CoinIcon size={14} />
+        </View>
 
         {!isAnonymous ? (
           <>
@@ -68,7 +72,7 @@ export default function SettingsScreen() {
         ) : (
           <>
             <Text className="text-sm text-muted-foreground">
-              Sign in with Apple to keep your credits safe across devices.
+              Sign in with Apple to keep your coins safe across devices.
             </Text>
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
@@ -88,7 +92,7 @@ export default function SettingsScreen() {
             router.back();
             openPaywall();
           }}
-          title="Buy Credits"
+          title="Buy Coins"
         />
       </View>
 
@@ -104,7 +108,7 @@ export default function SettingsScreen() {
         <View className="rounded-lg border border-border bg-card p-4 gap-3">
           <Text className="text-sm font-semibold text-foreground">Danger Zone</Text>
           <Text className="text-xs text-muted-foreground">
-            Permanently delete your account, credits, and generated videos.
+            Permanently delete your account, coins, and generated videos.
           </Text>
           <Button
             variant="destructive"
@@ -118,7 +122,7 @@ export default function SettingsScreen() {
       <ConfirmModal
         visible={deleteConfirmOpen}
         title="Delete account?"
-        message="This permanently deletes your account, your remaining credits, and all generated videos. This action cannot be undone."
+        message="This permanently deletes your account, your remaining coins, and all generated videos. This action cannot be undone."
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleConfirmDelete}
