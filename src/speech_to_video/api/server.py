@@ -1250,6 +1250,8 @@ def create_template_video(
             selfie_key=req.selfie_key,
             prompt_overrides=req.prompt_overrides,
             on_progress=on_progress,
+            uid=user["uid"],
+            job_id=job_id,
         )
 
     start_job(job_id, run)

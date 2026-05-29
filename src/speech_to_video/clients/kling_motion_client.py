@@ -184,17 +184,23 @@ class KlingMotionClient:
         )
         status_code = int(submit_data.get("_status_code", 0))
         if not (200 <= status_code < 300) or submit_data.get("code") != 0:
-            return {"success": False, "error": submit_data}
+            return {"success": False, "error": submit_data, "failure_kind": "submit_error"}
 
         task_id = (submit_data.get("data") or {}).get("task_id")
         if not task_id:
-            return {"success": False, "error": "No task_id in response", "raw": submit_data}
+            return {
+                "success": False,
+                "error": "No task_id in response",
+                "raw": submit_data,
+                "failure_kind": "submit_no_task_id",
+            }
 
         logger.info("[Kling] task_id=%s — polling (max %ds)", task_id, max_wait)
 
         # Step 2: poll
         start = time.time()
         last_status: Dict[str, Any] = {}
+        task_status = ""  # holds the last observed status; read by the timeout branch
         while time.time() - start < max_wait:
             last_status = self.poll(task_id)
             data = last_status.get("data") or {}
@@ -206,6 +212,8 @@ class KlingMotionClient:
                     "success": False,
                     "error": data.get("task_status_msg") or last_status,
                     "task_id": task_id,
+                    "failure_kind": "kling_failed",
+                    "last_task_status": "failed",
                 }
             if task_status == "succeed":
                 videos = ((data.get("task_result") or {}).get("videos")) or []
@@ -215,6 +223,8 @@ class KlingMotionClient:
                         "error": "Succeeded but no videos in result",
                         "raw": last_status,
                         "task_id": task_id,
+                        "failure_kind": "empty_result",
+                        "last_task_status": "succeed",
                     }
                 video = videos[0]
                 video_url_out = video.get("url")
@@ -224,6 +234,8 @@ class KlingMotionClient:
                         "error": "Video entry missing url",
                         "raw": last_status,
                         "task_id": task_id,
+                        "failure_kind": "empty_result",
+                        "last_task_status": "succeed",
                     }
                 logger.info("[Kling] video ready: task_id=%s duration=%s",
                             task_id, video.get("duration"))
@@ -238,9 +250,14 @@ class KlingMotionClient:
             # submitted | processing → keep polling
             time.sleep(poll_interval)
 
+        # Loop exited without a terminal status → exceeded max_wait. The last
+        # observed task_status discriminates a true hang (stuck at "submitted")
+        # from a slow-but-alive gen (at "processing") — see S83 hang detection.
         return {
             "success": False,
             "error": "Generation timed out",
             "task_id": task_id,
             "last_status": last_status,
+            "failure_kind": "timeout",
+            "last_task_status": task_status or "unknown",
         }

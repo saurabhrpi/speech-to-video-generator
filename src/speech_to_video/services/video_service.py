@@ -895,6 +895,8 @@ class VideoService:
         selfie_key: str,
         prompt_overrides: Optional[Dict] = None,
         on_progress: Optional[Callable] = None,
+        uid: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> Dict:
         """V2 dispatcher. Loads a template by id and routes by `pipeline_class` to
         either the motion-transfer (Pipeline A) or scene-insertion (Pipeline B) flow.
@@ -916,7 +918,9 @@ class VideoService:
 
         pipeline = template.get("pipeline_class")
         if pipeline == template_registry.PIPELINE_MOTION_TRANSFER:
-            return self._dispatch_motion_transfer(template, selfie_key, prompt_overrides, progress)
+            return self._dispatch_motion_transfer(
+                template, selfie_key, prompt_overrides, progress, uid=uid, job_id=job_id,
+            )
         if pipeline == template_registry.PIPELINE_SCENE_INSERTION:
             return self._dispatch_scene_insertion(template, selfie_key, prompt_overrides, progress)
         return {"success": False, "phase": "route", "error": f"unknown pipeline_class: {pipeline!r}"}
@@ -927,6 +931,8 @@ class VideoService:
         selfie_key: str,
         overrides: Optional[Dict],
         progress: Callable,
+        uid: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> Dict:
         """Pipeline A: motion-transfer. Selfie + driving_video → animated character.
 
@@ -937,20 +943,52 @@ class VideoService:
         per-template so we can roll out template-by-template after verifying
         each one's regen quality on the sim.
         """
-        from ..utils import r2_client
+        from ..utils import gen_telemetry, r2_client
+
+        # S85 per-stage telemetry: time each stage and emit one durable Firestore
+        # event at whichever branch terminates the dispatch, so failures leave a
+        # recoverable trace (Kling task_id, timeout-vs-reject, stage timings) that
+        # outlives the ephemeral job manager. _emit is best-effort and never raises.
+        t_start = time.time()
+        tid = template.get("id")
+        model_name = mode = None
+
+        def _emit(outcome, *, failure_stage=None, error=None, result=None,
+                  prep_ms=None, kling_ms=None):
+            gen_telemetry.record(
+                outcome=outcome,
+                template_id=tid,
+                pipeline="motion-transfer",
+                uid=uid,
+                job_id=job_id,
+                failure_stage=failure_stage,
+                error=error,
+                kling_task_id=(result or {}).get("task_id"),
+                kling_model_name=model_name,
+                kling_mode=mode,
+                last_task_status=(result or {}).get("last_task_status"),
+                prep_ms=prep_ms,
+                kling_ms=kling_ms,
+                total_ms=int((time.time() - t_start) * 1000),
+            )
 
         assets = template.get("assets") or {}
         driving_video = assets.get("driving_video_url")
         if not driving_video:
+            _emit("error", failure_stage="load_template",
+                  error="missing assets.driving_video_url")
             return {"success": False, "phase": "load_template", "error": "missing assets.driving_video_url"}
 
-        progress(phase="presign_selfie", template_id=template["id"])
+        progress(phase="presign_selfie", template_id=tid)
 
         # Optional NBP regen — produces a regen character image and uses ITS url
         # for the Kling call. Falls back to the raw selfie when the flag is off.
         if template.get("use_nbp_regen"):
             regen = self._nbp_regen_character(template, selfie_key, progress)
             if not regen.get("success"):
+                _emit("nbp_error", failure_stage=regen.get("phase", "nbp_regen"),
+                      error=regen.get("error"),
+                      prep_ms=int((time.time() - t_start) * 1000))
                 return regen
             character_url = regen["character_url"]
         else:
@@ -958,8 +996,9 @@ class VideoService:
                 selfie_key, bucket=self.settings.r2_selfies_bucket, expires_in=600,
             )
 
-        progress(phase="kling_motion_control", template_id=template["id"])
-        client = self._resolve_motion_client(template["id"])
+        prep_ms = int((time.time() - t_start) * 1000)
+        progress(phase="kling_motion_control", template_id=tid)
+        client = self._resolve_motion_client(tid)
         # S67: per-template audio control replaces the S66 hardcoded silence.
         # template.audio_enabled True → keep_original_sound="yes" (output keeps
         # the driving-video soundtrack). Default missing/False stays silent
@@ -978,6 +1017,7 @@ class VideoService:
         # Per S58 (Memory/feedback_provider_mode_names_neq_outcomes.md), both
         # orientations produce the same Outcome-2 (motion-onto-character).
         model_name, mode = self._resolve_kling_settings(template)
+        t_kling = time.time()
         result = client.generate_and_poll(
             image_url=character_url,
             video_url=driving_video,
@@ -987,7 +1027,14 @@ class VideoService:
             prompt=(overrides or {}).get("prompt") or template.get("prompt_template"),
             keep_original_sound=keep_sound,
         )
+        kling_ms = int((time.time() - t_kling) * 1000)
         if not result.get("success"):
+            # failure_kind comes from the Kling client (timeout | kling_failed |
+            # submit_error | empty_result); fall back to generic "error".
+            _emit(result.get("failure_kind") or "error",
+                  failure_stage="kling_motion_control",
+                  error=result.get("error"), result=result,
+                  prep_ms=prep_ms, kling_ms=kling_ms)
             return {
                 "success": False,
                 "phase": "kling_motion_control",
@@ -995,6 +1042,7 @@ class VideoService:
                 "task_id": result.get("task_id"),
             }
 
+        _emit("success", result=result, prep_ms=prep_ms, kling_ms=kling_ms)
         return {
             "success": True,
             "video_url": result["video_url"],
