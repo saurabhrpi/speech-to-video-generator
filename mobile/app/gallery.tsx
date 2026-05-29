@@ -11,8 +11,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useGalleryStore, type GalleryJob } from '@/store/gallery-store';
-import { useTemplateStore, findTemplateById } from '@/store/template-store';
 import { Colors } from '@/lib/design-tokens';
+import { computePhase } from '@/lib/generation-status';
+import { useGenerationTick } from '@/hooks/useGenerationTick';
 
 const CARD_GAP = 12;
 const PADDING = 20;
@@ -26,20 +27,17 @@ export default function GalleryScreen() {
 
   const jobs = useGalleryStore((s) => s.jobs);
   const clearThumbnail = useGalleryStore((s) => s.clearThumbnail);
-  // Subscribed for V2 card variant — undefined templates fall through to V1 styling,
-  // so an unhydrated store doesn't break rendering.
-  const templates = useTemplateStore((s) => s.templates);
+
+  // 30s ticker so the per-card "Ready in X mins" countdown re-renders. Included
+  // in renderItem deps below so FlatList re-invokes per tick.
+  const tick = useGenerationTick(30_000);
 
   const renderItem = useCallback(({ item }: { item: GalleryJob }) => {
-    const template = findTemplateById(templates, item.templateId);
-
     if (item.status === 'generating' || item.status === 'paused') {
       const paused = item.status === 'paused';
-      const inflightCopy = paused
-        ? 'Paused'
-        : template
-          ? `Generating ${template.title}…`
-          : 'Generating Video';
+      const { label, subtitle } = paused
+        ? { label: 'Paused', subtitle: 'Will resume when back online' }
+        : computePhase(item);
       return (
         <View
           style={{
@@ -51,19 +49,38 @@ export default function GalleryScreen() {
             borderColor: Colors.glassyBorder,
             justifyContent: 'center',
             alignItems: 'center',
-            padding: 12,
+            padding: 16,
           }}
         >
           {paused ? (
-            <Ionicons name="cloud-offline-outline" size={28} color={Colors.textSecondary} />
+            <Ionicons name="cloud-offline-outline" size={32} color={Colors.textSecondary} />
           ) : (
-            <ActivityIndicator color={Colors.textPrimary} size="small" />
+            <ActivityIndicator color={Colors.textPrimary} size="large" />
           )}
           <Text
-            style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 10, textAlign: 'center' }}
+            style={{
+              color: Colors.textPrimary,
+              fontSize: 15,
+              fontWeight: '600',
+              marginTop: 14,
+              textAlign: 'center',
+            }}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {label}
+          </Text>
+          <Text
+            style={{
+              color: Colors.textSecondary,
+              fontSize: 11,
+              marginTop: 4,
+              textAlign: 'center',
+            }}
             numberOfLines={2}
           >
-            {inflightCopy}
+            {subtitle}
           </Text>
         </View>
       );
@@ -99,7 +116,7 @@ export default function GalleryScreen() {
         </View>
       </Pressable>
     );
-  }, [cardWidth, cardHeight, router, clearThumbnail, templates]);
+  }, [cardWidth, cardHeight, router, clearThumbnail, tick]);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

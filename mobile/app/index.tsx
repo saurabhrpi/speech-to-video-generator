@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 import { useTemplateStore, groupByCategory, type Template } from '@/store/template-store';
 import { useAuthStore } from '@/store/auth-store';
+import { useGalleryStore } from '@/store/gallery-store';
 import { Colors } from '@/lib/design-tokens';
 import CoinIcon from '@/components/CoinIcon';
 
@@ -148,15 +149,46 @@ export default function HomeScreen() {
         onViewableItemsChanged={onRowViewableChanged}
       />
 
-      <Pressable
-        style={styles.fab}
-        onPress={() => router.push('/create-video' as any)}
-        accessibilityLabel="Create a video"
-      >
-        <Ionicons name="mic" size={24} color="#FFFFFF" />
-        <Text style={styles.fabLabel}>Create a Video</Text>
-      </Pressable>
+      <GenerateFab onPress={() => router.push('/create-video' as any)} />
     </View>
+  );
+}
+
+/**
+ * Bottom-of-home Generate CTA. Two visual states:
+ *  - idle (no in-flight job)  → large pill centered (default)
+ *  - in-flight                → "Generate" pill stretched from left:16 to
+ *                                right:264 (leaves room for the
+ *                                <FloatingStatusPill> on the right; matches
+ *                                its 240 maxWidth + 8 gap + 16 edge).
+ *                                Both pills sit at the same bottom level
+ *                                (insets.bottom + 8).
+ * Tap target navigates to /create-video either way.
+ */
+function GenerateFab({ onPress }: { onPress: () => void }) {
+  const insets = useSafeAreaInsets();
+  const isGenerating = useGalleryStore((s) =>
+    s.jobs.some((j) => j.status === 'generating'),
+  );
+  const bottom = Math.max(insets.bottom, 24) + 8;
+  return (
+    <Pressable
+      style={[
+        isGenerating ? styles.fabCompact : styles.fabLarge,
+        { bottom },
+      ]}
+      onPress={onPress}
+      accessibilityLabel="Generate a video"
+    >
+      <Ionicons
+        name="sparkles"
+        size={isGenerating ? 18 : 20}
+        color="#FFFFFF"
+      />
+      <Text style={isGenerating ? styles.fabLabelCompact : styles.fabLabelLarge}>
+        {isGenerating ? 'Generate' : 'Generate Video'}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -603,15 +635,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryLabel: { color: Colors.textPrimary, fontSize: 13 },
-  fab: {
+  fabLarge: {
     position: 'absolute',
-    bottom: 50,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 28,
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 32,
     backgroundColor: '#007AFF',
     elevation: 4,
     shadowColor: '#000',
@@ -619,5 +651,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
-  fabLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginLeft: 6 },
+  // Stretched horizontally between left:16 and right:264 so the button fills
+  // the room next to <FloatingStatusPill> (which sits at right:16 with
+  // maxWidth 240, gap 8). Content centered inside the wide pill. Fixed
+  // `height: 60` matches the pill so the two sit at exactly the same height.
+  fabCompact: {
+    position: 'absolute',
+    left: 16,
+    right: 264,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 60,
+    borderRadius: 32,
+    backgroundColor: '#007AFF',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  fabLabelLarge: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
+  fabLabelCompact: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

@@ -2,36 +2,39 @@
 
 > **STICKY (do not remove):** Read Motto-and-Mantra.txt and [REQUIREMENTS.md](REQUIREMENTS.md). ToDo's live in [ToDo.md](ToDo.md) — do not remove items unless user says. If you're ever unsure about ANYTHING, feel free to do web search, as many time as you like. If you get blocked doing web search by the system, just prompt me and I will approve it.
 
-## Current Session: 83 — 2026-05-27 — branch `v2`
+## Current Session: 84 — 2026-05-28 — branch `v2`
 
-**Status:** **6 new `tiktok_dances` templates published** → feed **36 → 42**: 7/11, Seteadora, Copacabana, Speed, Got 2 Luv U, Luku. **2 more mid-flight**: Soda Pop Moves (Kling output downloaded, twins/seed/publish pending), Baby_Boo (NBP edit pending user verdict). Push-style Kling monitoring pattern introduced. Originally `Seteadora` was flagged SKIP in S82 but shipped this session per user override.
+**Status:** **3 new tiktok_dances templates published** → feed **42 → 45** (Soda Pop Moves, Baby_Boo, Git Up). **Credits→Coins UX rebrand SHIPPED** (commit `486cef9`, then `c7d8d73` ff-merged to main). **Floating-status-pill + 5-min countdown UX + client retry are IN CODE but UNCOMMITTED** — held pending Kling-timeout redesign decision (see Next step). Plus a temporary `console.log('[gen-debug] job_id …')` in gallery-store to remove before committing.
 
 ## What happened this session
 
-- **6 templates shipped** — 7/11 (tropical poolside, white woman dark hair, +0.5s audio fix), Seteadora (nightclub w/ empty dancefloor v2b after crowd-removal Pattern A edit; Latina, audio in-sync), Copacabana (cocktail lounge v2 lateral-room re-roll; Latino man; +0.5s audio + head+tail 0.5s trim), Speed (highway-at-night v2 shoulder Pattern A re-edit; South Asian man; audio in-sync), Got 2 Luv U (living room v3 lateral-room re-edit; mixed-race woman; audio in-sync), Luku (suburban backyard; older "dad" white man 50s-60s; audio in-sync).
-- **Push-style Kling monitoring locked in.** New `scripts/monitor_kling_task.py` polls Kling in background and exits on terminal state. New per-template flow: inline-python `client.submit()` (~3s) → spawn `monitor_kling_task.py` via `run_in_background` → harness re-invokes assistant on monitor exit. Replaces the chain script's inline 600s `generate_and_poll`, which burned conversation context on slow gens.
-- **Big lesson + memory update — lateral room prevents face distortion.** Updated [[reference_kling_mc_aspect_inherits_nbp]] with S83 finding: cramped framing in NBP edit causes BOTH cramped dance AND **face distortion** in Kling output (not just out-of-frame clipping). Original Copacabana had booths within arm's reach → first Kling output had cramped arms + subtle face distortion. Pattern A re-edit pushing furniture out fixed both. Going forward, every Pattern B chain prompt bakes the explicit "55-65% frame height, EQUAL open floor on both sides, nothing within arm's reach" clause up front (Luku, Soda Pop Moves, Baby_Boo).
-- **Big lesson + memory update — false-positive hangs.** Got 2 Luv U v3 monitor exited HUNG (code 2 at 300s no `updated_at` change), but a direct poll right after showed `task_status: succeed` — saved a wasted $1.50 re-submit. New workflow rule: ALWAYS direct-poll once after monitor's HUNG exit before re-submitting (user-locked: poll ONLY after 300s of no monitor updates, never earlier). Discriminator: true hangs sit at `submitted`; false-positive hangs sit at `processing`. Memory amended at [[reference_kling_task_hang_detection]].
-- **True hangs observed (no charge).** Seteadora v1+v2 sat in `submitted` forever — re-submitting fresh tasks worked. Per memory, hung tasks aren't charged. Kling API has NO cancel/delete endpoint — orphan tasks may eventually wake and produce a discardable output.
-- **Process delta from S82:** chain scripts now invoke `client.submit()` directly (submit-only inline-python) followed by monitor in background, instead of full `generate_and_poll`. Cuts dead inline-poll time when Kling takes >10 min.
+- **3 templates shipped** — Soda Pop Moves (43, first-roll approve), Baby_Boo (44; surgical NBP second pass removed overhead Edison string lights between v1 and v2 edits), Git Up (45; cup-positioning iteration — "her right hand" failed → "VISIBLE ON THE LEFT SIDE OF THE FRAME" worked; Kling rendered cups in BOTH hands which user accepted over empty-hands variant).
+- **Credits→Coins migration** — gold-clover PNG (~/Downloads/Coin.png was actually AVIF-with-.png-extension → broke RN decode, looked like an "orange slice"; converted with `sips -s format png`, then user-approved a Pillow-generated alt). Asset reference centralized in `mobile/lib/assets.ts` (config-driven). Word "Credits" → inline CoinIcon next to numbers; "coins" in pure prose.
+- **Template detail redesigned** — UPPERCASE title (28pt) + half-size mood subtitle (14pt); Add-your-photo + Cost labels removed; cost embedded in "Generate · 25 [coin]" button (U+00B7 middot). **16 weak template descriptions** ("Pinky up. 💅✨", "Let's go! 🔥🏀" etc.) rewritten to proper 4-word mood lines via partial-upsert Firestore batch.
+- **Home polish** — per-tile cost removed (redundant per row), UPPERCASE tile titles, section headers 16→18pt. Home FAB conditional: large centered "Generate Video" (20% bigger) when idle; compact stretched "Generate" filling room next to status pill (`left:16 → right:264`, `height:60`) when a gen is in flight.
+- **Countdown UX + retry (UNCOMMITTED)** — `mobile/lib/generation-status.ts` phase machine (counting → almost_ready → awaiting_retry → failed), 30s `useGenerationTick` hook, `<FloatingStatusPill>` (black/white, per-route placement: hidden on `/gallery`, centered on `/template/*`, right-anchored elsewhere; shared `bottom = max(insets.bottom, 24) + 8`, `height: 60`), gallery card redesigned to spinner + phase label + subtitle, gallery-store `tickAndRetryIfDue` watcher with `retryBody` persistence (`retryAttempts < 1` only).
+- **CLAUDE.md correction + v2→main ff-merge** — stale "V1 live on App Store, Build #14" was wrong; V2.0.0 has been live since AIVO rebrand. Versioning convention trimmed to current-only (V1 / V2.1+ history removed per user). Fast-forward main = v2 (68 commits, 0 conflicts) — main was strict ancestor; no PR needed (sole dev).
 
-## Next step — Session 84
+## Next step — Session 85
 
-- **Finish Soda Pop Moves**: inspect `~/Downloads/soda_pop_moves_chain_888833.mp4`, decide audio-sync (apply +0.5s fix or ship-as-is), build twins, upload to `viral-dances/soda-pop-moves/`, write+run `seed_soda_pop_moves_template.py`, publish via `set_template_status.py`. → feed 42 → 43.
-- **Finish Baby_Boo**: inspect `~/Downloads/baby_boo_edit_aa5be06d.jpg` (white blonde woman in patio-at-night, slip midi). If approved, submit-only Kling + monitor; else iterate NBP edit. Then twins / seed / publish. → feed 43 → 44.
-- **Resume V2.0.1 ship work** (carries 14 new templates this batch + S80/S81 home-feed/posters/TikTok-label/hero-threshold from prior sessions): AIV-97 credit refresh, AIV-98 Show My ID, revert AIV-94 UID logging, version bump, EAS build + TestFlight.
+**Lock + implement the Kling-timeout redesign** (open Q at /close). User-leaning proposal (4 pieces, confirm verbatim before coding):
+1. **Rip out client-side auto-retry** from gallery store (`tickAndRetryIfDue` + `retryBody` fields + 30s watcher). Kling has no cancel endpoint → resubmit-while-in-flight doubles cost, doesn't speed anything up. Keep the friendly countdown UX, just don't auto-resubmit. See [[feedback_no_client_retry_for_uncancellable_jobs]].
+2. **Stretch backend `max_wait`** 600s → 900s in `kling_motion_client.generate_and_poll` (or override at the call site in `video_service.py:981` and `:1155`). Kling MC v2.6+std variance is empirically 3–12 min (S83).
+3. **Backend progress-stuck detection** — no `updated_at` change for ≥5 min → declare hung early, return failed (matches S83 push-monitor pattern; avoids waiting full 15 min on actually-dead tasks).
+4. **Auto credit-refund on declared failure** — backend re-credits the UID's ledger so users aren't charged for nothing.
+
+Then **commit the countdown UX + the redesign together as one S85 commit**. Remove the temporary `console.log('[gen-debug] job_id assigned:', …)` in `mobile/store/gallery-store.ts` before committing.
+
+After that: **resume V2.0.1 ship work** (carry from S83) — AIV-97 credit refresh, AIV-98 Show My ID, revert AIV-94 UID logging, version bump, EAS build + TestFlight.
 
 ## Open questions
 
-1. **(S83)** Soda Pop Moves audio sync — needs user verdict (Kling output downloaded, twins not yet built).
-2. **(S83)** Baby_Boo NBP edit — pending user inspection (left at `~/Downloads/baby_boo_edit_aa5be06d.jpg` at /close).
-3. **(S83)** Hung Seteadora v1+v2 task IDs (888806253990903823 stayed in `submitted`; v2 888811813252104221 same) — no charge per memory, but theoretically could wake and produce orphan output. Untrackable per Kling API.
-4. **(S83→AIV-110)** Cleanup `~/Downloads/` intermediates this session: `*_chain_*.mp4`, `*_edit_*.jpg`, `*_shift_*.mp4`, `*_driving_video.mp4`, `*_preview_stream.mp4` for all 8 S83 slugs (+ `seteadora_edit_v2_*`, `copacabana_edit_v2_*`, `speed_edit_v2_*`, `got_2_luv_u_edit_v2_*`/`_v3_*`). Per [[feedback_persist_accepted_nbp_edit]], KEEP the final accepted `*_edit_*` rolls (S83 finals: `seteadora_edit_v2_250479fc.jpg`, `copacabana_edit_v2_bd42d608.jpg`, `speed_edit_v2_c6d35f91.jpg`, `got_2_luv_u_edit_v3_5a405bb9.jpg`, `7_11_edit_573907df.jpg`, `luku_edit_009b0b4e.jpg`). Carries S82 + S81 cleanup backlog.
-5. **(S83→AIV-105)** Audio-lead RUNTIME sync still unverified for v2.6-std + raw-driver (carry from S82). 4 of 6 S83 templates shipped audio-in-sync as-is; 2 (7/11, Copacabana) needed +0.5s. Per-gen variance still in force; no static fix viable.
-6. **(S82)** Sim test continues to be skipped for S83 templates (14 published total since S82 without device-side spot-check). Spot-check golden-path gen + tile playback on sim.
-7. **(S81)** Hero freeze threshold = 0.6 — tune if partial-freeze reads odd on device.
-8. **(S79→AIV-109)** Non-Kling motion-transfer model — needs competitor app name (user has it) → research → `docs/research/`. River source kept.
-9. **(S78→AIV-110)** Stale-artifact cleanup on R2 — `the-hills/driving_video_2k.mp4`, `give-it-up/raw_source_2k.mp4`, `spike-outputs/`. Runbook: `docs/template_prep_cleanup_runbook.md`.
-10. **(S77→AIV-107)** Streaming-preview monitoring, then fix buggy `migrate_driver_filenames.py --cleanup`.
-
-**Deferred memory:** If NBP outpaint-widen recurs, amend [[feedback_nbp_cant_reposition]] (NBP CAN add lateral room via outpaint-framed edit, CANNOT zoom-in a subject → use Pillow crop). [S78; carry until re-confirmed.] (S83 partial validation: Pattern A edits on existing NBP edits successfully pushed furniture/walls outward when prompted to "extend the open floor" — confirms NBP can compose a wider surroundings around a fixed subject, just not rescale the subject.)
+1. **(S84)** Kling-timeout redesign — confirm the 4-point proposal verbatim with user at start of S85. Without confirmation, the countdown UX commit is stuck in limbo.
+2. **(S84→AIV-110)** Cleanup `~/Downloads/` intermediates this session — all `git_up_*`, `baby_boo_*`, `soda_pop_moves_*` chain/edit/preview/driver files; `git_up_first_frame.png`. Per [[feedback_persist_accepted_nbp_edit]] KEEP the finals fed to Kling: `baby_boo_edit_v2_b5de1b18.jpg`, `git_up_edit_cfda7d39.jpg` (both empty-hands and cup variants were rolled), `git_up_edit_v2_5c731e10.jpg`. Carries S83+S82+S81 cleanup backlog.
+3. **(S83)** Hung Seteadora v1+v2 task IDs from S83 — no charge per memory, but theoretically could wake. Untrackable per Kling API.
+4. **(S83→AIV-105)** Audio-lead RUNTIME sync still unverified for v2.6-std + raw-driver. 9 of 9 S84 templates shipped audio-in-sync as-is; consistent S83+S84 evidence the runtime path may not introduce the lead at all (was only ever confirmed on `pro`).
+5. **(S82)** Sim test continues to be skipped for shipped templates — 17 templates published over S82+S83+S84 without device-side spot-check of golden path. (Coins-UX testing this session DID happen on sim, but didn't include a full template gen.)
+6. **(S81)** Hero freeze threshold = 0.6 — tune if partial-freeze reads odd on device.
+7. **(S79→AIV-109)** Non-Kling motion-transfer competitor — needs competitor app name → research.
+8. **(S78→AIV-110)** Stale-artifact cleanup on R2 — runbook in `docs/template_prep_cleanup_runbook.md`.
+9. **(S77→AIV-107)** Streaming-preview monitoring, then fix buggy `migrate_driver_filenames.py --cleanup`.

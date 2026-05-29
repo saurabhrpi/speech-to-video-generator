@@ -22,6 +22,7 @@ import { hasDataSharingConsent, setDataSharingConsent } from '@/lib/consent';
 import NetworkBanner from '@/components/NetworkBanner';
 import OnboardingScreen from '@/components/OnboardingScreen';
 import Paywall from '@/components/Paywall';
+import FloatingStatusPill from '@/components/FloatingStatusPill';
 import '../global.css';
 
 const WarmDarkTheme: Theme = {
@@ -132,6 +133,7 @@ export default function RootLayout() {
                 options={{ title: 'Create Video', headerBackButtonDisplayMode: 'minimal' }}
               />
             </Stack>
+            <FloatingStatusPill />
             <Paywall />
           </>
         ) : (
