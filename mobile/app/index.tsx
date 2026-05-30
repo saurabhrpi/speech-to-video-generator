@@ -233,7 +233,7 @@ function HeroSection({
               key={t.id}
               template={t}
               isActive={i === activeIndex && !frozen}
-              onPress={() => router.push(`/template/${t.id}` as any)}
+              onTryIt={() => router.push(`/template/${t.id}` as any)}
             />
           ))}
         </ScrollView>
@@ -285,11 +285,11 @@ function HeroSection({
 function HeroCard({
   template,
   isActive,
-  onPress,
+  onTryIt,
 }: {
   template: Template;
   isActive: boolean;
-  onPress: () => void;
+  onTryIt: () => void;
 }) {
   const videoUrl =
     template.assets?.preview_video_url ?? template.assets?.driving_video_url;
@@ -299,8 +299,18 @@ function HeroCard({
   const poster = template.assets?.thumbnail_url;
   const hasPoster = isUsableMediaUrl(poster);
   const showVideo = isActive && isUsableMediaUrl(videoUrl);
+  // S86: the card body is intentionally NOT tappable — an accidental tap, or a
+  // pager swipe that lands as a tap, must NOT navigate into the template
+  // screen. A plain View keeps the card swipeable in the horizontal pager
+  // while doing nothing on tap. The ONLY route from the hero to the template
+  // screen is the explicit "Try It" pill. That pill lives in a FLOW-layout
+  // overlay (never position:absolute) because an absolute Pressable sitting
+  // over an expo-av <Video> silently swallows touches on iOS — see
+  // feedback_absolute_overlay_button_intercept.md. The overlay is box-none so
+  // its empty area passes swipes through to the pager ScrollView while the
+  // pill itself still receives taps.
   return (
-    <Pressable style={styles.heroCard} onPress={onPress}>
+    <View style={styles.heroCard}>
       <View style={styles.heroMedia}>
         {hasPoster && (
           <Image
@@ -324,8 +334,20 @@ function HeroCard({
             <Ionicons name="image-outline" size={36} color={Colors.textSecondary} />
           </View>
         )}
+        <View style={styles.heroCtaOverlay} pointerEvents="box-none">
+          <Pressable
+            style={styles.heroTryBtn}
+            onPress={onTryIt}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Try ${template.title}`}
+          >
+            <Ionicons name="sparkles" size={16} color="#111" />
+            <Text style={styles.heroTryLabel}>Try It</Text>
+          </Pressable>
+        </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -528,6 +550,37 @@ const styles = StyleSheet.create({
   heroMediaPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Flow-layout overlay (flex:1 fills the media since the Image/Video siblings
+  // are absoluteFill). Pins the "Try It" pill to the bottom-RIGHT corner —
+  // clear of the page-indicator dots (bottom-center, bottom:10). box-none on
+  // this wrapper lets pager swipes fall through; only the pill is a touch
+  // target.
+  heroCtaOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingBottom: 28,
+    paddingRight: 16,
+  },
+  heroTryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  heroTryLabel: {
+    color: '#111',
+    fontSize: 15,
+    fontWeight: '700',
   },
   heroPlaceholder: {
     flex: 1,
