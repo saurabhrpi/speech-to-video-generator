@@ -1335,9 +1335,12 @@ def list_published_templates(request: Request):
 # V2 selfie endpoints (AIV-89). Policy locked in AIV-77.
 # ----------------------------------------------------------------------
 # Selfies live in the private R2 selfies bucket under `selfies/{uid}/`.
-# Server enforces uid prefix on every read/delete. R2 lifecycle rule
-# (30d auto-delete on `selfies/` prefix) is configured manually in the
-# R2 dashboard — see AIV-89 / AIV-84 #4.
+# Server enforces uid prefix on every read/delete. Inputs are also deleted
+# inline once a gen is terminal (video_service._dispatch_motion_transfer); the
+# R2 backstop is a 1-day expiry lifecycle on selfies/, nbp-regen/, composites/
+# set via scripts/set_r2_selfie_lifecycle.py. (The old "30d on selfies/" comment
+# was wrong — that rule was never actually present in the bucket; verified S85.)
+# See AIV-89.
 
 import secrets as _secrets
 from datetime import datetime as _dt, timedelta as _td
@@ -1401,7 +1404,9 @@ async def upload_selfie(
         logger.exception("Selfie upload to R2 failed")
         raise HTTPException(status_code=500, detail=f"upload_failed: {exc}")
 
-    expires_at = (_dt.utcnow() + _td(days=30)).replace(microsecond=0).isoformat() + "Z"
+    # Upper bound only — the R2 lifecycle backstop expires inputs after 1 day,
+    # and the inline purge usually removes them within minutes of the gen.
+    expires_at = (_dt.utcnow() + _td(days=1)).replace(microsecond=0).isoformat() + "Z"
     return {"key": key, "expires_at": expires_at, "size_bytes": len(body)}
 
 
