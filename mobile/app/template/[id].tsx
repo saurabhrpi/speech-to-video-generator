@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Alert,
   Dimensions,
-  Linking,
 } from 'react-native';
 
 const PREVIEW_HEIGHT = Dimensions.get('window').height * 0.42;
@@ -97,32 +96,34 @@ export default function TemplateReviewScreen() {
   const canSubmit = !!selfieUri && !submitting && !blockedByInFlight;
 
   async function handlePickSelfie() {
-    // iOS shows the native permission sheet (Allow Full / Limited / Don't
-    // Allow) only on the FIRST call when status='undetermined' — once denied,
-    // the sheet never fires again and the only path is Settings. AIV-96:
-    // dad's iPhone fell through to the in-app Alert with no escape; surface
-    // Open Settings directly so the user isn't dead-ended.
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Photo access needed',
-        'AIVO needs access to your Photos to pick a selfie. Tap Open Settings, then enable Photos for AIVO.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-        ],
-      );
-      return;
+    // AIV-96: NO permission gate. launchImageLibraryAsync uses iOS's
+    // out-of-process picker — PHPickerViewController, or the legacy
+    // UIImagePickerController when allowsEditing forces a crop — and NEITHER
+    // requires PHPhotoLibrary authorization (verified in expo-image-picker
+    // v17's native ImagePickerModule: only launchCameraAsync guards on a
+    // permission; the photo-library launch never checks). The selected image
+    // is handed back in-memory; the only permission-dependent read is a
+    // best-effort PHAsset filename we don't use.
+    //
+    // The old requestMediaLibraryPermissionsAsync() gate was self-imposed: on
+    // a device where that permission was pre-set to "denied" (e.g. an earlier
+    // TestFlight build the user denied), it dead-ended at an in-app Alert even
+    // though the picker needs no permission. Launching directly fixes that in
+    // every state (granted/undetermined/denied/limited) and also removes a
+    // redundant first-use permission prompt.
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (result.canceled) return;
+      const asset = result.assets?.[0];
+      if (asset?.uri) setSelfieUri(asset.uri);
+    } catch (err: any) {
+      Alert.alert('Could not open Photos', err?.message ?? 'Please try again.');
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (result.canceled) return;
-    const asset = result.assets?.[0];
-    if (asset?.uri) setSelfieUri(asset.uri);
   }
 
   async function handleGenerate() {
