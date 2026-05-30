@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet, Image } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PRIVACY_URL } from '@/lib/constants';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/constants';
 import { useTemplateStore } from '@/store/template-store';
 
 interface Props {
@@ -56,6 +56,10 @@ export default function OnboardingScreen({ onContinue }: Props) {
         <View style={styles.bottomInner}>
           <Text style={styles.legalText}>
             By tapping <Text style={styles.bold}>Continue</Text>, you agree to our{' '}
+            <Text style={styles.link} onPress={() => Linking.openURL(TERMS_URL)}>
+              Terms of Use
+            </Text>
+            {' '}and{' '}
             <Text style={styles.link} onPress={() => Linking.openURL(PRIVACY_URL)}>
               Privacy Policy
             </Text>

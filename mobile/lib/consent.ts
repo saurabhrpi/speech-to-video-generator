@@ -5,7 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // v2 (V2.0.0): adds Kling AI + photo upload to the disclosure scope; also
 // folds in the "rights to use the photo" affirmation that used to live as a
 // per-template checkbox.
-const CONSENT_KEY = 'data_sharing_consent_v2';
+// v3 (V2.0.1): onboarding gate now captures acceptance of the Terms of Use in
+// addition to the Privacy Policy (was Privacy-only). Re-prompt so every user
+// has accepted the Terms before the public release.
+const CONSENT_KEY = 'data_sharing_consent_v3';
 
 /**
  * One-time disclosure + consent for sending user data (text prompts, audio,
