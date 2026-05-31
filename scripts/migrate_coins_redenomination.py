@@ -24,6 +24,13 @@ the wrong spending power for the window in between.
 Usage:
   .venv/bin/python scripts/migrate_coins_redenomination.py              # dry-run
   .venv/bin/python scripts/migrate_coins_redenomination.py --apply      # execute
+  .venv/bin/python scripts/migrate_coins_redenomination.py --uid <UID>  # one ledger
+
+HANGS: firebase-admin uses gRPC, which has NO client-side deadline by default —
+a degraded network path makes a Firestore call block FOREVER instead of erroring.
+Every call here now passes timeout=. A preflight get() fails fast (≤10s) with a
+clear message if Firestore is unreachable, instead of hanging on the first stream.
+See memory/feedback_firestore_calls_need_timeout.
 """
 from __future__ import annotations
 
@@ -40,6 +47,25 @@ load_dotenv(str(ROOT / ".env"), override=True)
 from src.speech_to_video.utils import credit_store  # noqa: E402
 
 MARKER = "redenom_v2_applied"
+PREFLIGHT_TIMEOUT = 10   # seconds — fail fast if Firestore is unreachable
+READ_TIMEOUT = 30        # seconds — for the collection stream
+WRITE_TIMEOUT = 30       # seconds — per-ledger transaction
+
+
+def _preflight(db) -> None:
+    """Fail fast (≤PREFLIGHT_TIMEOUT) if Firestore is unreachable, instead of
+    letting the first stream() hang forever on a degraded gRPC channel."""
+    try:
+        # A bounded, cheap read. limit(1).get(timeout=) raises on deadline.
+        list(db.collection("credits").limit(1).get(timeout=PREFLIGHT_TIMEOUT))
+    except Exception as e:
+        print(
+            f"\nPREFLIGHT FAILED: Firestore unreachable within {PREFLIGHT_TIMEOUT}s "
+            f"({type(e).__name__}: {e}).\n"
+            "  → Check network/VPN, then retry. Nothing was read or written.",
+            file=sys.stderr,
+        )
+        raise SystemExit(4)
 
 
 def main() -> int:
@@ -47,11 +73,23 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="Write the x10 (default: dry-run).")
     ap.add_argument("--factor", type=int, default=10, help="Multiplier (default 10).")
     ap.add_argument("--show-zero", action="store_true", help="Also list zero-balance ledgers.")
+    ap.add_argument("--uid", default=None, help="Operate on ONLY this ledger id (fast straggler fix).")
     args = ap.parse_args()
 
     from firebase_admin import firestore as fb_firestore
     db = credit_store._db()
-    snaps = list(db.collection("credits").stream())
+
+    _preflight(db)  # fail fast if Firestore is unreachable, instead of hanging
+
+    if args.uid:
+        # Single-ledger path: one bounded get, no full-collection stream.
+        snap = db.collection("credits").document(args.uid).get(timeout=READ_TIMEOUT)
+        if not snap.exists:
+            print(f"ledger not found: {args.uid}", file=sys.stderr)
+            return 2
+        snaps = [snap]
+    else:
+        snaps = list(db.collection("credits").stream(timeout=READ_TIMEOUT))
 
     print(f"\nMODE: {'APPLY (will write)' if args.apply else 'DRY-RUN (no writes)'} | factor x{args.factor}")
     print(f"ledgers found: {len(snaps)}\n")
@@ -100,7 +138,7 @@ def main() -> int:
 
             @fb_firestore.transactional
             def _run(t, ref=ref):
-                snap = ref.get(transaction=t)
+                snap = ref.get(transaction=t, timeout=WRITE_TIMEOUT)
                 if not snap.exists:
                     return False
                 dd = snap.to_dict() or {}
@@ -115,8 +153,13 @@ def main() -> int:
                 })
                 return True
 
-            if _run(tx):
-                ok += 1
+            try:
+                if _run(tx):
+                    ok += 1
+            except Exception as e:
+                # Per-ledger isolation: a deadline on one doc doesn't abort the
+                # rest, and re-running is safe (marker-guarded).
+                print(f"  FAILED {uid[:12]}: {type(e).__name__}: {e}", file=sys.stderr)
         print(f"migrated {ok}/{len(to_write)} ledgers.")
     else:
         print("\nDRY-RUN — nothing written. Re-run with --apply to execute.")
