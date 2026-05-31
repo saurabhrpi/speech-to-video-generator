@@ -211,6 +211,7 @@ function HeroSection({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const creditBalance = useAuthStore((s) => s.creditBalance);
+  const openPaywall = useAuthStore((s) => s.openPaywall);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -249,12 +250,18 @@ function HeroSection({
       <View style={[styles.heroOverlay, { top: insets.top + 4 }]}>
         <Text style={styles.brand}>AIVO</Text>
         <View style={styles.overlayRight}>
-          <View style={styles.coinRow}>
+          <Pressable
+            onPress={openPaywall}
+            hitSlop={12}
+            style={styles.coinRow}
+            accessibilityLabel="Buy coins"
+            accessibilityRole="button"
+          >
             <Text style={styles.creditsText}>
               {creditBalance != null ? String(creditBalance) : '—'}
             </Text>
             <CoinIcon size={16} />
-          </View>
+          </Pressable>
           <Text style={styles.divider}>|</Text>
           <Pressable
             onPress={() => router.push('/gallery')}

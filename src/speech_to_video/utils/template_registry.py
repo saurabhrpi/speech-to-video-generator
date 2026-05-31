@@ -166,6 +166,33 @@ def upsert_template(template_id: str, data: Dict) -> Dict:
     return out
 
 
+def set_credit_cost(template_id: str, credit_cost: int) -> Dict:
+    """Partial-update ONLY a template's credit_cost (+ updated_at).
+
+    Used by the duration-based pricing tool (S87). Does not touch any other
+    field. `updated_at` is bumped to SERVER_TIMESTAMP so the /api/templates
+    ETag changes and mobile clients drop their 304-cached copy — without it the
+    price change is invisible to existing installs (see
+    Memory/reference_firestore_partial_update_etag.md).
+    """
+    from firebase_admin import firestore as fb_firestore
+
+    if not isinstance(credit_cost, int) or credit_cost <= 0:
+        raise ValueError(f"credit_cost must be positive int; got {credit_cost!r}")
+
+    ref = _doc_ref(template_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise TemplateNotFound(template_id)
+    ref.update({
+        "credit_cost": int(credit_cost),
+        "updated_at": fb_firestore.SERVER_TIMESTAMP,
+    })
+    out = ref.get().to_dict() or {}
+    out["id"] = template_id
+    return out
+
+
 def set_status(
     template_id: str,
     status: str,

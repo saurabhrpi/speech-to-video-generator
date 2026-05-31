@@ -33,10 +33,16 @@ router = APIRouter()
 # Product-id -> credits granted per purchase. Must match the product ids
 # configured in RevenueCat (Test Store or App Store) and the PACK_SKUS the
 # mobile app uses to identify packages.
+# S87 redenomination (100 coins = $1). ASC Product IDs are immutable, so the
+# SKU names (50/120/250) no longer match the coin grants — the ASC *Display
+# Name* carries the user-facing "500/1500/2500 Coins" label. Coins are an exact
+# ×10 of the prior packs. This is the SOURCE OF TRUTH for what a purchase grants;
+# mobile PACK_CREDITS (constants.ts) must mirror it. (Fixes the prior 120-vs-150
+# mismatch on the middle pack: now 1500 = 150 × 10.)
 PACK_CREDITS: Dict[str, int] = {
-    "pro_pack_50": 50,
-    "pro_pack_120": 120,
-    "pro_pack_250": 250,
+    "pro_pack_50": 500,
+    "pro_pack_120": 1500,
+    "pro_pack_250": 2500,
 }
 
 _RC_BASE_URL = "https://api.revenuecat.com/v1"

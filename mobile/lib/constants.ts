@@ -7,18 +7,18 @@ export const PACK_SKUS = ['pro_pack_50', 'pro_pack_120', 'pro_pack_250'] as cons
 export type PackSku = (typeof PACK_SKUS)[number];
 
 export const PACK_CREDITS: Record<PackSku, number> = {
-  pro_pack_50: 50,
-  // SKU still reads "120" — ASC SKUs are immutable. The pack now grants 150
-  // credits (V2.0.0 resize so the mid tier divides more evenly into 23-cr
-  // template gens). ASC IAP display name must read "150 credits" before
-  // V2.0.0 ships. Keep in sync with PACK_CREDITS in src/speech_to_video/api/credits.py.
-  pro_pack_120: 150,
-  pro_pack_250: 250,
+  // S87 redenomination (100 coins = $1). ASC Product IDs are immutable, so the
+  // SKU names (50/120/250) no longer match the coin grants — the ASC *Display
+  // Name* carries the user-facing "500/1500/2500 Coins" label. MUST mirror
+  // PACK_CREDITS in src/speech_to_video/api/credits.py (the grant source of truth).
+  pro_pack_50: 500,
+  pro_pack_120: 1500, // was 150 here / 120 in backend — bug fixed: 150 × 10
+  pro_pack_250: 2500,
 };
 
-// Badge target — the pack with the lowest per-credit price (best deal).
-// V2.0.0 final pricing: $24.99 / 250 = $0.0999/cr beats $15.99 / 150 = $0.1066/cr
-// and $5.99 / 50 = $0.1198/cr. Top pack reclaims the badge.
+// Badge target — the pack with the lowest per-coin price (best deal).
+// S87 pricing (prices unchanged in ASC): $24.99 / 2500 = $0.0100/coin beats
+// $15.99 / 1500 = $0.0107/coin and $5.99 / 500 = $0.0120/coin. Top pack keeps it.
 export const BEST_VALUE_PACK: PackSku = 'pro_pack_250';
 
 // Default-selected radio when the paywall opens. We deliberately do NOT default
@@ -32,7 +32,7 @@ export type CostTable = Record<string, Record<string, number>>;
 // server's cost_table hasn't landed yet (cold start / offline). Keep in sync.
 // V1 ships single model + single duration (Session 52).
 const FALLBACK_COSTS: CostTable = {
-  hailuo: { '10': 10 },
+  hailuo: { '10': 100 }, // S87 redenomination ×10 (legacy S2V path, paused)
 };
 
 export function creditCostFor(

@@ -97,10 +97,10 @@ def setup_status():
 # dropped — mobile no longer sends a picker. Kept as a dict so future
 # variants slot back in without restructuring callers.
 CREDIT_COSTS: Dict[tuple, int] = {
-    ("hailuo", 10): 10,
+    ("hailuo", 10): 100,  # S87 redenomination ×10 (legacy S2V path, paused; was 10)
 }
 
-_ANON_STARTER_CREDITS = 25  # V2.0.0 bump (was 10) — covers one template gen (23 cr) so anons can try one for free
+_ANON_STARTER_CREDITS = 500  # S87 redenomination (100 coins=$1): covers exactly one flat-priced template gen (500 cr) so anons get one free
 
 
 def _cost_table_public() -> Dict[str, Dict[str, int]]:

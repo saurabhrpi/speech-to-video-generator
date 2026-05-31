@@ -45,6 +45,8 @@ The home screen replaces tab navigation entirely with a competitor-style templat
 | Pipeline B — scene-insertion (Outcome 1) | $1.16 | $2.32 | ~23 cr/gen |
 | V1 — S2V single-clip (legacy) | $0.50 | $1.00 | 10 cr/gen (unchanged) |
 
+> **⚠️ S87 UPDATE — verified runtime COGS supersedes the $1.12 above.** The $1.12 figure was Kling **pro** mode (S58 spike). The shipping runtime is `kling-v2-6` + **std**. Verified from the user's Kling billing logs (S87, 2026-05-30): a **15s** v2.6-std gen costs **~$1.50** total = Kling **$1.05** (7.5 units × $0.14/unit) + NBP regen **~$0.20** + Replit cushion **~$0.25**. Kling-side ≈ **$0.07/sec**. See `memory/reference_v2_runtime_cogs.md`. The S87 coins rework is moving to **100 coins = $1** + **duration-based pricing at 30 coins/sec** (15s → 450 coins = $4.50 ≈ 3× COGS), replacing the flat 25-credit per-template cost.
+
 **Free tier:** anon starter-credit count TBD towards end of V2 build (S59 — explicit defer). Must cover at least 1 V2 gen if we want anon-tier wedge to work; otherwise free tier becomes a S2V-only experience and V2 conversion happens via paywall on first V2 attempt.
 
 **ASC / RC operational impact:**
