@@ -41,8 +41,32 @@ complete** — that confirmation is itself blocked by this hang.
   a fix before verifying it actually prevented the hang
   ([[feedback_save_memory_only_after_verification]]).
 
+## Update — S88 (2026-05-31): network ruled out + reads work fast
+Ran the step-1 probes below. **These findings sharpen the problem; it is NOT solved.**
+- **Network branch RULED OUT.** `curl -m 8` to both `oauth2.googleapis.com/token`
+  and `firestore.googleapis.com` returned **fast HTTP 404** (<0.2s total each; DNS
+  ~20–34ms, connect ~33–47ms, TLS ~50–65ms). Per step-1's own decision tree, that
+  means the issue is the **auth/channel layer — not network/VPN/DNS.**
+- **A single READ did NOT hang.** A stage-marked, 60s-bounded fetch of the newest
+  `gen_events` (`order_by(created_at desc).limit(6)`) completed with **`_db()`
+  (firebase init + auth + channel) AND `.stream()` (the Firestore RPC) both inside
+  the same 1-second window**, returning the row. So on S88 the token fetch, channel
+  setup, and read RPC were all fast — the hang did not reproduce on a read.
+- **Sharpened hypothesis:** the S87 hang happened during a **bulk WRITE loop** (the
+  migration `.update()`-ing many ledgers in sequence). A clean read on S88 → the hang
+  is plausibly **specific to bulk/batched writes, or intermittent** — NOT a blanket
+  "every firebase-admin call hangs." (Reinforces the already-noted intermittency.)
+- **Candidate fix direction (user, S88):** **batch the writes** — use a Firestore
+  `WriteBatch` / `BulkWriter` instead of a per-doc `.update()` loop, so the migration
+  issues far fewer separate RPC/channel round-trips (each a place a per-doc call can
+  stall). Untested — validate against a *reproduced* hang first.
+- **Still open:** one clean read does NOT prove the write path is fixed. Migration
+  completeness remains **unverified** — deliberately NOT re-tested S88 (parked for
+  later, to be done together with the batched-write attempt).
+
 ## How to actually solve it (investigation → fix)
-1. **Root-cause first with hard-bounded probes** (each can't hang):
+1. **Root-cause first with hard-bounded probes** (each can't hang): ✅ **step-1 probe
+   DONE S88 — network ruled out (see Update above); investigation now at step 2.**
    - `curl -m 8 https://firestore.googleapis.com` → fast HTTP code = reachable
      (problem is auth/channel layer); hang/err = network/VPN/DNS.
    - `curl -m 8 https://oauth2.googleapis.com/token` reachability for the token host.
