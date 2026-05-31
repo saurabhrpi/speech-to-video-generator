@@ -53,14 +53,15 @@ Engagement split (best guess pre-data): ~80% one-shot tourists (1-3 clips, share
 
 **Brand voice.** Playful but reviewer-safe (Apple's reviewers are humorless; over-irreverence triggers 4.3a). Tonal anchor for App Store + paywall copy: *"Your weirdest idea, made real in 5 minutes."* Avoid corporate-speak ("AI-powered video generation platform") and pure-meme tone (curse words, dense irony). Under-promise principle: never claim faster than 5 min in user-facing copy, even though Hailuo typically returns in 30-60s.
 
-**Pricing strategy** (Session 43 → Session 52 simplified to round numbers):
-- **Per gen: 10 credits = $1.00 retail.**
-- **Anon free tier: 10 credits = 1 free gen.** One-time, not refilling. Paywall on second gen attempt.
-- **Three credit packs** (ASC IAPs already created):
-  - `pro_pack_50` — $4.99 / 50 credits = **5 gens**
-  - `pro_pack_120` — $9.99 / 120 credits = **12 gens** (BEST_VALUE)
-  - `pro_pack_250` — $19.99 / 250 credits = **25 gens**
-- ~$0.50 COGS/gen. After Apple's 15% Small Business cut: $0.35/gen margin at the $4.99 pack, $0.18/gen at $19.99 (bulk discount eats top-pack margin — accepted for V1; revisit when conversion data lands).
+**Pricing strategy** (S43 → S52 round numbers → **S87 redenomination ×10 + credits→"coins"**; live values verified S88):
+- **Currency: "coins," 100 coins = $1.00 retail** (was 10 credits/$1).
+- **Per video: 500 coins ($5)** — flat across all templates (per-template `credit_cost`; was 25 credits).
+- **Anon free tier: 500 coins = 1 free video** (`_ANON_STARTER_CREDITS = 500` in `api/server.py`). One-time, not refilling. Paywall on the next gen attempt.
+- **Three coin packs** (ASC IAPs; Product IDs immutable so names stay `pro_pack_50/120/250`, but grants are ×10):
+  - `pro_pack_50` — **$5.99 / 500 coins = 1 video**
+  - `pro_pack_120` — **$15.99 / 1,500 coins = 3 videos**
+  - `pro_pack_250` — **$24.99 / 2,500 coins = 5 videos** (BEST_VALUE)
+- **COGS ≈ $1.50/video** (verified S87 from Kling logs: ~$1.05 Kling for a 15s kling-v2.6-std gen + ~$0.20 NBP + ~$0.25 Replit; see `Memory/reference_v2_runtime_cogs.md`). Supersedes the old ~$0.50 estimate.
 
 **No subscription at launch.** Adds reviewer surface area + churn UX + lapsed-user re-engagement work. Re-evaluate at month 3-6: if the 15-20% returning core spends >$9.99/mo on packs, sub becomes obvious; if not, credits stay.
 
@@ -369,7 +370,7 @@ All configuration via environment variables (`.env` file). Settings loaded via `
 
 **Models — Paused (Timelapse-Phase-2 + Ads):** `I2V_MODEL` (minimax/hailuo-02), `KLING_I2V_MODEL` (klingai/video-v3-pro-image-to-video), `SEEDANCE_I2V_MODEL`, `HAILUO_I2V_MODEL`, `AD_MODEL` (openai/sora-2-t2v), T2I: `google/nano-banana-pro`, I2I: `google/nano-banana-pro-edit`
 
-**Auth:** `FIREBASE_SERVICE_ACCOUNT_PATH` (path to Firebase admin SDK JSON — supports `~` expansion). Anon free tier is now controlled by `_ANON_STARTER_CREDITS = 10` constant in `api/server.py` (not env-driven). Legacy `UNAUTH_GEN_LIMIT` env var and Google OAuth vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, `POST_LOGIN_REDIRECT`, `SESSION_SECRET`) are removed.
+**Auth:** `FIREBASE_SERVICE_ACCOUNT_PATH` (path to Firebase admin SDK JSON — supports `~` expansion). Anon free tier is now controlled by `_ANON_STARTER_CREDITS = 500` constant in `api/server.py` (S87 redenomination ×10; not env-driven). Legacy `UNAUTH_GEN_LIMIT` env var and Google OAuth vars (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, `POST_LOGIN_REDIRECT`, `SESSION_SECRET`) are removed.
 
 **Nano Banana Pro (AI Studio direct):** `NBP_API_Key` — Google AI Studio paid-tier key for `gemini-3-pro-image-preview` (Pipeline B Edit).
 
