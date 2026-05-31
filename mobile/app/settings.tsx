@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Alert, Pressable } from 'react-native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
@@ -8,6 +9,7 @@ import { Button } from '@/components/Button';
 import ConfirmModal from '@/components/ConfirmModal';
 import CoinIcon from '@/components/CoinIcon';
 import { useAuthStore } from '@/store/auth-store';
+import { Colors } from '@/lib/design-tokens';
 
 export default function SettingsScreen() {
   const isAnonymous = useAuthStore((s) => s.isAnonymous);
@@ -65,6 +67,20 @@ export default function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-background p-4 gap-6">
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              accessibilityLabel="Close"
+              style={{ marginRight: 8 }}
+            >
+              <Ionicons name="close" size={26} color={Colors.textPrimary} />
+            </Pressable>
+          ),
+        }}
+      />
       <View className="rounded-lg border border-border bg-card p-4 gap-3">
         <Text className="text-sm font-semibold text-foreground">Account</Text>
 
