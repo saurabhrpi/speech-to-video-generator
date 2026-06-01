@@ -80,6 +80,13 @@ def _eligible(only_id: Optional[str] = None) -> List[dict]:
     for t in list_templates(published_only=False):
         if only_id and t["id"] != only_id:
             continue
+        # Furry Friends (subject_type="animal", S89) invert the catalog twin
+        # invariant: their preview is a generated PET-dance clip, NOT derived from
+        # driving_video (which is a reused HUMAN driver). The driver-derived
+        # encode/repoint/revert here would clobber the pet preview with the human
+        # driver — so exclude animal templates from this catalog-wide tool.
+        if (t.get("subject_type") or "").strip().lower() == "animal":
+            continue
         if (t.get("assets") or {}).get("preview_video_url"):
             out.append(t)
     return sorted(out, key=lambda t: t["id"])

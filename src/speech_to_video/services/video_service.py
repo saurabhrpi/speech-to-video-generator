@@ -1094,6 +1094,29 @@ class VideoService:
         "room for the subject to move laterally."
     )
 
+    # Animal variant of the regen core, selected when a template sets
+    # subject_type="animal" (e.g. the furry_friends category, S89). The Pipeline A
+    # input here is the user's PET photo, never a selfie — so the prompt carries
+    # NO human reference, preserves the animal's species/breed/markings identity,
+    # and re-poses it standing upright + spacious so Kling Motion Control's
+    # bipedal dance maps onto a (typically quadruped) pet input. Aspect/spacing
+    # rationale is the same as the human core (Kling MC inherits NBP aspect
+    # end-to-end — Memory/reference_kling_mc_aspect_inherits_nbp.md).
+    _GENERIC_NBP_REGEN_PROMPT_ANIMAL = (
+        "Generate a more complete, full-body portrait of this pet. Preserve the "
+        "animal's species, breed, fur colour, markings, and facial features so it "
+        "stays recognisably the SAME pet as the input. Re-pose it STANDING "
+        "UPRIGHT on its hind legs in a playful, anthropomorphic, dance-ready "
+        "posture facing the camera, with its front paws/forelimbs raised and free "
+        "to move. Output a square (1:1) photographic frame with the full body "
+        "visible from the top of the head down to the feet, comfortable headroom "
+        "above and floor visible beneath the feet. The setting MUST be roomy and "
+        "spacious with generous open space on both sides of the animal and ample "
+        "empty floor around its feet — never cramped, tight, or closely-walled — "
+        "so there is room to move laterally. Do NOT include any humans, people, "
+        "or human body parts in the frame."
+    )
+
     def _nbp_regen_character(
         self,
         template: Dict,
@@ -1119,9 +1142,18 @@ class VideoService:
         progress(phase="nbp_regen", template_id=template["id"])
 
         framing_hint = (template.get("nbp_framing_hint") or "").strip()
-        nbp_prompt = self._GENERIC_NBP_REGEN_PROMPT
+        # subject_type selects the regen core: "animal" (furry_friends, pet input)
+        # vs the default "human" (selfie input). Absent/unknown → human, so the
+        # 45 existing templates are unaffected. See _GENERIC_NBP_REGEN_PROMPT_ANIMAL.
+        subject_type = (template.get("subject_type") or "human").strip().lower()
+        core = (
+            self._GENERIC_NBP_REGEN_PROMPT_ANIMAL
+            if subject_type == "animal"
+            else self._GENERIC_NBP_REGEN_PROMPT
+        )
+        nbp_prompt = core
         if framing_hint:
-            nbp_prompt = f"{nbp_prompt}\n\n{framing_hint}"
+            nbp_prompt = f"{core}\n\n{framing_hint}"
 
         try:
             selfie_bytes = r2_client.download_to_bytes(

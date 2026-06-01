@@ -33,6 +33,13 @@ Document shape:
                                                # core lives in code; per-template
                                                # specifics live here. See
                                                # Memory/feedback_no_overfit_prompts.md.
+      "subject_type": str | None,              # S89 — Pipeline A regen core
+                                               # selector: "animal" → the pet-input
+                                               # core (furry_friends category, NO
+                                               # human reference, upright re-pose);
+                                               # else default "human" (selfie).
+                                               # See video_service
+                                               # _GENERIC_NBP_REGEN_PROMPT_ANIMAL.
       # S66 — V2 home hero carousel inclusion (optional, per-template)
       "is_hero": bool | None,                  # When True, template renders in the
                                                # landscape "Top Trends" hero carousel
